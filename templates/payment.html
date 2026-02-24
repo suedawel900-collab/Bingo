@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bingo Bot - Secure Payment</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .payment-container {
+            max-width: 500px;
+            width: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+            animation: slideUp 0.5s ease;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .payment-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .payment-header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .amount-display {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        
+        .payment-body {
+            padding: 30px;
+        }
+        
+        .info-box {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 25px;
+            font-size: 14px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .info-box .icon {
+            font-size: 24px;
+        }
+        
+        #payment-form {
+            margin-top: 20px;
+        }
+        
+        #payment-element {
+            margin-bottom: 24px;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        #error-message {
+            color: #dc3545;
+            margin-top: 15px;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .security-badge {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+            font-size: 13px;
+        }
+        
+        .security-badge span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        @media (max-width: 480px) {
+            .payment-header {
+                padding: 20px;
+            }
+            
+            .amount-display {
+                font-size: 36px;
+            }
+            
+            .payment-body {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="payment-container">
+        <div class="payment-header">
+            <h1>💰 Bingo Bot</h1>
+            <div class="amount-display" id="amount"></div>
+            <p>Secure Payment</p>
+        </div>
+        
+        <div class="payment-body">
+            <div class="info-box">
+                <span class="icon">🔒</span>
+                <span>Your payment is secured by Stripe. We never store your card details.</span>
+            </div>
+            
+            <form id="payment-form">
+                <div id="payment-element">
+                    <!-- Stripe Elements will create form elements here -->
+                </div>
+                
+                <button id="submit-button">
+                    <span id="button-text">Pay now</span>
+                </button>
+                
+                <div id="error-message"></div>
+            </form>
+            
+            <div id="loading-message" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Processing your payment...</p>
+            </div>
+            
+            <div class="security-badge">
+                <span>🔒 256-bit SSL</span>
+                <span>✓ PCI Compliant</span>
+                <span>🛡️ Fraud Protection</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const amount = urlParams.get('amount');
+        const user_id = urlParams.get('user_id');
+        const clientSecret = '{{ client_secret }}';
+        
+        // Display amount
+        document.getElementById('amount').textContent = `$${(amount/100).toFixed(2)}`;
+        
+        // Initialize Stripe
+        const stripe = Stripe('{{ stripe_public_key }}');
+        
+        // Set up appearance
+        const appearance = {
+            theme: 'stripe',
+            variables: {
+                colorPrimary: '#667eea',
+                colorBackground: '#ffffff',
+                colorText: '#333333',
+                colorDanger: '#dc3545',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                borderRadius: '12px',
+            },
+        };
+        
+        // Initialize Elements
+        const elements = stripe.elements({ clientSecret, appearance });
+        
+        // Create and mount Payment Element
+        const paymentElement = elements.create('payment');
+        paymentElement.mount('#payment-element');
+        
+        // Handle form submission
+        const form = document.getElementById('payment-form');
+        const submitButton = document.getElementById('submit-button');
+        const errorMessage = document.getElementById('error-message');
+        const loadingMessage = document.getElementById('loading-message');
+        const buttonText = document.getElementById('button-text');
+        
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            
+            // Disable button and show loading
+            submitButton.disabled = true;
+            buttonText.textContent = 'Processing...';
+            loadingMessage.style.display = 'block';
+            
+            // Confirm payment
+            const { error } = await stripe.confirmPayment({
+                elements,
+                confirmParams: {
+                    return_url: '{{ BASE_URL }}/payment/success',
+                },
+            });
+            
+            if (error) {
+                // Show error
+                errorMessage.textContent = error.message;
+                submitButton.disabled = false;
+                buttonText.textContent = 'Pay now';
+                loadingMessage.style.display = 'none';
+            }
+        });
+        
+        // Auto-resize iframe for Telegram
+        if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
+        }
+    </script>
+</body>
+</html>
