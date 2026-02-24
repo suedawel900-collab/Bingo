@@ -41,10 +41,11 @@ class GameManager:
         
         if game_id not in self.game_connections:
             self.game_connections[game_id] = []
-            # Start number calling for this game
+            # Start number calling for this game (every 2 seconds)
             self.number_call_tasks[game_id] = asyncio.create_task(
                 self.call_numbers_periodically(game_id)
             )
+            logger.info(f"Started number calling for game {game_id} (2-second interval)")
         
         self.game_connections[game_id].append(websocket)
         
@@ -67,14 +68,19 @@ class GameManager:
             'is_winner': False
         }
         
+        # Update prize pool (20 ETB per player)
+        player_count = len(self.active_games[game_id]['players'])
+        self.active_games[game_id]['prize_pool'] = player_count * 2000  # 20 ETB in cents
+        
         # Notify all players
         await self.broadcast_to_game(game_id, {
             'type': 'player_joined',
             'players': self.get_players_list(game_id),
-            'player_id': user_id
+            'player_id': user_id,
+            'prize_pool': self.active_games[game_id]['prize_pool'] / 100
         })
         
-        logger.info(f"User {user_id} joined game {game_id}")
+        logger.info(f"User {user_id} joined game {game_id}. Total players: {player_count}")
     
     def disconnect_from_game(self, game_id: int, websocket: WebSocket, user_id: int):
         """Disconnect user from game"""
@@ -86,12 +92,17 @@ class GameManager:
             if game_id in self.active_games:
                 if user_id in self.active_games[game_id]['players']:
                     del self.active_games[game_id]['players'][user_id]
+                    
+                    # Update prize pool
+                    player_count = len(self.active_games[game_id]['players'])
+                    self.active_games[game_id]['prize_pool'] = player_count * 2000
             
             # Stop number calling if no players left
             if len(self.game_connections.get(game_id, [])) == 0:
                 if game_id in self.number_call_tasks:
                     self.number_call_tasks[game_id].cancel()
                     del self.number_call_tasks[game_id]
+                    logger.info(f"Stopped number calling for game {game_id} - no players")
     
     async def broadcast_to_game(self, game_id: int, message: Dict[str, Any]):
         """Broadcast message to all players in game"""
@@ -103,10 +114,10 @@ class GameManager:
                     pass
     
     async def call_numbers_periodically(self, game_id: int):
-        """Call numbers every 10 seconds"""
+        """Call numbers every 2 seconds"""
         try:
             while True:
-                await asyncio.sleep(10)  # Call number every 10 seconds
+                await asyncio.sleep(2)  # Call number every 2 seconds (changed from 10)
                 
                 if game_id in self.active_games:
                     game = self.active_games[game_id]
@@ -123,10 +134,11 @@ class GameManager:
                         await self.broadcast_to_game(game_id, {
                             'type': 'number_called',
                             'number': number,
-                            'called_numbers': game['called_numbers']
+                            'called_numbers': game['called_numbers'],
+                            'numbers_left': len(available_numbers) - 1
                         })
                         
-                        logger.info(f"Game {game_id} called number: {number}")
+                        logger.info(f"Game {game_id} called number: {number} ({len(available_numbers)-1} numbers left)")
                     else:
                         # All numbers called, game over
                         await self.broadcast_to_game(game_id, {
@@ -224,7 +236,7 @@ class GameManager:
             
             # Calculate prize (total buy-ins minus house fee)
             player_count = len(game['players'])
-            prize_pool = player_count * 200  # 20 ETB per player in cents
+            prize_pool = player_count * 2000  # 20 ETB per player in cents
             house_fee = int(prize_pool * 0.1)  # 10% house fee
             winner_prize = prize_pool - house_fee
             
@@ -262,6 +274,11 @@ class GameManager:
             }))
             
             logger.info(f"Game {game_id} winner: User {user_id}, Prize: {winner_prize/100:.2f} ETB")
+            
+            # Stop number calling
+            if game_id in self.number_call_tasks:
+                self.number_call_tasks[game_id].cancel()
+                del self.number_call_tasks[game_id]
 
 # Initialize game manager
 game_manager = GameManager()
@@ -273,6 +290,7 @@ async def root():
         "status": "online",
         "service": "Bingo WebApp",
         "version": "1.0.0",
+        "message": "Numbers called every 2 seconds!",
         "endpoints": [
             "/game - Bingo game page",
             "/health - Health check",
@@ -330,7 +348,7 @@ async def game_page(request: Request, user_id: int, game_id: int = None):
                     <h1>🎯 BINGO GAME</h1>
                     <p>Game ID: {game_id}</p>
                     <p>User ID: {user_id}</p>
-                    <p>The game is loading...</p>
+                    <p>Numbers called every 2 seconds!</p>
                     <button onclick="window.location.href='https://t.me/your_bot'">Return to Bot</button>
                 </div>
                 <script>
@@ -403,10 +421,10 @@ async def join_game(request: Request):
         game_id = data.get('game_id')
         card = data.get('card')
         
-        # Deduct game fee (20 ETB = 200 cents)
+        # Deduct game fee (20 ETB = 2000 cents)
         result = db.update_balance(
             user_id=user_id,
-            amount=-200,
+            amount=-2000,
             transaction_type='game_fee',
             description=f'Joined game #{game_id}'
         )
@@ -490,13 +508,15 @@ async def get_game_state(game_id: int):
             return JSONResponse({
                 'called_numbers': game['called_numbers'],
                 'players': game_manager.get_players_list(game_id),
-                'winner': game['winner']
+                'winner': game['winner'],
+                'prize_pool': game['prize_pool'] / 100
             })
         
         return JSONResponse({
             'called_numbers': [],
             'players': [],
-            'winner': None
+            'winner': None,
+            'prize_pool': 0
         })
     except Exception as e:
         logger.error(f"Game state error: {str(e)}")
