@@ -154,8 +154,8 @@ class Database:
             conn.commit()
             logger.info("✅ Database tables created/verified")
     
-    def create_user(self, user_id, username=None, first_name=None, last_name=None, phone_number=None):
-        """Create a new user"""
+    def create_user(self, user_id, username=None, first_name=None, last_name=None, phone_number=None, country='ET', currency='ETB'):
+        """Create a new user with all parameters"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -171,9 +171,11 @@ class Database:
                         first_name = COALESCE(?, first_name),
                         last_name = COALESCE(?, last_name),
                         phone_number = COALESCE(?, phone_number),
+                        country = COALESCE(?, country),
+                        currency = COALESCE(?, currency),
                         updated_at = CURRENT_TIMESTAMP
                     WHERE user_id = ?
-                ''', (username, first_name, last_name, phone_number, user_id))
+                ''', (username, first_name, last_name, phone_number, country, currency, user_id))
                 conn.commit()
                 return self.get_user(user_id)
             
@@ -182,9 +184,9 @@ class Database:
             
             cursor.execute('''
                 INSERT INTO users 
-                (user_id, username, first_name, last_name, phone_number, balance, welcome_bonus_claimed)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (user_id, username, first_name, last_name, phone_number, welcome_bonus, True))
+                (user_id, username, first_name, last_name, phone_number, country, currency, balance, welcome_bonus_claimed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, username, first_name, last_name, phone_number, country, currency, welcome_bonus, True))
             
             conn.commit()
             logger.info(f"✅ New user {user_id} created with {welcome_bonus/100} ETB welcome bonus")
@@ -209,12 +211,27 @@ class Database:
                 return dict(row)
             return None
     
-    def get_or_create_user(self, user_id, username=None, first_name=None, last_name=None):
+    def get_or_create_user(self, user_id, username=None, first_name=None, last_name=None, phone_number=None):
         """Get existing user or create new one"""
         user = self.get_user(user_id)
         if user:
+            # Update user info if provided
+            if username or first_name or last_name or phone_number:
+                with self.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        UPDATE users 
+                        SET username = COALESCE(?, username),
+                            first_name = COALESCE(?, first_name),
+                            last_name = COALESCE(?, last_name),
+                            phone_number = COALESCE(?, phone_number),
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = ?
+                    ''', (username, first_name, last_name, phone_number, user_id))
+                    conn.commit()
+                user = self.get_user(user_id)
             return user
-        return self.create_user(user_id, username, first_name, last_name)
+        return self.create_user(user_id, username, first_name, last_name, phone_number)
     
     def update_balance(self, user_id, amount, transaction_type, description=None):
         """Update user balance"""
