@@ -28,8 +28,8 @@ WITHDRAW_ADDRESS = 3
 # Bot token and URLs
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 BOT_USERNAME = os.getenv('BOT_USERNAME', 'your_bot')
-BASE_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'https://your-app.railway.app')
-WEBAPP_URL = os.getenv('WEBAPP_URL', BASE_URL)
+BASE_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'bingo-production-a078.up.railway.app')
+WEBAPP_URL = os.getenv('WEBAPP_URL', f"https://{BASE_URL}")
 
 # Check for required environment variables
 if not BOT_TOKEN:
@@ -119,9 +119,6 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
     elif update.callback_query:
         await update.callback_query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
-    else:
-        # Handle case when it's neither (shouldn't happen)
-        await context.bot.send_message(chat_id=user.id, text=message, reply_markup=reply_markup, parse_mode='Markdown')
 
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show balance"""
@@ -213,8 +210,8 @@ async def process_deposit(message_obj, user_id: int, amount: int):
             logger.error(f"Unknown message object type: {type(message_obj)}")
             return
         
-        # Create payment page URL
-        payment_url = f"{BASE_URL}/payment/page?user_id={user_id}&amount={amount}"
+        # Create payment page URL with https://
+        payment_url = f"https://{BASE_URL}/payment/page?user_id={user_id}&amount={amount}"
         logger.info(f"Payment URL: {payment_url}")
         
         keyboard = [[
@@ -236,16 +233,16 @@ async def process_deposit(message_obj, user_id: int, amount: int):
         
     except Exception as e:
         logger.error(f"Deposit failed: {str(e)}")
-        # Handle error gracefully
+        # Handle error gracefully - send a new message instead of editing
         try:
-            if hasattr(message_obj, 'message'):
-                await message_obj.message.edit_message_text(
+            if hasattr(message_obj, 'message'):  # CallbackQuery
+                await message_obj.message.reply_text(
                     "❌ Payment processing failed. Please try again.",
                     reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("◀️ Back", callback_data="deposit")
+                        InlineKeyboardButton("💳 Try Again", callback_data="deposit")
                     ]])
                 )
-            elif hasattr(message_obj, 'chat'):
+            elif hasattr(message_obj, 'chat'):  # Message
                 await message_obj.reply_text(
                     "❌ Payment processing failed. Please try again.",
                     reply_markup=InlineKeyboardMarkup([[
@@ -522,6 +519,49 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         pass
 
+def setup_handlers(application):
+    """Setup all handlers for the bot"""
+    # Add error handler
+    application.add_error_handler(error_handler)
+    
+    # Conversation handlers with per_message=False to fix warning
+    deposit_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(deposit_amount_handler, pattern='^deposit_')],
+        states={
+            AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_amount)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        per_message=False,
+        name="deposit_conversation"
+    )
+    
+    withdraw_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(withdraw_command, pattern='^withdraw$')],
+        states={
+            WITHDRAW_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_amount_handler)],
+            WITHDRAW_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_address_handler)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(show_main_menu, pattern='^main_menu$')],
+        per_message=False,
+        name="withdraw_conversation"
+    )
+    
+    # Add handlers
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
+    application.add_handler(CallbackQueryHandler(show_main_menu, pattern='^main_menu$'))
+    application.add_handler(CallbackQueryHandler(balance_command, pattern='^balance$'))
+    application.add_handler(CallbackQueryHandler(deposit_command, pattern='^deposit$'))
+    application.add_handler(CallbackQueryHandler(history_command, pattern='^history$'))
+    application.add_handler(CallbackQueryHandler(play_command, pattern='^play$'))
+    application.add_handler(CallbackQueryHandler(help_command, pattern='^help$'))
+    
+    # Add conversation handlers
+    application.add_handler(deposit_conv)
+    application.add_handler(withdraw_conv)
+    
+    return application
+
 def main():
     """Start the bot"""
     try:
@@ -537,44 +577,8 @@ def main():
         # Create application
         application = Application.builder().token(BOT_TOKEN).build()
         
-        # Add error handler
-        application.add_error_handler(error_handler)
-        
-        # Conversation handlers with per_message=False to fix warning
-        deposit_conv = ConversationHandler(
-            entry_points=[CallbackQueryHandler(deposit_amount_handler, pattern='^deposit_')],
-            states={
-                AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_amount)]
-            },
-            fallbacks=[CommandHandler('cancel', cancel)],
-            per_message=False,
-            name="deposit_conversation"
-        )
-        
-        withdraw_conv = ConversationHandler(
-            entry_points=[CallbackQueryHandler(withdraw_command, pattern='^withdraw$')],
-            states={
-                WITHDRAW_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_amount_handler)],
-                WITHDRAW_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_address_handler)]
-            },
-            fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(show_main_menu, pattern='^main_menu$')],
-            per_message=False,
-            name="withdraw_conversation"
-        )
-        
-        # Add handlers
-        application.add_handler(CommandHandler('start', start))
-        application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
-        application.add_handler(CallbackQueryHandler(show_main_menu, pattern='^main_menu$'))
-        application.add_handler(CallbackQueryHandler(balance_command, pattern='^balance$'))
-        application.add_handler(CallbackQueryHandler(deposit_command, pattern='^deposit$'))
-        application.add_handler(CallbackQueryHandler(history_command, pattern='^history$'))
-        application.add_handler(CallbackQueryHandler(play_command, pattern='^play$'))
-        application.add_handler(CallbackQueryHandler(help_command, pattern='^help$'))
-        
-        # Add conversation handlers
-        application.add_handler(deposit_conv)
-        application.add_handler(withdraw_conv)
+        # Setup all handlers
+        application = setup_handlers(application)
         
         logger.info("✅ Bot initialized successfully!")
         logger.info(f"🚀 Starting bot polling with token: {BOT_TOKEN[:10]}...")
