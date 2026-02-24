@@ -1,5 +1,3 @@
-import signal
-import sys
 import os
 import logging
 import asyncio
@@ -134,19 +132,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler"""
     user = update.effective_user
     
-    # Create or update user
-    db.create_user(
+    # Use get_or_create_user instead of create_user
+    user_data = db.get_or_create_user(
         user_id=user.id,
         username=user.username,
         first_name=user.first_name,
-        last_name=user.last_name,
-        country='ET',
-        currency='ETB'
+        last_name=user.last_name
     )
     
     # Check if phone number exists
-    user_data = db.get_user(user.id)
-    if not user_data or not user_data['phone_number']:
+    if not user_data or not user_data.get('phone_number'):
         contact_button = KeyboardButton("📱 Share Phone Number", request_contact=True)
         reply_markup = ReplyKeyboardMarkup(
             [[contact_button]],
@@ -168,7 +163,8 @@ async def contact_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contact = update.message.contact
     user = update.effective_user
     
-    db.create_user(
+    # Update user with phone number
+    db.get_or_create_user(
         user_id=user.id,
         username=user.username,
         first_name=user.first_name,
@@ -1074,8 +1070,7 @@ async def approve_payment_callback(update: Update, context: ContextTypes.DEFAULT
             user_id=request['user_id'],
             amount=request['amount'],
             transaction_type='deposit',
-            description=f'Payment via {request_id}',
-            status='completed'
+            description=f'Payment via {request_id}'
         )
         
         # Get method name for emoji
@@ -1472,8 +1467,19 @@ async def async_main():
         await application.initialize()
         await application.start()
         
-        # Start polling
-        await application.updater.start_polling()
+        # Delete any existing webhook before starting polling
+        await application.bot.delete_webhook()
+        
+        # Start polling with custom settings to avoid conflicts
+        await application.updater.start_polling(
+            poll_interval=1.0,
+            timeout=10,
+            read_latency=2.0,
+            bootstrap_retries=0,  # Don't retry on conflict
+            allowed_updates=['message', 'callback_query']
+        )
+        
+        logger.info("✅ Bot polling started successfully")
         
         # Keep running until stopped
         while not shutdown_flag:
@@ -1486,6 +1492,7 @@ async def async_main():
         # Clean shutdown
         if application:
             try:
+                logger.info("🛑 Stopping bot...")
                 await application.updater.stop()
                 await application.stop()
                 await application.shutdown()
@@ -1508,7 +1515,14 @@ def main():
         logger.error(f"❌ Fatal error: {e}")
     finally:
         # Clean up
-        loop.close()
+        try:
+            # Cancel all tasks
+            for task in asyncio.all_tasks(loop):
+                task.cancel()
+            loop.run_until_complete(asyncio.sleep(0.1))
+            loop.close()
+        except:
+            pass
 
 if __name__ == "__main__":
     main()
