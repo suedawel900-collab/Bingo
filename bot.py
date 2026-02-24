@@ -1,6 +1,5 @@
 import os
 import logging
-import asyncio
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
@@ -30,7 +29,7 @@ PAYMENT_REFERENCE = 6
 
 # Bot token and URLs
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-BOT_USERNAME = os.getenv('BOT_USERNAME', 'your_bot')
+BOT_USERNAME = os.getenv('BOT_USERNAME', 'Treeeeestbot')
 BASE_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'bingo-production-a078.up.railway.app')
 WEBAPP_URL = os.getenv('WEBAPP_URL', f"https://{BASE_URL}")
 ADMIN_USER_ID = os.getenv('ADMIN_USER_ID')
@@ -857,7 +856,7 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Launch Bingo game"""
+    """Launch Bingo game with card selection"""
     query = update.callback_query
     await query.answer()
     
@@ -868,11 +867,9 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = {'balance': 0, 'games_played': 0, 'games_won': 0, 'currency': 'ETB'}
     
     currency = user_data['currency'] if 'currency' in user_data.keys() else 'ETB'
-    games_played = user_data['games_played'] if 'games_played' in user_data.keys() else 0
-    games_won = user_data['games_won'] if 'games_won' in user_data.keys() else 0
     
-    # Game fee 20 ETB (200 cents)
-    if user_data['balance'] < 200:
+    # Game fee 20 ETB (2000 cents)
+    if user_data['balance'] < 2000:
         await query.edit_message_text(
             f"❌ **Insufficient Balance**\n\n"
             f"You need 20.00 {currency} to play Bingo.\n\n"
@@ -885,8 +882,8 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Launch webapp
-    webapp_url = f"{WEBAPP_URL}/game?user_id={user.id}&game_id={context.user_data.get('game_id', 1)}"
+    # Launch webapp with admin_id
+    webapp_url = f"{WEBAPP_URL}/game?user_id={user.id}&game_id={context.user_data.get('game_id', 1)}&admin_id={ADMIN_USER_ID}"
     logger.info(f"Webapp URL: {webapp_url}")
     
     keyboard = [[
@@ -902,7 +899,8 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Click below to open the game.\n\n"
         f"• Game fee: 20.00 {currency}\n"
         f"• Your balance: {user_data['balance']/100:.2f} {currency}\n"
-        f"• Games played: {games_played} | Wins: {games_won}",
+        f"• Choose from 1000 unique cards!\n"
+        f"• Admin starts the game",
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
@@ -916,8 +914,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "❓ **Bingo Bot Help**\n\n"
         "**How to Play:**\n"
         "1. Click 'Play Bingo' to start\n"
-        "2. Match numbers as they're called\n"
-        "3. Click 'BINGO' when you have 5 in a row\n\n"
+        "2. Choose your card from 1000 options\n"
+        "3. Wait for admin to start the game\n"
+        "4. Match numbers as they're called (every 2 seconds!)\n"
+        "5. Click 'BINGO' when you have 5 in a row\n\n"
         "**💰 Balance:**\n"
         "• Deposit using Telbirr or CBE Birr\n"
         "• Withdraw your winnings to mobile money\n"
@@ -926,7 +926,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• 🔵 Telbirr - Dial *127#\n"
         "• 💚 CBE Birr - Dial *847#\n\n"
         "**📞 Contact:**\n"
-        "• For support, contact @admin\n"
+        "• Bot: @Treeeeestbot\n"
         "• Payment issues: Send payment reference to admin"
     )
     
