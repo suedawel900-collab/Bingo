@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bingo Game - 2 Second Edition</title>
+    <title>Bingo Game - Card Selection</title>
     <style>
         * {
             margin: 0;
@@ -22,7 +22,7 @@
         }
         
         .game-container {
-            max-width: 500px;
+            max-width: 600px;
             width: 100%;
             background: white;
             border-radius: 20px;
@@ -76,6 +76,137 @@
             0% { transform: scale(1); }
             50% { transform: scale(1.05); }
             100% { transform: scale(1); }
+        }
+        
+        /* Card Selection Screen */
+        .card-selection {
+            padding: 20px;
+            background: white;
+        }
+        
+        .selection-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .selection-header h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .selection-header p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+        }
+        
+        .card-option {
+            aspect-ratio: 1;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .card-option:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .card-option.selected {
+            background: #4CAF50;
+            transform: scale(1.05);
+            box-shadow: 0 0 0 3px #ffd700;
+        }
+        
+        .card-preview {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .preview-title {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .preview-card {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .preview-cell {
+            aspect-ratio: 1;
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .preview-cell.free {
+            background: #ffd700;
+            border-color: #ffd700;
+            color: #333;
+            font-size: 10px;
+        }
+        
+        .confirm-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        
+        .confirm-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+        }
+        
+        .confirm-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Game Screen (hidden initially) */
+        .game-screen {
+            display: none;
         }
         
         .game-info {
@@ -145,7 +276,7 @@
             background: white;
         }
         
-        .card-grid {
+        .card-grid-game {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
             gap: 8px;
@@ -199,24 +330,6 @@
             color: #333;
         }
         
-        .card-cell.just-called {
-            animation: calledFlash 1s ease;
-        }
-        
-        @keyframes calledFlash {
-            0% { background-color: #ffd700; }
-            100% { background-color: white; }
-        }
-        
-        .card-cell.marked.just-called {
-            animation: markedFlash 1s ease;
-        }
-        
-        @keyframes markedFlash {
-            0% { background-color: #ffd700; }
-            100% { background-color: #4CAF50; }
-        }
-        
         .bingo-button {
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: white;
@@ -239,17 +352,9 @@
             box-shadow: 0 15px 35px rgba(245, 87, 108, 0.4);
         }
         
-        .bingo-button:active:not(:disabled) {
-            transform: translateY(0);
-        }
-        
         .bingo-button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
-        }
-        
-        .bingo-button.winner {
-            background: linear-gradient(135deg, #4CAF50, #45a049);
         }
         
         .status-message {
@@ -283,13 +388,6 @@
             display: block;
         }
         
-        .status-message.warning {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeeba;
-            display: block;
-        }
-        
         .players-list {
             padding: 20px;
             background: #f8f9fa;
@@ -318,6 +416,12 @@
             color: #333;
             border: 2px solid #e9ecef;
             transition: all 0.3s ease;
+        }
+        
+        .player-badge .card-id {
+            font-size: 10px;
+            color: #666;
+            margin-left: 5px;
         }
         
         .player-badge.winner {
@@ -351,36 +455,52 @@
             background: #5a6268;
         }
         
-        .loading {
+        .pagination {
             display: flex;
-            flex-direction: column;
-            align-items: center;
             justify-content: center;
-            padding: 40px;
+            gap: 10px;
+            margin: 15px 0;
         }
         
-        .spinner {
-            border: 4px solid rgba(0,0,0,0.1);
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
+        .page-btn {
+            background: #e9ecef;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #495057;
+            transition: all 0.3s;
         }
         
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .page-btn:hover:not(:disabled) {
+            background: #667eea;
+            color: white;
+        }
+        
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .card-id-display {
+            background: #e9ecef;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #495057;
+            display: inline-block;
+            margin-top: 10px;
         }
         
         @media (max-width: 480px) {
-            .game-header h1 {
-                font-size: 28px;
-            }
-            
-            .info-value {
-                font-size: 20px;
+            .card-option {
+                font-size: 16px;
             }
             
             .card-cell {
@@ -390,10 +510,6 @@
             .bingo-button {
                 font-size: 20px;
                 padding: 15px;
-            }
-            
-            .last-number {
-                font-size: 36px;
             }
         }
     </style>
@@ -406,47 +522,82 @@
             <div class="speed-badge">⚡ 2 SECOND CALLS ⚡</div>
         </div>
         
-        <div class="game-info">
-            <div class="info-item">
-                <div class="info-label">Players</div>
-                <div class="info-value" id="player-count">1</div>
-            </div>
-            <div class="info-item">
-                <div class="info-label">Prize Pool</div>
-                <div class="info-value" id="prize-pool">20 ETB</div>
-            </div>
-            <div class="info-item">
-                <div class="info-label">Called</div>
-                <div class="info-value" id="called-count">0</div>
-            </div>
-        </div>
-        
-        <div class="timer-info">
-            ⏱️ Next number in <span id="countdown">2</span> seconds | <span id="numbers-left">75</span> numbers left
-        </div>
-        
-        <div class="last-number" id="last-number">
-            🎲 Ready...
-        </div>
-        
-        <div class="bingo-card">
-            <div class="card-grid" id="bingo-card">
-                <!-- Card will be generated by JavaScript -->
+        <!-- Card Selection Screen -->
+        <div id="card-selection" class="card-selection">
+            <div class="selection-header">
+                <h2>Choose Your Card</h2>
+                <p>Select from <span id="total-cards">{{ total_cards }}</span> unique cards</p>
             </div>
             
-            <div id="status-message" class="status-message"></div>
+            <div id="card-grid" class="card-grid">
+                <!-- Cards will be loaded here -->
+                <div class="loading">Loading cards...</div>
+            </div>
             
-            <button class="bingo-button" id="bingo-button" onclick="checkBingo()">
-                🎯 BINGO!
+            <div class="pagination" id="pagination">
+                <button class="page-btn" id="prev-page" disabled>◀ Previous</button>
+                <span id="page-info">Page 1</span>
+                <button class="page-btn" id="next-page">Next ▶</button>
+            </div>
+            
+            <div id="card-preview" class="card-preview" style="display: none;">
+                <div class="preview-title">Preview Card <span id="selected-card-id"></span></div>
+                <div id="preview-grid" class="preview-card">
+                    <!-- Preview will be shown here -->
+                </div>
+                <div class="card-id-display" id="preview-card-id"></div>
+            </div>
+            
+            <button class="confirm-button" id="confirm-card" disabled>
+                Confirm Selection
             </button>
-            
-            <a href="https://t.me/your_bot" class="back-button">◀️ Back to Bot</a>
         </div>
         
-        <div class="players-list">
-            <div class="players-title">Players in this game:</div>
-            <div class="player-badges" id="players-list">
-                <span class="player-badge">You</span>
+        <!-- Game Screen (hidden initially) -->
+        <div id="game-screen" class="game-screen">
+            <div class="game-info">
+                <div class="info-item">
+                    <div class="info-label">Players</div>
+                    <div class="info-value" id="player-count">1</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Prize Pool</div>
+                    <div class="info-value" id="prize-pool">20 ETB</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Called</div>
+                    <div class="info-value" id="called-count">0</div>
+                </div>
+            </div>
+            
+            <div class="timer-info">
+                ⏱️ Next number in <span id="countdown">2</span> seconds | <span id="numbers-left">75</span> numbers left
+            </div>
+            
+            <div class="last-number" id="last-number">
+                🎲 Ready...
+            </div>
+            
+            <div class="bingo-card">
+                <div class="card-id-display" id="current-card-id">Card #<span></span></div>
+                <div class="card-grid-game" id="bingo-card">
+                    <!-- Card will be displayed here -->
+                </div>
+                
+                <div id="status-message" class="status-message"></div>
+                
+                <button class="bingo-button" id="bingo-button" onclick="checkBingo()">
+                    🎯 BINGO!
+                </button>
+                
+                <a href="https://t.me/your_bot" class="back-button">◀️ Back to Bot</a>
+            </div>
+            
+            <div class="players-list">
+                <div class="players-title">Players in this game:</div>
+                <div class="player-badges" id="players-list">
+                    <span class="player-badge">You</span>
+                </div>
             </div>
         </div>
     </div>
@@ -455,17 +606,19 @@
         // Configuration
         const CALL_INTERVAL = 2000; // 2 seconds
         const TOTAL_NUMBERS = 75;
+        const TOTAL_CARDS = {{ total_cards }};
         
         // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const userId = parseInt(urlParams.get('user_id') || '{{ user_id }}');
         const gameId = parseInt(urlParams.get('game_id') || '{{ game_id }}');
         
-        console.log('🎯 Bingo Game Starting - 2 Second Edition');
+        console.log('🎯 Bingo Game Starting - Card Selection Edition');
         console.log(`📊 Game #${gameId} for Player #${userId}`);
         
         // Game state
-        let card = [];
+        let selectedCardId = null;
+        let currentCard = null;
         let markedNumbers = [];
         let calledNumbers = [];
         let players = [];
@@ -476,44 +629,143 @@
         const maxReconnectAttempts = 5;
         let countdownInterval = null;
         let nextNumberTime = 2;
+        let currentPage = 1;
+        const cardsPerPage = 30;
+        let totalPages = Math.ceil(TOTAL_CARDS / cardsPerPage);
         
-        // Generate random bingo card
-        function generateCard() {
-            const columns = [
-                { letter: 'B', min: 1, max: 15 },
-                { letter: 'I', min: 16, max: 30 },
-                { letter: 'N', min: 31, max: 45 },
-                { letter: 'G', min: 46, max: 60 },
-                { letter: 'O', min: 61, max: 75 }
-            ];
-            
-            const newCard = [];
-            
-            for (let col = 0; col < 5; col++) {
-                const column = [];
-                const numbers = new Set();
+        // Initialize card selection
+        async function loadCards(page = 1) {
+            try {
+                const response = await fetch(`/api/cards?page=${page}&limit=${cardsPerPage}`);
+                const data = await response.json();
                 
-                while (numbers.size < 5) {
-                    const num = Math.floor(Math.random() * (columns[col].max - columns[col].min + 1)) + columns[col].min;
-                    numbers.add(num);
-                }
+                const cardGrid = document.getElementById('card-grid');
+                cardGrid.innerHTML = '';
                 
-                column.push(...Array.from(numbers));
-                newCard.push(column);
+                data.cards.forEach(card => {
+                    const btn = document.createElement('button');
+                    btn.className = 'card-option';
+                    if (card.id === selectedCardId) {
+                        btn.classList.add('selected');
+                    }
+                    btn.textContent = card.id;
+                    btn.onclick = () => previewCard(card.id);
+                    cardGrid.appendChild(btn);
+                });
+                
+                // Update pagination
+                document.getElementById('page-info').textContent = `Page ${data.page} of ${data.total_pages}`;
+                document.getElementById('prev-page').disabled = data.page === 1;
+                document.getElementById('next-page').disabled = data.page === data.total_pages;
+                
+                currentPage = data.page;
+                totalPages = data.total_pages;
+                
+            } catch (error) {
+                console.error('Error loading cards:', error);
+                document.getElementById('card-grid').innerHTML = '<div class="error">Error loading cards</div>';
             }
-            
-            // Free space in center
-            newCard[2][2] = 'FREE';
-            
-            return newCard;
         }
         
-        // Render bingo card
-        function renderCard() {
+        // Preview card
+        async function previewCard(cardId) {
+            selectedCardId = cardId;
+            
+            // Update selected state
+            document.querySelectorAll('.card-option').forEach(btn => {
+                btn.classList.remove('selected');
+                if (parseInt(btn.textContent) === cardId) {
+                    btn.classList.add('selected');
+                }
+            });
+            
+            try {
+                const response = await fetch(`/api/card/${cardId}`);
+                const card = await response.json();
+                
+                const previewGrid = document.getElementById('preview-grid');
+                previewGrid.innerHTML = '';
+                
+                // Show preview (first 2 rows only)
+                for (let row = 0; row < 2; row++) {
+                    for (let col = 0; col < 5; col++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'preview-cell';
+                        const num = card.card[col][row];
+                        cell.textContent = num;
+                        if (num === 'FREE') {
+                            cell.classList.add('free');
+                        }
+                        previewGrid.appendChild(cell);
+                    }
+                }
+                
+                document.getElementById('selected-card-id').textContent = `#${cardId}`;
+                document.getElementById('preview-card-id').textContent = `Card #${cardId}`;
+                document.getElementById('card-preview').style.display = 'block';
+                document.getElementById('confirm-card').disabled = false;
+                
+            } catch (error) {
+                console.error('Error loading card preview:', error);
+            }
+        }
+        
+        // Confirm card selection
+        async function confirmCard() {
+            if (!selectedCardId) return;
+            
+            // Connect WebSocket first
+            connectWebSocket();
+            
+            // Wait for connection and send card selection
+            setTimeout(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'select_card',
+                        card_id: selectedCardId
+                    }));
+                }
+            }, 1000);
+            
+            // Hide selection screen, show game screen
+            document.getElementById('card-selection').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+            
+            // Join game (deduct fee)
+            try {
+                await fetch('/api/join-game', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        game_id: gameId
+                    })
+                });
+            } catch (error) {
+                console.error('Error joining game:', error);
+            }
+        }
+        
+        // Pagination handlers
+        document.getElementById('prev-page').addEventListener('click', () => {
+            if (currentPage > 1) {
+                loadCards(currentPage - 1);
+            }
+        });
+        
+        document.getElementById('next-page').addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                loadCards(currentPage + 1);
+            }
+        });
+        
+        // Render game card
+        function renderGameCard(card) {
             const cardGrid = document.getElementById('bingo-card');
             if (!cardGrid) return;
             
             cardGrid.innerHTML = '';
+            document.getElementById('current-card-id').innerHTML = `Card #<span>${selectedCardId}</span>`;
             
             for (let row = 0; row < 5; row++) {
                 for (let col = 0; col < 5; col++) {
@@ -538,13 +790,13 @@
             }
         }
         
-        // Mark number on card
+        // Mark number
         function markNumber(number) {
             if (number === 'FREE' || !gameActive || winner) return;
             
             if (!markedNumbers.includes(number) && calledNumbers.includes(number)) {
                 markedNumbers.push(number);
-                renderCard();
+                renderGameCard(currentCard);
                 
                 // Send to server
                 if (ws && ws.readyState === WebSocket.OPEN) {
@@ -553,9 +805,6 @@
                         number: number
                     }));
                 }
-                
-                // Play sound effect (if browser supports it)
-                playSound('mark');
                 
                 // Check for bingo after marking
                 if (checkBingo()) {
@@ -566,11 +815,13 @@
         
         // Check if player has bingo
         function checkBingo() {
+            if (!currentCard) return false;
+            
             // Check rows
             for (let row = 0; row < 5; row++) {
                 let bingo = true;
                 for (let col = 0; col < 5; col++) {
-                    const num = card[col][row];
+                    const num = currentCard[col][row];
                     if (num !== 'FREE' && !markedNumbers.includes(num)) {
                         bingo = false;
                         break;
@@ -583,7 +834,7 @@
             for (let col = 0; col < 5; col++) {
                 let bingo = true;
                 for (let row = 0; row < 5; row++) {
-                    const num = card[col][row];
+                    const num = currentCard[col][row];
                     if (num !== 'FREE' && !markedNumbers.includes(num)) {
                         bingo = false;
                         break;
@@ -596,8 +847,8 @@
             let diag1 = true;
             let diag2 = true;
             for (let i = 0; i < 5; i++) {
-                const num1 = card[i][i];
-                const num2 = card[4-i][i];
+                const num1 = currentCard[i][i];
+                const num2 = currentCard[4-i][i];
                 
                 if (num1 !== 'FREE' && !markedNumbers.includes(num1)) diag1 = false;
                 if (num2 !== 'FREE' && !markedNumbers.includes(num2)) diag2 = false;
@@ -612,7 +863,6 @@
             
             gameActive = false;
             showStatus('🎉 BINGO! Checking with server...', 'info');
-            playSound('bingo');
             
             try {
                 const response = await fetch('/api/check-bingo', {
@@ -621,7 +871,6 @@
                     body: JSON.stringify({
                         user_id: userId,
                         game_id: gameId,
-                        card: card,
                         marked: markedNumbers
                     })
                 });
@@ -633,7 +882,6 @@
                     document.getElementById('bingo-button').disabled = true;
                     document.getElementById('bingo-button').classList.add('winner');
                     document.getElementById('bingo-button').textContent = '🏆 YOU WON! 🏆';
-                    playSound('win');
                 } else {
                     showStatus('❌ Not a valid BINGO!', 'error');
                     gameActive = true;
@@ -654,48 +902,9 @@
             statusDiv.textContent = message;
             statusDiv.className = `status-message ${type}`;
             
-            // Auto hide after 3 seconds for non-error messages
-            if (type !== 'error') {
-                setTimeout(() => {
-                    statusDiv.style.display = 'none';
-                }, 3000);
-            }
-        }
-        
-        // Play sound effects (simple beep using Web Audio API)
-        function playSound(type) {
-            try {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                if (type === 'call') {
-                    oscillator.frequency.value = 440; // A4
-                    gainNode.gain.value = 0.1;
-                    oscillator.start();
-                    oscillator.stop(audioContext.currentTime + 0.1);
-                } else if (type === 'mark') {
-                    oscillator.frequency.value = 523.25; // C5
-                    gainNode.gain.value = 0.1;
-                    oscillator.start();
-                    oscillator.stop(audioContext.currentTime + 0.05);
-                } else if (type === 'bingo') {
-                    oscillator.frequency.value = 659.25; // E5
-                    gainNode.gain.value = 0.2;
-                    oscillator.start();
-                    oscillator.stop(audioContext.currentTime + 0.3);
-                } else if (type === 'win') {
-                    oscillator.frequency.value = 880; // A5
-                    gainNode.gain.value = 0.3;
-                    oscillator.start();
-                    oscillator.stop(audioContext.currentTime + 0.5);
-                }
-            } catch (e) {
-                // Ignore audio errors
-            }
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
         }
         
         // Connect to WebSocket
@@ -708,37 +917,19 @@
             ws.onopen = () => {
                 console.log('✅ WebSocket connected');
                 reconnectAttempts = 0;
-                showStatus('Connected! Numbers called every 2 seconds ⚡', 'success');
-                
-                // Start countdown
-                startCountdown();
-                
-                // Join game
-                fetch('/api/join-game', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        user_id: userId,
-                        game_id: gameId,
-                        card: card
-                    })
-                }).then(res => res.json()).then(data => {
-                    if (data.success) {
-                        console.log('✅ Joined game successfully');
-                        showStatus('Game joined! Waiting for numbers...', 'info');
-                    } else {
-                        showStatus('Failed to join game: ' + (data.error || 'Unknown error'), 'error');
-                    }
-                }).catch(err => {
-                    console.error('Join game error:', err);
-                });
+                showStatus('Connected! Select your card ⚡', 'success');
             };
             
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 console.log('📩 WebSocket message:', data);
                 
-                if (data.type === 'number_called') {
+                if (data.type === 'your_card') {
+                    currentCard = data.card;
+                    renderGameCard(currentCard);
+                    showStatus(`Card #${data.card_id} selected! Game starting...`, 'success');
+                    startCountdown();
+                } else if (data.type === 'number_called') {
                     onNumberCalled(data);
                 } else if (data.type === 'player_joined') {
                     onPlayerJoined(data);
@@ -748,8 +939,6 @@
                     onGameOver(data);
                 } else if (data.type === 'number_marked') {
                     // Number marked successfully
-                } else if (data.type === 'bingo_result') {
-                    // Bingo check result
                 }
             };
             
@@ -806,30 +995,17 @@
             document.getElementById('called-count').textContent = calledNumbers.length;
             document.getElementById('numbers-left').textContent = data.numbers_left || (TOTAL_NUMBERS - calledNumbers.length);
             
-            // Highlight the number on card if it exists
-            for (let col = 0; col < 5; col++) {
-                for (let row = 0; row < 5; row++) {
-                    if (card[col][row] === data.number) {
-                        // Flash the cell
-                        const cells = document.querySelectorAll('.card-cell');
-                        cells.forEach(cell => {
-                            if (cell.textContent == data.number) {
-                                cell.classList.add('just-called');
-                                setTimeout(() => {
-                                    cell.classList.remove('just-called');
-                                }, 1000);
-                            }
-                        });
-                        
-                        showStatus(`✅ Number ${data.number} is on your card!`, 'success');
-                        playSound('mark');
-                        break;
+            // Check if number is on player's card
+            if (currentCard) {
+                for (let col = 0; col < 5; col++) {
+                    for (let row = 0; row < 5; row++) {
+                        if (currentCard[col][row] === data.number) {
+                            showStatus(`✅ Number ${data.number} is on your card!`, 'success');
+                            break;
+                        }
                     }
                 }
             }
-            
-            // Play sound
-            playSound('call');
         }
         
         // Handle player joined
@@ -840,11 +1016,6 @@
             
             if (data.prize_pool) {
                 document.getElementById('prize-pool').textContent = `${data.prize_pool} ETB`;
-            }
-            
-            if (data.player_id !== userId) {
-                showStatus(`👋 Player joined the game! Total: ${players.length}`, 'info');
-                playSound('call');
             }
         }
         
@@ -859,19 +1030,15 @@
                 document.getElementById('bingo-button').classList.add('winner');
                 document.getElementById('bingo-button').textContent = '🏆 YOU WON! 🏆';
                 showStatus('🏆 CONGRATULATIONS! You won! 🏆', 'success');
-                playSound('win');
             } else {
                 document.getElementById('bingo-button').textContent = '👑 GAME OVER';
                 showStatus(`👑 ${data.winner_name} won! Prize: ${data.prize}`, 'info');
-                playSound('bingo');
             }
             
-            // Update prize pool
             if (data.prize) {
                 document.getElementById('prize-pool').textContent = data.prize;
             }
             
-            // Update players list to show winner
             updatePlayersList();
         }
         
@@ -881,7 +1048,6 @@
             showStatus(data.message, 'warning');
             document.getElementById('bingo-button').disabled = true;
             document.getElementById('bingo-button').textContent = '🎲 GAME OVER';
-            playSound('bingo');
         }
         
         // Update players list
@@ -901,32 +1067,31 @@
                 badge.className = 'player-badge';
                 badge.textContent = player.name;
                 
+                if (player.card_id) {
+                    const cardSpan = document.createElement('span');
+                    cardSpan.className = 'card-id';
+                    cardSpan.textContent = ` (#${player.card_id})`;
+                    badge.appendChild(cardSpan);
+                }
+                
                 if (player.is_winner || player.id === winner) {
                     badge.classList.add('winner');
-                    badge.textContent += ' 👑';
+                    badge.innerHTML += ' 👑';
                 }
                 
                 if (player.id === userId) {
-                    badge.textContent += ' (You)';
+                    badge.innerHTML += ' (You)';
                 }
                 
                 container.appendChild(badge);
             });
         }
         
-        // Initialize game
-        function initGame() {
-            // Generate card
-            card = generateCard();
-            renderCard();
-            console.log('🎴 Bingo card generated:', card);
-            
-            // Connect WebSocket
-            connectWebSocket();
-        }
+        // Initialize
+        loadCards();
         
-        // Start game when page loads
-        document.addEventListener('DOMContentLoaded', initGame);
+        // Confirm button handler
+        document.getElementById('confirm-card').addEventListener('click', confirmCard);
     </script>
 </body>
 </html>
