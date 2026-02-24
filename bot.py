@@ -438,4 +438,48 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def notify_admin(message: str):
-    """Notify admin (implement
+    """Notify admin (implement with your admin chat ID)"""
+    admin_id = os.getenv('ADMIN_USER_ID')
+    if admin_id:
+        # Send message to admin
+        pass
+
+def main():
+    """Start the bot"""
+    # Create application
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Conversation handlers
+    deposit_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(deposit_amount_handler, pattern='^deposit_')],
+        states={AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_amount)]},
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+    
+    withdraw_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(withdraw_command, pattern='^withdraw$')],
+        states={
+            WITHDRAW_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_amount_handler)],
+            WITHDRAW_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_address_handler)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+    
+    # Add handlers
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
+    application.add_handler(CallbackQueryHandler(show_main_menu, pattern='^main_menu$'))
+    application.add_handler(CallbackQueryHandler(balance_command, pattern='^balance$'))
+    application.add_handler(CallbackQueryHandler(deposit_command, pattern='^deposit$'))
+    application.add_handler(CallbackQueryHandler(history_command, pattern='^history$'))
+    application.add_handler(CallbackQueryHandler(play_command, pattern='^play$'))
+    application.add_handler(CallbackQueryHandler(help_command, pattern='^help$'))
+    application.add_handler(deposit_conv)
+    application.add_handler(withdraw_conv)
+    
+    # Start bot
+    print("🤖 Bingo bot started!")
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()
