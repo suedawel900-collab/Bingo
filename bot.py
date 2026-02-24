@@ -70,42 +70,6 @@ async def notify_admin(context: ContextTypes.DEFAULT_TYPE, message: str):
     except Exception as e:
         logger.error(f"Failed to notify admin: {e}")
 
-async def notify_admin_withdrawal(user_id: int, amount: int, address: str, context: ContextTypes.DEFAULT_TYPE):
-    """Notify admin about withdrawal request"""
-    if not ADMIN_USER_ID:
-        return
-    
-    try:
-        # Get user info
-        user = await context.bot.get_chat(user_id)
-        username = user.username or f"User {user_id}"
-        
-        # Create approval buttons
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}_{amount}"),
-                InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}_{amount}")
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        message = (
-            f"💰 **New Withdrawal Request**\n\n"
-            f"**User:** {username} (ID: `{user_id}`)\n"
-            f"**Amount:** `${amount/100:.2f}`\n"
-            f"**Destination:** `{address}`\n"
-            f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        
-        await context.bot.send_message(
-            chat_id=ADMIN_USER_ID,
-            text=message,
-            parse_mode='Markdown',
-            reply_markup=reply_markup
-        )
-    except Exception as e:
-        logger.error(f"Failed to notify admin about withdrawal: {e}")
-
 async def notify_admin_payment_request(request_id, user_id, amount, method_name, context):
     """Notify admin about new payment request"""
     if not ADMIN_USER_ID:
@@ -116,7 +80,7 @@ async def notify_admin_payment_request(request_id, user_id, amount, method_name,
             f"🆕 **New Payment Request**\n\n"
             f"**Request ID:** `{request_id}`\n"
             f"**User ID:** `{user_id}`\n"
-            f"**Amount:** ${amount:.2f}\n"
+            f"**Amount:** {amount:.2f} ETB\n"
             f"**Method:** {method_name}\n"
             f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
@@ -278,64 +242,32 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show deposit options with payment methods"""
+    """Show deposit options with only Telbirr and CBE Birr"""
     query = update.callback_query
     await query.answer()
     
-    # Get payment methods grouped by type
-    methods = db.get_payment_methods(active_only=True)
+    # Get only mobile money payment methods (Telbirr and CBE Birr)
+    methods = db.get_payment_methods(type='mobile_money', active_only=True)
     
     keyboard = []
     
-    # Add mobile money section (Telbirr, CBE Birr)
-    mobile_money = [m for m in methods if m['type'] == 'mobile_money']
-    if mobile_money:
-        keyboard.append([InlineKeyboardButton("📱 የሞባይል ገንዘብ አገልግሎት (Mobile Money)", callback_data="ignore")])
-        for m in mobile_money:
+    # Add mobile money section
+    if methods and len(methods) > 0:
+        for m in methods:
             min_amt = m['min_amount'] / 100
             max_amt = m['max_amount'] / 100
             method_name = m['method_name'] if 'method_name' in m.keys() else 'Mobile Money'
+            
+            # Use specific emoji for each
+            if 'CBE' in method_name or 'ሲቢኢ' in method_name:
+                emoji = "💚"
+            else:
+                emoji = "🔵"
+                
             keyboard.append([InlineKeyboardButton(
-                f"   {method_name} ({min_amt:.0f}-{max_amt:.0f} ETB)", 
+                f"{emoji} {method_name} ({min_amt:.0f}-{max_amt:.0f} ETB)", 
                 callback_data=f"deposit_method_{m['id']}"
             )])
-    
-    # Add bank section
-    banks = [m for m in methods if m['type'] == 'bank']
-    if banks:
-        keyboard.append([InlineKeyboardButton("🏦 የባንክ ማስተላለፍ (Bank Transfer)", callback_data="ignore")])
-        for b in banks:
-            min_amt = b['min_amount'] / 100
-            max_amt = b['max_amount'] / 100
-            method_name = b['method_name'] if 'method_name' in b.keys() else 'Bank Transfer'
-            keyboard.append([InlineKeyboardButton(
-                f"   {method_name} ({min_amt:.0f}-{max_amt:.0f} ETB)", 
-                callback_data=f"deposit_method_{b['id']}"
-            )])
-    
-    # Add manual payment
-    manual = [m for m in methods if m['type'] == 'manual']
-    if manual:
-        m = manual[0]
-        min_amt = m['min_amount'] / 100
-        max_amt = m['max_amount'] / 100
-        method_name = m['method_name'] if 'method_name' in m.keys() else 'Manual Payment'
-        keyboard.append([InlineKeyboardButton(
-            f"💵 {method_name} ({min_amt:.0f}-{max_amt:.0f} ETB)", 
-            callback_data=f"deposit_method_{m['id']}"
-        )])
-    
-    # Add card payment (Stripe)
-    card = [m for m in methods if m['type'] == 'card']
-    if card:
-        c = card[0]
-        min_amt = c['min_amount'] / 100
-        max_amt = c['max_amount'] / 100
-        method_name = c['method_name'] if 'method_name' in c.keys() else 'Credit/Debit Card'
-        keyboard.append([InlineKeyboardButton(
-            f"💳 {method_name} (ፈጣን / Instant) ({min_amt:.0f}-{max_amt:.0f} ETB)", 
-            callback_data=f"deposit_method_{c['id']}"
-        )])
     
     keyboard.append([InlineKeyboardButton("◀️ ተመለስ (Back)", callback_data="main_menu")])
     
@@ -364,134 +296,29 @@ async def deposit_method_selected(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text("❌ Invalid payment method")
         return ConversationHandler.END
     
-    if method['type'] == 'card' and method['method_code'] == 'STRIPE':
-        # Stripe card payment - use existing flow
-        await stripe_deposit(update, context)
-    else:
-        # Ethiopian payment methods - show amount input
-        min_amt = method['min_amount'] / 100
-        max_amt = method['max_amount'] / 100
-        method_name = method['method_name'] if 'method_name' in method.keys() else 'Payment'
-        
-        await query.edit_message_text(
-            f"{get_method_emoji(method['type'])} **{method_name}**\n\n"
-            f"ዝቅተኛ: {min_amt:.0f} ETB\n"
-            f"ከፍተኛ: {max_amt:.0f} ETB\n\n"
-            f"💰 እባክዎ መጠኑን ያስገቡ (ETB):\n"
-            f"Please enter amount in ETB:",
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ ተመለስ (Back)", callback_data="deposit")
-            ]])
-        )
-        return AMOUNT
-
-async def stripe_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle Stripe deposit (existing flow)"""
-    query = update.callback_query
+    # Show amount input for mobile money
+    min_amt = method['min_amount'] / 100
+    max_amt = method['max_amount'] / 100
+    method_name = method['method_name'] if 'method_name' in method.keys() else 'Payment'
     
-    keyboard = [
-        [InlineKeyboardButton("$10", callback_data="deposit_10"),
-         InlineKeyboardButton("$20", callback_data="deposit_20"),
-         InlineKeyboardButton("$50", callback_data="deposit_50")],
-        [InlineKeyboardButton("$100", callback_data="deposit_100"),
-         InlineKeyboardButton("$200", callback_data="deposit_200"),
-         InlineKeyboardButton("Custom", callback_data="deposit_custom")],
-        [InlineKeyboardButton("◀️ Back", callback_data="deposit")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    # Set appropriate emoji
+    if 'CBE' in method_name or 'ሲቢኢ' in method_name:
+        emoji = "💚"
+    else:
+        emoji = "🔵"
     
     await query.edit_message_text(
-        "💳 **Stripe Deposit**\n\n"
-        "Select amount in USD:",
+        f"{emoji} **{method_name}**\n\n"
+        f"ዝቅተኛ: {min_amt:.0f} ETB\n"
+        f"ከፍተኛ: {max_amt:.0f} ETB\n\n"
+        f"💰 እባክዎ መጠኑን ያስገቡ (ETB):\n"
+        f"Please enter amount in ETB:",
         parse_mode='Markdown',
-        reply_markup=reply_markup
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ ተመለስ (Back)", callback_data="deposit")
+        ]])
     )
-
-async def deposit_amount_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle deposit amount selection for Stripe"""
-    query = update.callback_query
-    await query.answer()
-    
-    data = query.data
-    
-    if data == "deposit_custom":
-        await query.edit_message_text(
-            "💰 Enter amount in USD (e.g., 25.50):",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Cancel", callback_data="deposit")
-            ]])
-        )
-        return AMOUNT
-    
-    # Parse amount
-    amount_map = {
-        'deposit_10': 10,
-        'deposit_20': 20,
-        'deposit_50': 50,
-        'deposit_100': 100,
-        'deposit_200': 200
-    }
-    
-    amount = amount_map.get(data, 0)
-    if amount:
-        await process_stripe_deposit(query, update.effective_user.id, amount)
-    return ConversationHandler.END
-
-async def process_stripe_deposit(message_obj, user_id: int, amount: int):
-    """Process Stripe deposit with external payment page"""
-    try:
-        # Get the correct message object to edit
-        if hasattr(message_obj, 'message'):  # It's a CallbackQuery
-            target = message_obj.message
-            logger.info(f"Processing Stripe deposit for user {user_id}, amount ${amount}")
-        elif hasattr(message_obj, 'chat'):  # It's a Message/Update
-            target = message_obj
-            logger.info(f"Processing Stripe deposit from message for user {user_id}, amount ${amount}")
-        else:
-            logger.error(f"Unknown message object type: {type(message_obj)}")
-            return
-        
-        # Create payment page URL with https://
-        payment_url = f"https://{BASE_URL}/payment/page?user_id={user_id}&amount={amount}"
-        logger.info(f"Stripe Payment URL: {payment_url}")
-        
-        keyboard = [[
-            InlineKeyboardButton(
-                "💳 Pay with Card", 
-                url=payment_url
-            )
-        ]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await target.edit_message_text(
-            f"💳 **Stripe Deposit ${amount:.2f}**\n\n"
-            f"Click the button below to pay securely with your credit/debit card.\n\n"
-            f"⚠️ **Note:** The payment page will open in your browser.\n"
-            f"Your balance will update automatically after payment.",
-            parse_mode='Markdown',
-            reply_markup=reply_markup
-        )
-        
-    except Exception as e:
-        logger.error(f"Stripe deposit failed: {str(e)}")
-        try:
-            if hasattr(message_obj, 'message'):
-                await message_obj.message.reply_text(
-                    "❌ Payment processing failed. Please try again.",
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("💳 Try Again", callback_data="deposit")
-                    ]])
-                )
-            elif hasattr(message_obj, 'chat'):
-                await message_obj.reply_text(
-                    "❌ Payment processing failed. Please try again.",
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("💳 Try Again", callback_data="deposit")
-                    ]])
-                )
-        except Exception as inner_e:
-            logger.error(f"Error in error handling: {inner_e}")
+    return AMOUNT
 
 async def handle_ethiopian_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle deposit amount for Ethiopian payment methods"""
@@ -506,10 +333,10 @@ async def handle_ethiopian_deposit(update: Update, context: ContextTypes.DEFAULT
             await update.message.reply_text("❌ Invalid payment method")
             return ConversationHandler.END
         
-        # Convert to cents (ETB has no cents, but we'll use same system)
+        # Convert to cents
         amount_cents = int(amount * 100)
         
-        # Validate amount - use dictionary access instead of .get()
+        # Validate amount
         if amount_cents < method['min_amount']:
             await update.message.reply_text(f"❌ Minimum amount is {method['min_amount']/100:.0f} ETB")
             return AMOUNT
@@ -521,7 +348,7 @@ async def handle_ethiopian_deposit(update: Update, context: ContextTypes.DEFAULT
         user_data = db.get_user(update.effective_user.id)
         phone = user_data['phone_number'] if user_data and 'phone_number' in user_data.keys() and user_data['phone_number'] else context.user_data.get('phone_number')
         
-        if not phone and method['type'] == 'mobile_money':
+        if not phone:
             # Ask for phone number for mobile money
             context.user_data['pending_amount'] = amount_cents
             context.user_data['pending_method_id'] = method_id
@@ -590,17 +417,60 @@ async def create_payment_request(update_obj, context, method_id, amount_cents, p
     instructions = method['instructions'] if 'instructions' in method.keys() and method['instructions'] else "No instructions available"
     
     # Replace account number placeholder if present
+    account_number = "0953933030"  # Default
     if account and 'account_number' in account.keys():
-        instructions = instructions.replace('0953933030', account['account_number'])
+        account_number = account['account_number']
     
     # Get method name safely
     method_name = method['method_name'] if 'method_name' in method.keys() else "Payment"
     
+    # Set appropriate emoji
+    if 'CBE' in method_name or 'ሲቢኢ' in method_name:
+        emoji = "💚"
+    else:
+        emoji = "🔵"
+    
+    # Customize instructions based on method
+    if 'CBE' in method_name or 'ሲቢኢ' in method_name:
+        custom_instructions = (
+            f"**የ CBE ቢር ክፍያ መመሪያ / CBE Birr Payment Instructions**\n\n"
+            f"1. ወደ CBE ቢር ሜኑ ለመግባት *847# ይደውሉ\n"
+            f"2. \"ገንዘብ ላክ\" የሚለውን ይምረጡ\n"
+            f"3. ቁጥር **{account_number}** ያስገቡ\n"
+            f"4. {amount_cents/100:.0f} ETB ያስገቡ\n"
+            f"5. ፒንዎን ያስገቡ\n"
+            f"6. ከተጠናቀቀ በኋላ የግብይት መለያ ቁጥር (transaction ID) ያስቀምጡ\n\n"
+            f"📱 **CBE Birr Instructions**\n"
+            f"1. Dial *847# to access CBE Birr menu\n"
+            f"2. Select \"Send Money\"\n"
+            f"3. Enter number **{account_number}**\n"
+            f"4. Enter {amount_cents/100:.0f} ETB\n"
+            f"5. Enter your PIN\n"
+            f"6. Save the transaction ID"
+        )
+    else:
+        custom_instructions = (
+            f"**የቴሌቢር ክፍያ መመሪያ / Telbirr Payment Instructions**\n\n"
+            f"1. ወደ ቴሌቢር ሜኑ ለመግባት *127# ይደውሉ\n"
+            f"2. \"ገንዘብ ላክ\" የሚለውን ይምረጡ\n"
+            f"3. ቁጥር **{account_number}** ያስገቡ\n"
+            f"4. {amount_cents/100:.0f} ETB ያስገቡ\n"
+            f"5. ፒንዎን ያስገቡ\n"
+            f"6. ከተጠናቀቀ በኋላ የደረሰኝ ቁጥር (reference number) ያስቀምጡ\n\n"
+            f"📱 **Telbirr Instructions**\n"
+            f"1. Dial *127# to access Telbirr menu\n"
+            f"2. Select \"Send Money\"\n"
+            f"3. Enter number **{account_number}**\n"
+            f"4. Enter {amount_cents/100:.0f} ETB\n"
+            f"5. Enter your PIN\n"
+            f"6. Save the reference number"
+        )
+    
     message = (
-        f"{get_method_emoji(method['type'])} **{method_name}**\n\n"
+        f"{emoji} **{method_name}**\n\n"
         f"💰 **መጠን / Amount:** {amount_cents/100:.0f} ETB\n"
         f"🆔 **የክፍያ መለያ / Request ID:** `{request_id}`\n\n"
-        f"**📋 መመሪያ / Instructions:**\n{instructions}\n\n"
+        f"**📋 መመሪያ / Instructions:**\n{custom_instructions}\n\n"
         f"📱 **ከተከፈለ በኋላ የክፍያ ማረጋገጫ ቁጥር ይላኩ / After payment, send the transaction reference:**"
     )
     
@@ -705,7 +575,7 @@ async def handle_payment_reference(update: Update, context: ContextTypes.DEFAULT
     return ConversationHandler.END
 
 async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start withdrawal process"""
+    """Start withdrawal process - simplified for mobile money only"""
     query = update.callback_query
     await query.answer()
     
@@ -728,17 +598,23 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
     
-    # Get withdrawal methods
-    methods = db.get_payment_methods(active_only=True)
+    # Get only mobile money withdrawal methods
+    methods = db.get_payment_methods(type='mobile_money', active_only=True)
     
     keyboard = []
     for method in methods:
-        if method['type'] in ['mobile_money', 'bank']:  # Allow withdrawal to mobile money and bank
-            method_name = method['method_name'] if 'method_name' in method.keys() else 'Payment Method'
-            keyboard.append([InlineKeyboardButton(
-                f"{get_method_emoji(method['type'])} {method_name}", 
-                callback_data=f"withdraw_method_{method['id']}"
-            )])
+        method_name = method['method_name'] if 'method_name' in method.keys() else 'Mobile Money'
+        
+        # Use specific emoji for each
+        if 'CBE' in method_name or 'ሲቢኢ' in method_name:
+            emoji = "💚"
+        else:
+            emoji = "🔵"
+            
+        keyboard.append([InlineKeyboardButton(
+            f"{emoji} {method_name}", 
+            callback_data=f"withdraw_method_{method['id']}"
+        )])
     
     keyboard.append([InlineKeyboardButton("◀️ Cancel", callback_data="main_menu")])
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -815,17 +691,11 @@ async def withdraw_amount_handler(update: Update, context: ContextTypes.DEFAULT_
         
         context.user_data['withdraw_amount'] = amount_cents
         
-        # Ask for account details based on method type
-        if method['type'] == 'mobile_money':
-            await update.message.reply_text(
-                "📱 **Enter Withdrawal Details**\n\n"
-                "Please enter your mobile money phone number (09xxxxxxxx):"
-            )
-        else:  # bank
-            await update.message.reply_text(
-                "🏦 **Enter Withdrawal Details**\n\n"
-                "Please enter your bank account number:"
-            )
+        # Ask for phone number
+        await update.message.reply_text(
+            "📱 **Enter Withdrawal Details**\n\n"
+            "Please enter your mobile money phone number (09xxxxxxxx):"
+        )
         return WITHDRAW_ADDRESS
         
     except ValueError:
@@ -833,37 +703,31 @@ async def withdraw_amount_handler(update: Update, context: ContextTypes.DEFAULT_
         return WITHDRAW_AMOUNT
 
 async def withdraw_address_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle withdrawal address"""
-    address = update.message.text.strip()
-    amount = context.user_data.get('withdraw_amount', 0)
-    method_id = context.user_data.get('withdraw_method_id')
+    """Handle withdrawal address (phone number)"""
+    phone = update.message.text.strip()
     
-    method = db.get_payment_method(method_id)
-    
-    if not method:
-        await update.message.reply_text("❌ Invalid withdrawal method")
-        return ConversationHandler.END
-    
-    try:
-        # Store address and ask for account name
-        context.user_data['withdraw_address'] = address
+    # Validate phone number
+    if not phone.startswith('09') or len(phone) != 10:
         await update.message.reply_text(
-            "📝 **Enter Account Name**\n\n"
-            "Please enter the account holder name:"
+            "❌ Please enter a valid phone number (09xxxxxxxx)"
         )
-        return WITHDRAW_NAME
-        
-    except Exception as e:
-        logger.error(f"Withdrawal error: {e}")
-        await update.message.reply_text("❌ Withdrawal failed. Please try again.")
-        return ConversationHandler.END
+        return WITHDRAW_ADDRESS
+    
+    context.user_data['withdraw_phone'] = phone
+    
+    # Ask for account name
+    await update.message.reply_text(
+        "📝 **Enter Account Name**\n\n"
+        "Please enter the account holder name:"
+    )
+    return WITHDRAW_NAME
 
 async def withdraw_name_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle account name for withdrawal"""
     account_name = update.message.text.strip()
     amount = context.user_data.get('withdraw_amount', 0)
     method_id = context.user_data.get('withdraw_method_id')
-    address = context.user_data.get('withdraw_address')
+    phone = context.user_data.get('withdraw_phone')
     user = update.effective_user
     
     method = db.get_payment_method(method_id)
@@ -878,9 +742,9 @@ async def withdraw_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
             user_id=user.id,
             method_id=method_id,
             amount=amount,
-            account_number=address,
+            account_number=phone,
             account_name=account_name,
-            phone_number=address if method['type'] == 'mobile_money' else None
+            phone_number=phone
         )
         
         if request_id:
@@ -888,7 +752,7 @@ async def withdraw_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text(
                 f"✅ **Withdrawal Request Submitted**\n\n"
                 f"Amount: **{amount/100:.2f} ETB**\n"
-                f"Account: {address}\n"
+                f"Phone: {phone}\n"
                 f"Name: {account_name}\n"
                 f"Method: {method_name}\n"
                 f"Request ID: `{request_id}`\n\n"
@@ -903,7 +767,7 @@ async def withdraw_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
             # Notify admin
             await notify_admin_withdrawal_request(
                 request_id, user.id, amount/100, 
-                method_name, address, account_name, context
+                method_name, phone, account_name, context
             )
             
         else:
@@ -1049,15 +913,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "2. Match numbers as they're called\n"
         "3. Click 'BINGO' when you have 5 in a row\n\n"
         "**💰 Balance:**\n"
-        "• Deposit funds using Telbirr, CBE Birr, or Bank Transfer\n"
-        "• Withdraw your winnings to mobile money or bank\n"
+        "• Deposit using Telbirr or CBE Birr\n"
+        "• Withdraw your winnings to mobile money\n"
         "• Each game costs 20 ETB\n\n"
         "**📱 Payment Methods:**\n"
-        "• Telbirr - Dial *127#\n"
-        "• CBE Birr - Dial *847#\n"
-        "• Bank Transfer - CBE, Awash, Dashen\n"
-        "• Manual Cash - Pay at agents\n"
-        "• Credit/Debit Card - Instant via Stripe\n\n"
+        "• 🔵 Telbirr - Dial *127#\n"
+        "• 💚 CBE Birr - Dial *847#\n\n"
         "**📞 Contact:**\n"
         "• For support, contact @admin\n"
         "• Payment issues: Send payment reference to admin"
@@ -1282,85 +1143,6 @@ async def admin_user_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]])
     )
 
-async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle admin approval/rejection"""
-    query = update.callback_query
-    await query.answer()
-    
-    # Check if user is admin
-    if str(update.effective_user.id) != ADMIN_USER_ID:
-        await query.edit_message_text("❌ You are not authorized to perform this action.")
-        return
-    
-    data = query.data
-    if data.startswith('approve_'):
-        parts = data.split('_')
-        user_id = int(parts[1])
-        amount = int(parts[2])
-        
-        try:
-            # Process approval
-            result = db.update_balance(
-                user_id=user_id,
-                amount=-amount,
-                transaction_type='withdrawal',
-                description='Withdrawal approved by admin',
-                status='completed'
-            )
-            
-            await query.edit_message_text(
-                f"✅ Withdrawal for user {user_id} of ${amount/100:.2f} has been approved.",
-                parse_mode='Markdown'
-            )
-            
-            # Notify user
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=f"✅ Your withdrawal of **${amount/100:.2f}** has been approved and processed!",
-                parse_mode='Markdown'
-            )
-            
-        except Exception as e:
-            logger.error(f"Error approving withdrawal: {e}")
-            await query.edit_message_text(
-                f"❌ Error approving withdrawal: {str(e)}",
-                parse_mode='Markdown'
-            )
-        
-    elif data.startswith('reject_'):
-        parts = data.split('_')
-        user_id = int(parts[1])
-        amount = int(parts[2])
-        
-        try:
-            # Refund the amount back to user
-            db.update_balance(
-                user_id=user_id,
-                amount=amount,
-                transaction_type='refund',
-                description='Withdrawal rejected, funds returned',
-                status='completed'
-            )
-            
-            await query.edit_message_text(
-                f"❌ Withdrawal for user {user_id} of ${amount/100:.2f} has been rejected.",
-                parse_mode='Markdown'
-            )
-            
-            # Notify user
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=f"❌ Your withdrawal of **${amount/100:.2f}** was rejected. Funds have been returned to your balance.",
-                parse_mode='Markdown'
-            )
-            
-        except Exception as e:
-            logger.error(f"Error rejecting withdrawal: {e}")
-            await query.edit_message_text(
-                f"❌ Error rejecting withdrawal: {str(e)}",
-                parse_mode='Markdown'
-            )
-
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel conversation"""
     await update.message.reply_text(
@@ -1400,8 +1182,7 @@ def setup_handlers(application):
     # Conversation handlers
     deposit_conv = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(deposit_method_selected, pattern='^deposit_method_'),
-            CallbackQueryHandler(deposit_amount_handler, pattern='^deposit_')
+            CallbackQueryHandler(deposit_method_selected, pattern='^deposit_method_')
         ],
         states={
             AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ethiopian_deposit)],
@@ -1445,7 +1226,6 @@ def setup_handlers(application):
     application.add_handler(CallbackQueryHandler(admin_pending_withdrawals, pattern='^admin_pending_withdrawals$'))
     application.add_handler(CallbackQueryHandler(admin_stats, pattern='^admin_stats$'))
     application.add_handler(CallbackQueryHandler(admin_user_stats, pattern='^admin_user_stats$'))
-    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^(approve|reject)_'))
     
     # Add conversation handlers
     application.add_handler(deposit_conv)
