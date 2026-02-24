@@ -28,8 +28,15 @@ WITHDRAW_ADDRESS = 3
 # Bot token and URLs
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 BOT_USERNAME = os.getenv('BOT_USERNAME', 'your_bot')
-BASE_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'http://localhost:8000')
+BASE_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'https://your-app.railway.app')
 WEBAPP_URL = os.getenv('WEBAPP_URL', BASE_URL)
+
+# Check for required environment variables
+if not BOT_TOKEN:
+    logger.error("❌ CRITICAL: BOT_TOKEN environment variable is not set!")
+    logger.error("Please add BOT_TOKEN to your Railway environment variables")
+
+logger.info(f"✅ Using BASE_URL: {BASE_URL}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler"""
@@ -87,6 +94,9 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_user(user.id)
     
+    if not user_data:
+        user_data = {'balance': 0, 'games_played': 0, 'games_won': 0}
+    
     keyboard = [
         [InlineKeyboardButton("🎮 Play Bingo", callback_data="play")],
         [InlineKeyboardButton("💰 Balance", callback_data="balance"),
@@ -107,8 +117,11 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if update.message:
         await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
-    else:
+    elif update.callback_query:
         await update.callback_query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+    else:
+        # Handle case when it's neither (shouldn't happen)
+        await context.bot.send_message(chat_id=user.id, text=message, reply_markup=reply_markup, parse_mode='Markdown')
 
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show balance"""
@@ -118,12 +131,15 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_user(user.id)
     
+    if not user_data:
+        user_data = {'balance': 0, 'total_deposits': 0, 'total_withdrawals': 0}
+    
     balance = user_data['balance'] / 100
     await query.edit_message_text(
         f"💰 **Your Balance**\n\n"
         f"Current: **${balance:.2f}**\n"
-        f"Total Deposits: **${user_data['total_deposits']/100:.2f}**\n"
-        f"Total Withdrawals: **${user_data['total_withdrawals']/100:.2f}**",
+        f"Total Deposits: **${user_data.get('total_deposits', 0)/100:.2f}**\n"
+        f"Total Withdrawals: **${user_data.get('total_withdrawals', 0)/100:.2f}**",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Back", callback_data="main_menu")
@@ -181,12 +197,25 @@ async def deposit_amount_handler(update: Update, context: ContextTypes.DEFAULT_T
     amount = amount_map.get(data, 0)
     if amount:
         await process_deposit(query, update.effective_user.id, amount)
+    return ConversationHandler.END
 
 async def process_deposit(message_obj, user_id: int, amount: int):
     """Process deposit with external payment page"""
     try:
+        # Get the correct message object to edit
+        if hasattr(message_obj, 'message'):  # It's a CallbackQuery
+            target = message_obj.message
+            logger.info(f"Processing deposit for user {user_id}, amount ${amount}")
+        elif hasattr(message_obj, 'chat'):  # It's a Message/Update
+            target = message_obj
+            logger.info(f"Processing deposit from message for user {user_id}, amount ${amount}")
+        else:
+            logger.error(f"Unknown message object type: {type(message_obj)}")
+            return
+        
         # Create payment page URL
         payment_url = f"{BASE_URL}/payment/page?user_id={user_id}&amount={amount}"
+        logger.info(f"Payment URL: {payment_url}")
         
         keyboard = [[
             InlineKeyboardButton(
@@ -196,7 +225,7 @@ async def process_deposit(message_obj, user_id: int, amount: int):
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await message_obj.edit_message_text(
+        await target.edit_message_text(
             f"💳 **Deposit ${amount:.2f}**\n\n"
             f"Click the button below to pay securely.\n\n"
             f"⚠️ **Note:** The payment page will open in your browser.\n"
@@ -207,17 +236,29 @@ async def process_deposit(message_obj, user_id: int, amount: int):
         
     except Exception as e:
         logger.error(f"Deposit failed: {str(e)}")
-        await message_obj.edit_message_text(
-            "❌ Payment processing failed. Please try again.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Back", callback_data="deposit")
-            ]])
-        )
+        # Handle error gracefully
+        try:
+            if hasattr(message_obj, 'message'):
+                await message_obj.message.edit_message_text(
+                    "❌ Payment processing failed. Please try again.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("◀️ Back", callback_data="deposit")
+                    ]])
+                )
+            elif hasattr(message_obj, 'chat'):
+                await message_obj.reply_text(
+                    "❌ Payment processing failed. Please try again.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("💳 Try Again", callback_data="deposit")
+                    ]])
+                )
+        except Exception as inner_e:
+            logger.error(f"Error in error handling: {inner_e}")
 
 async def handle_custom_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle custom deposit amount"""
     try:
-        amount_text = update.message.text.strip().replace('$', '')
+        amount_text = update.message.text.strip().replace('$', '').replace(',', '')
         amount = float(amount_text)
         
         if amount < 5:
@@ -242,6 +283,9 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_user(user.id)
     
+    if not user_data:
+        user_data = {'balance': 0}
+    
     if user_data['balance'] < 500:  # Minimum $5 withdrawal
         await query.edit_message_text(
             f"❌ Minimum withdrawal is $5.00\n"
@@ -251,20 +295,23 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("◀️ Back", callback_data="main_menu")
             ]])
         )
-        return
+        return ConversationHandler.END
     
     await query.edit_message_text(
         f"💸 **Withdrawal**\n\n"
         f"Balance: **${user_data['balance']/100:.2f}**\n\n"
         f"Enter amount to withdraw (minimum $5):",
-        parse_mode='Markdown'
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Cancel", callback_data="main_menu")
+        ]])
     )
     return WITHDRAW_AMOUNT
 
 async def withdraw_amount_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle withdrawal amount"""
     try:
-        amount_text = update.message.text.strip().replace('$', '')
+        amount_text = update.message.text.strip().replace('$', '').replace(',', '')
         amount = float(amount_text)
         
         if amount < 5:
@@ -273,6 +320,10 @@ async def withdraw_amount_handler(update: Update, context: ContextTypes.DEFAULT_
         
         amount_cents = int(amount * 100)
         user_data = db.get_user(update.effective_user.id)
+        
+        if not user_data:
+            await update.message.reply_text("❌ User not found")
+            return ConversationHandler.END
         
         if amount_cents > user_data['balance']:
             await update.message.reply_text(
@@ -298,27 +349,43 @@ async def withdraw_address_handler(update: Update, context: ContextTypes.DEFAULT
     amount = context.user_data.get('withdraw_amount', 0)
     user = update.effective_user
     
-    # Process withdrawal
-    db.update_balance(
-        user_id=user.id,
-        amount=-amount,
-        transaction_type='withdrawal',
-        description=f'Withdrawal to {address}'
-    )
-    
-    # Notify admin (implement this)
-    await notify_admin(f"Withdrawal request: User {user.id} - ${amount/100:.2f} to {address}")
-    
-    await update.message.reply_text(
-        f"✅ **Withdrawal Request Submitted**\n\n"
-        f"Amount: **${amount/100:.2f}**\n"
-        f"Destination: {address}\n\n"
-        f"Your withdrawal will be processed within 24 hours.",
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ Main Menu", callback_data="main_menu")
-        ]])
-    )
+    try:
+        # Process withdrawal
+        result = db.update_balance(
+            user_id=user.id,
+            amount=-amount,
+            transaction_type='withdrawal',
+            description=f'Withdrawal to {address}'
+        )
+        
+        if result:
+            await update.message.reply_text(
+                f"✅ **Withdrawal Request Submitted**\n\n"
+                f"Amount: **${amount/100:.2f}**\n"
+                f"Destination: {address}\n\n"
+                f"Your withdrawal will be processed within 24 hours.\n"
+                f"New balance: **${result['new_balance']/100:.2f}**",
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ Main Menu", callback_data="main_menu")
+                ]])
+            )
+        else:
+            await update.message.reply_text(
+                "❌ Withdrawal failed. Please try again.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ Main Menu", callback_data="main_menu")
+                ]])
+            )
+        
+    except Exception as e:
+        logger.error(f"Withdrawal error: {e}")
+        await update.message.reply_text(
+            "❌ Withdrawal failed. Please try again.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Main Menu", callback_data="main_menu")
+            ]])
+        )
     
     context.user_data.clear()
     return ConversationHandler.END
@@ -365,6 +432,9 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_user(user.id)
     
+    if not user_data:
+        user_data = {'balance': 0, 'games_played': 0, 'games_won': 0}
+    
     # Game fee $2
     if user_data['balance'] < 200:
         await query.edit_message_text(
@@ -381,6 +451,7 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Launch webapp
     webapp_url = f"{WEBAPP_URL}/game?user_id={user.id}&game_id={context.user_data.get('game_id', 1)}"
+    logger.info(f"Webapp URL: {webapp_url}")
     
     keyboard = [[
         InlineKeyboardButton(
@@ -437,49 +508,84 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-async def notify_admin(message: str):
-    """Notify admin (implement with your admin chat ID)"""
-    admin_id = os.getenv('ADMIN_USER_ID')
-    if admin_id:
-        # Send message to admin
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle errors"""
+    logger.error(f"Update {update} caused error {context.error}")
+    
+    # Send message to user
+    try:
+        if update and update.effective_chat:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ An error occurred. Please try again."
+            )
+    except:
         pass
 
 def main():
     """Start the bot"""
-    # Create application
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Conversation handlers
-    deposit_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(deposit_amount_handler, pattern='^deposit_')],
-        states={AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_amount)]},
-        fallbacks=[CommandHandler('cancel', cancel)]
-    )
-    
-    withdraw_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(withdraw_command, pattern='^withdraw$')],
-        states={
-            WITHDRAW_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_amount_handler)],
-            WITHDRAW_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_address_handler)]
-        },
-        fallbacks=[CommandHandler('cancel', cancel)]
-    )
-    
-    # Add handlers
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
-    application.add_handler(CallbackQueryHandler(show_main_menu, pattern='^main_menu$'))
-    application.add_handler(CallbackQueryHandler(balance_command, pattern='^balance$'))
-    application.add_handler(CallbackQueryHandler(deposit_command, pattern='^deposit$'))
-    application.add_handler(CallbackQueryHandler(history_command, pattern='^history$'))
-    application.add_handler(CallbackQueryHandler(play_command, pattern='^play$'))
-    application.add_handler(CallbackQueryHandler(help_command, pattern='^help$'))
-    application.add_handler(deposit_conv)
-    application.add_handler(withdraw_conv)
-    
-    # Start bot
-    print("🤖 Bingo bot started!")
-    application.run_polling()
+    try:
+        # Get token with validation
+        BOT_TOKEN = os.getenv('BOT_TOKEN')
+        if not BOT_TOKEN:
+            logger.error("❌ BOT_TOKEN not found in environment variables")
+            logger.error("Please set BOT_TOKEN in Railway dashboard")
+            return
+        
+        logger.info("🤖 Initializing bot...")
+        
+        # Create application
+        application = Application.builder().token(BOT_TOKEN).build()
+        
+        # Add error handler
+        application.add_error_handler(error_handler)
+        
+        # Conversation handlers with per_message=False to fix warning
+        deposit_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(deposit_amount_handler, pattern='^deposit_')],
+            states={
+                AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_custom_amount)]
+            },
+            fallbacks=[CommandHandler('cancel', cancel)],
+            per_message=False,
+            name="deposit_conversation"
+        )
+        
+        withdraw_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(withdraw_command, pattern='^withdraw$')],
+            states={
+                WITHDRAW_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_amount_handler)],
+                WITHDRAW_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_address_handler)]
+            },
+            fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(show_main_menu, pattern='^main_menu$')],
+            per_message=False,
+            name="withdraw_conversation"
+        )
+        
+        # Add handlers
+        application.add_handler(CommandHandler('start', start))
+        application.add_handler(MessageHandler(filters.CONTACT, contact_handler))
+        application.add_handler(CallbackQueryHandler(show_main_menu, pattern='^main_menu$'))
+        application.add_handler(CallbackQueryHandler(balance_command, pattern='^balance$'))
+        application.add_handler(CallbackQueryHandler(deposit_command, pattern='^deposit$'))
+        application.add_handler(CallbackQueryHandler(history_command, pattern='^history$'))
+        application.add_handler(CallbackQueryHandler(play_command, pattern='^play$'))
+        application.add_handler(CallbackQueryHandler(help_command, pattern='^help$'))
+        
+        # Add conversation handlers
+        application.add_handler(deposit_conv)
+        application.add_handler(withdraw_conv)
+        
+        logger.info("✅ Bot initialized successfully!")
+        logger.info(f"🚀 Starting bot polling with token: {BOT_TOKEN[:10]}...")
+        logger.info(f"🌐 Using BASE_URL: {BASE_URL}")
+        
+        # Start bot
+        application.run_polling()
+        
+    except Exception as e:
+        logger.error(f"❌ Bot error: {e}")
+        raise
 
 if __name__ == '__main__':
     main()
