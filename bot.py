@@ -23,8 +23,9 @@ db = Database()
 AMOUNT = 1
 WITHDRAW_AMOUNT = 2
 WITHDRAW_ADDRESS = 3
-PAYMENT_PHONE = 4
-PAYMENT_REFERENCE = 5
+WITHDRAW_NAME = 4
+PAYMENT_PHONE = 5
+PAYMENT_REFERENCE = 6
 
 # Bot token and URLs
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -128,6 +129,31 @@ async def notify_admin_payment_request(request_id, user_id, amount, method_name,
     except Exception as e:
         logger.error(f"Failed to notify admin: {e}")
 
+async def notify_admin_withdrawal_request(request_id, user_id, amount, method, account, account_name, context):
+    """Notify admin about withdrawal request"""
+    if not ADMIN_USER_ID:
+        return
+    
+    try:
+        message = (
+            f"🆕 **New Withdrawal Request**\n\n"
+            f"**Request ID:** `{request_id}`\n"
+            f"**User ID:** `{user_id}`\n"
+            f"**Amount:** {amount:.2f} ETB\n"
+            f"**Method:** {method}\n"
+            f"**Account:** {account}\n"
+            f"**Account Name:** {account_name}\n"
+            f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        await context.bot.send_message(
+            chat_id=ADMIN_USER_ID,
+            text=message,
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Failed to notify admin: {e}")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler"""
     user = update.effective_user
@@ -190,7 +216,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = db.get_user(user.id)
     
     if not user_data:
-        user_data = {'balance': 0, 'games_played': 0, 'games_won': 0}
+        user_data = {'balance': 0, 'games_played': 0, 'games_won': 0, 'currency': 'ETB'}
     
     keyboard = [
         [InlineKeyboardButton("🎮 Play Bingo", callback_data="play")],
@@ -208,7 +234,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     balance = user_data['balance'] / 100
-    currency = user_data.get('currency', 'ETB')
+    currency = user_data['currency'] if 'currency' in user_data.keys() else 'ETB'
     message = (
         f"🎯 Welcome, {user.first_name}!\n\n"
         f"💰 Balance: **{balance:.2f} {currency}**\n"
@@ -233,12 +259,15 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = {'balance': 0, 'total_deposits': 0, 'total_withdrawals': 0, 'currency': 'ETB'}
     
     balance = user_data['balance'] / 100
-    currency = user_data.get('currency', 'ETB')
+    currency = user_data['currency'] if 'currency' in user_data.keys() else 'ETB'
+    total_deposits = user_data['total_deposits'] if 'total_deposits' in user_data.keys() else 0
+    total_withdrawals = user_data['total_withdrawals'] if 'total_withdrawals' in user_data.keys() else 0
+    
     await query.edit_message_text(
         f"💰 **Your Balance**\n\n"
         f"Current: **{balance:.2f} {currency}**\n"
-        f"Total Deposits: **{user_data.get('total_deposits', 0)/100:.2f} {currency}**\n"
-        f"Total Withdrawals: **{user_data.get('total_withdrawals', 0)/100:.2f} {currency}**",
+        f"Total Deposits: **{total_deposits/100:.2f} {currency}**\n"
+        f"Total Withdrawals: **{total_withdrawals/100:.2f} {currency}**",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Back", callback_data="main_menu")
@@ -323,6 +352,10 @@ async def deposit_method_selected(update: Update, context: ContextTypes.DEFAULT_
     
     # Get method details
     method = db.get_payment_method(method_id)
+    
+    if not method:
+        await query.edit_message_text("❌ Invalid payment method")
+        return ConversationHandler.END
     
     if method['type'] == 'card' and method['method_code'] == 'STRIPE':
         # Stripe card payment - use existing flow
@@ -468,7 +501,7 @@ async def handle_ethiopian_deposit(update: Update, context: ContextTypes.DEFAULT
         # Convert to cents (ETB has no cents, but we'll use same system)
         amount_cents = int(amount * 100)
         
-        # Validate amount
+        # Validate amount - use dictionary access instead of .get()
         if amount_cents < method['min_amount']:
             await update.message.reply_text(f"❌ Minimum amount is {method['min_amount']/100:.0f} ETB")
             return AMOUNT
@@ -478,7 +511,7 @@ async def handle_ethiopian_deposit(update: Update, context: ContextTypes.DEFAULT
         
         # Get user's phone number
         user_data = db.get_user(update.effective_user.id)
-        phone = user_data['phone_number'] if user_data else context.user_data.get('phone_number')
+        phone = user_data['phone_number'] if user_data and user_data['phone_number'] else context.user_data.get('phone_number')
         
         if not phone and method['type'] == 'mobile_money':
             # Ask for phone number for mobile money
@@ -526,6 +559,10 @@ async def create_payment_request(update_obj, context, method_id, amount_cents, p
     method = db.get_payment_method(method_id)
     user = update_obj.effective_user
     
+    if not method:
+        await update_obj.message.reply_text("❌ Payment method not found")
+        return
+    
     # Create payment request
     request_id = db.create_payment_request(
         user_id=user.id,
@@ -542,14 +579,17 @@ async def create_payment_request(update_obj, context, method_id, amount_cents, p
     account = db.get_primary_account(method_id)
     
     # Show payment instructions
-    instructions = method['instructions']
+    instructions = method['instructions'] if method['instructions'] else "No instructions available"
     
     # Replace account number placeholder if present
     if account:
         instructions = instructions.replace('0953933030', account['account_number'])
     
+    # Get method name safely
+    method_name = method['method_name'] if method['method_name'] else "Payment"
+    
     message = (
-        f"{get_method_emoji(method['type'])} **{method['method_name']}**\n\n"
+        f"{get_method_emoji(method['type'])} **{method_name}**\n\n"
         f"💰 **መጠን / Amount:** {amount_cents/100:.0f} ETB\n"
         f"🆔 **የክፍያ መለያ / Request ID:** `{request_id}`\n\n"
         f"**📋 መመሪያ / Instructions:**\n{instructions}\n\n"
@@ -573,7 +613,7 @@ async def create_payment_request(update_obj, context, method_id, amount_cents, p
     context.user_data.pop('pending_method_id', None)
     
     # Notify admin
-    await notify_admin_payment_request(request_id, user.id, amount_cents/100, method['method_name'], context)
+    await notify_admin_payment_request(request_id, user.id, amount_cents/100, method_name, context)
 
 async def payment_done_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle payment completion callback"""
@@ -667,10 +707,12 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_data:
         user_data = {'balance': 0, 'currency': 'ETB'}
     
+    currency = user_data['currency'] if 'currency' in user_data.keys() else 'ETB'
+    
     if user_data['balance'] < 500:  # Minimum 5 ETB withdrawal
         await query.edit_message_text(
-            f"❌ Minimum withdrawal is 5.00 {user_data['currency']}\n"
-            f"Your balance: **{user_data['balance']/100:.2f} {user_data['currency']}**",
+            f"❌ Minimum withdrawal is 5.00 {currency}\n"
+            f"Your balance: **{user_data['balance']/100:.2f} {currency}**",
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("◀️ Back", callback_data="main_menu")
@@ -694,7 +736,7 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(
         f"💸 **Withdrawal**\n\n"
-        f"Balance: **{user_data['balance']/100:.2f} {user_data['currency']}**\n\n"
+        f"Balance: **{user_data['balance']/100:.2f} {currency}**\n\n"
         f"Select withdrawal method:",
         parse_mode='Markdown',
         reply_markup=reply_markup
@@ -710,7 +752,12 @@ async def withdraw_method_selected(update: Update, context: ContextTypes.DEFAULT
     context.user_data['withdraw_method_id'] = method_id
     
     method = db.get_payment_method(method_id)
-    min_amt = method['min_amount'] / 100
+    
+    if not method:
+        await query.edit_message_text("❌ Invalid withdrawal method")
+        return ConversationHandler.END
+    
+    min_amt = method['min_amount'] / 100 if method['min_amount'] else 5
     
     await query.edit_message_text(
         f"💸 **{method['method_name']} Withdrawal**\n\n"
@@ -736,7 +783,7 @@ async def withdraw_amount_handler(update: Update, context: ContextTypes.DEFAULT_
             await update.message.reply_text("❌ Invalid withdrawal method")
             return ConversationHandler.END
         
-        min_amount = method['min_amount'] / 100
+        min_amount = method['min_amount'] / 100 if method['min_amount'] else 5
         if amount < min_amount:
             await update.message.reply_text(f"❌ Minimum withdrawal is {min_amount:.0f} ETB")
             return WITHDRAW_AMOUNT
@@ -748,9 +795,11 @@ async def withdraw_amount_handler(update: Update, context: ContextTypes.DEFAULT_
             await update.message.reply_text("❌ User not found")
             return ConversationHandler.END
         
+        currency = user_data['currency'] if 'currency' in user_data.keys() else 'ETB'
+        
         if amount_cents > user_data['balance']:
             await update.message.reply_text(
-                f"❌ Insufficient balance. Your balance: {user_data['balance']/100:.2f} {user_data['currency']}"
+                f"❌ Insufficient balance. Your balance: {user_data['balance']/100:.2f} {currency}"
             )
             return WITHDRAW_AMOUNT
         
@@ -778,18 +827,21 @@ async def withdraw_address_handler(update: Update, context: ContextTypes.DEFAULT
     address = update.message.text.strip()
     amount = context.user_data.get('withdraw_amount', 0)
     method_id = context.user_data.get('withdraw_method_id')
-    user = update.effective_user
     
     method = db.get_payment_method(method_id)
     
+    if not method:
+        await update.message.reply_text("❌ Invalid withdrawal method")
+        return ConversationHandler.END
+    
     try:
-        # Ask for account name
+        # Store address and ask for account name
         context.user_data['withdraw_address'] = address
         await update.message.reply_text(
             "📝 **Enter Account Name**\n\n"
             "Please enter the account holder name:"
         )
-        return WITHDRAW_ADDRESS + 1  # Use next state
+        return WITHDRAW_NAME
         
     except Exception as e:
         logger.error(f"Withdrawal error: {e}")
@@ -805,6 +857,10 @@ async def withdraw_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
     user = update.effective_user
     
     method = db.get_payment_method(method_id)
+    
+    if not method:
+        await update.message.reply_text("❌ Invalid withdrawal method")
+        return ConversationHandler.END
     
     try:
         # Create withdrawal request
@@ -833,7 +889,10 @@ async def withdraw_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
             )
             
             # Notify admin
-            await notify_admin_withdrawal_request(request_id, user.id, amount/100, method['method_name'], address, account_name, context)
+            await notify_admin_withdrawal_request(
+                request_id, user.id, amount/100, 
+                method['method_name'], address, account_name, context
+            )
             
         else:
             await update.message.reply_text("❌ Withdrawal failed. Please try again.")
@@ -845,31 +904,6 @@ async def withdraw_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data.clear()
     return ConversationHandler.END
 
-async def notify_admin_withdrawal_request(request_id, user_id, amount, method, account, account_name, context):
-    """Notify admin about withdrawal request"""
-    if not ADMIN_USER_ID:
-        return
-    
-    try:
-        message = (
-            f"🆕 **New Withdrawal Request**\n\n"
-            f"**Request ID:** `{request_id}`\n"
-            f"**User ID:** `{user_id}`\n"
-            f"**Amount:** {amount:.2f} ETB\n"
-            f"**Method:** {method}\n"
-            f"**Account:** {account}\n"
-            f"**Account Name:** {account_name}\n"
-            f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        
-        await context.bot.send_message(
-            chat_id=ADMIN_USER_ID,
-            text=message,
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        logger.error(f"Failed to notify admin: {e}")
-
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show transaction history"""
     query = update.callback_query
@@ -877,7 +911,7 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user = update.effective_user
     user_data = db.get_user(user.id)
-    currency = user_data.get('currency', 'ETB') if user_data else 'ETB'
+    currency = user_data['currency'] if user_data and 'currency' in user_data.keys() else 'ETB'
     
     # Get regular transactions
     transactions = db.get_user_transactions(user.id, limit=5)
@@ -888,7 +922,7 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Get withdrawal requests
     withdrawal_requests = db.get_user_withdrawal_requests(user.id, limit=5)
     
-    if not transactions and not payment_requests and not withdrawal_requests:
+    if (not transactions or len(transactions) == 0) and (not payment_requests or len(payment_requests) == 0) and (not withdrawal_requests or len(withdrawal_requests) == 0):
         await query.edit_message_text(
             "📊 No transactions yet.",
             reply_markup=InlineKeyboardMarkup([[
@@ -900,7 +934,7 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history_text = "📊 **Recent Activity**\n\n"
     
     # Add regular transactions
-    if transactions:
+    if transactions and len(transactions) > 0:
         history_text += "**💰 Transactions:**\n"
         for t in transactions:
             amount = t['amount'] / 100
@@ -912,23 +946,25 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history_text += "\n"
     
     # Add payment requests
-    if payment_requests:
+    if payment_requests and len(payment_requests) > 0:
         history_text += "**📱 Payment Requests:**\n"
         for pr in payment_requests:
             amount = pr['amount'] / 100
             date = datetime.fromisoformat(pr['created_at']).strftime("%m/%d %H:%M")
             status_emoji = "✅" if pr['status'] == 'completed' else "⏳" if pr['status'] == 'pending' else "❌"
-            history_text += f"📤 {date}: {amount:.2f} {currency} {pr['method_name']} {status_emoji}\n"
+            method_name = pr['method_name'] if 'method_name' in pr.keys() else 'Payment'
+            history_text += f"📤 {date}: {amount:.2f} {currency} {method_name} {status_emoji}\n"
         history_text += "\n"
     
     # Add withdrawal requests
-    if withdrawal_requests:
+    if withdrawal_requests and len(withdrawal_requests) > 0:
         history_text += "**💸 Withdrawal Requests:**\n"
         for wr in withdrawal_requests:
             amount = wr['amount'] / 100
             date = datetime.fromisoformat(wr['created_at']).strftime("%m/%d %H:%M")
             status_emoji = "✅" if wr['status'] == 'completed' else "⏳" if wr['status'] == 'pending' else "❌"
-            history_text += f"📥 {date}: {amount:.2f} {currency} {wr['method_name']} {status_emoji}\n"
+            method_name = wr['method_name'] if 'method_name' in wr.keys() else 'Withdrawal'
+            history_text += f"📥 {date}: {amount:.2f} {currency} {method_name} {status_emoji}\n"
     
     await query.edit_message_text(
         history_text,
@@ -949,12 +985,14 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_data:
         user_data = {'balance': 0, 'games_played': 0, 'games_won': 0, 'currency': 'ETB'}
     
+    currency = user_data['currency'] if 'currency' in user_data.keys() else 'ETB'
+    
     # Game fee 20 ETB (200 cents)
     if user_data['balance'] < 200:
         await query.edit_message_text(
             f"❌ **Insufficient Balance**\n\n"
-            f"You need 20.00 {user_data['currency']} to play Bingo.\n\n"
-            f"Your balance: **{user_data['balance']/100:.2f} {user_data['currency']}**",
+            f"You need 20.00 {currency} to play Bingo.\n\n"
+            f"Your balance: **{user_data['balance']/100:.2f} {currency}**",
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💳 Deposit", callback_data="deposit")],
@@ -978,8 +1016,8 @@ async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         "🎮 **Ready to Play!**\n\n"
         "Click below to open the game.\n\n"
-        f"• Game fee: 20.00 {user_data['currency']}\n"
-        f"• Your balance: {user_data['balance']/100:.2f} {user_data['currency']}",
+        f"• Game fee: 20.00 {currency}\n"
+        f"• Your balance: {user_data['balance']/100:.2f} {currency}",
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
@@ -1030,7 +1068,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📊 Pending Withdrawals", callback_data="admin_pending_withdrawals")],
         [InlineKeyboardButton("💰 Pending Payments", callback_data="admin_pending_payments")],
-        [InlineKeyboardButton("💳 Payment Requests", callback_data="admin_payment_requests")],
         [InlineKeyboardButton("📈 System Stats", callback_data="admin_stats")],
         [InlineKeyboardButton("👥 User Stats", callback_data="admin_user_stats")],
         [InlineKeyboardButton("◀️ Main Menu", callback_data="main_menu")]
@@ -1055,7 +1092,7 @@ async def admin_pending_payments(update: Update, context: ContextTypes.DEFAULT_T
     
     pending = db.get_pending_payment_requests(limit=20)
     
-    if not pending:
+    if not pending or len(pending) == 0:
         await query.edit_message_text(
             "📊 No pending payment requests.",
             reply_markup=InlineKeyboardMarkup([[
@@ -1067,12 +1104,16 @@ async def admin_pending_payments(update: Update, context: ContextTypes.DEFAULT_T
     message = "💰 **Pending Payment Requests**\n\n"
     for p in pending[:10]:  # Show first 10
         created = datetime.fromisoformat(p['created_at']).strftime("%m/%d %H:%M")
+        sender_phone = p['sender_phone'] if 'sender_phone' in p.keys() else 'N/A'
+        method_name = p['method_name'] if 'method_name' in p.keys() else 'Unknown'
+        first_name = p['first_name'] if 'first_name' in p.keys() else 'User'
+        
         message += (
             f"• **{p['request_id']}**\n"
-            f"  User: {p['first_name']} (ID: {p['user_id']})\n"
+            f"  User: {first_name} (ID: {p['user_id']})\n"
             f"  Amount: {p['amount']/100:.0f} ETB\n"
-            f"  Method: {p['method_name']}\n"
-            f"  Phone: {p.get('sender_phone', 'N/A')}\n"
+            f"  Method: {method_name}\n"
+            f"  Phone: {sender_phone}\n"
             f"  Time: {created}\n\n"
         )
     
@@ -1096,7 +1137,7 @@ async def admin_pending_withdrawals(update: Update, context: ContextTypes.DEFAUL
     
     pending = db.get_pending_withdrawal_requests(limit=20)
     
-    if not pending:
+    if not pending or len(pending) == 0:
         await query.edit_message_text(
             "📊 No pending withdrawal requests.",
             reply_markup=InlineKeyboardMarkup([[
@@ -1108,13 +1149,18 @@ async def admin_pending_withdrawals(update: Update, context: ContextTypes.DEFAUL
     message = "💸 **Pending Withdrawal Requests**\n\n"
     for w in pending[:10]:  # Show first 10
         created = datetime.fromisoformat(w['created_at']).strftime("%m/%d %H:%M")
+        first_name = w['first_name'] if 'first_name' in w.keys() else 'User'
+        method_name = w['method_name'] if 'method_name' in w.keys() else 'Unknown'
+        account_number = w['account_number'] if 'account_number' in w.keys() else 'N/A'
+        account_name = w['account_name'] if 'account_name' in w.keys() else 'N/A'
+        
         message += (
             f"• **{w['request_id']}**\n"
-            f"  User: {w['first_name']} (ID: {w['user_id']})\n"
+            f"  User: {first_name} (ID: {w['user_id']})\n"
             f"  Amount: {w['amount']/100:.0f} ETB\n"
-            f"  Method: {w['method_name']}\n"
-            f"  Account: {w['account_number']}\n"
-            f"  Name: {w['account_name']}\n"
+            f"  Method: {method_name}\n"
+            f"  Account: {account_number}\n"
+            f"  Name: {account_name}\n"
             f"  Time: {created}\n\n"
         )
     
@@ -1140,17 +1186,17 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     message = (
         f"📊 **System Statistics**\n\n"
-        f"**Users:** {stats['total_users']}\n"
-        f"**Total Balance:** {stats['total_balance']/100:.2f} ETB\n"
-        f"**Total Deposits:** {stats['total_deposits']/100:.2f} ETB\n"
-        f"**Total Withdrawals:** {stats['total_withdrawals']/100:.2f} ETB\n"
-        f"**Game Fees:** {stats['total_game_fees']/100:.2f} ETB\n"
-        f"**Game Wins:** {stats['total_game_wins']/100:.2f} ETB\n\n"
+        f"**Users:** {stats.get('total_users', 0)}\n"
+        f"**Total Balance:** {stats.get('total_balance', 0)/100:.2f} ETB\n"
+        f"**Total Deposits:** {stats.get('total_deposits', 0)/100:.2f} ETB\n"
+        f"**Total Withdrawals:** {stats.get('total_withdrawals', 0)/100:.2f} ETB\n"
+        f"**Game Fees:** {stats.get('total_game_fees', 0)/100:.2f} ETB\n"
+        f"**Game Wins:** {stats.get('total_game_wins', 0)/100:.2f} ETB\n\n"
         f"**Pending Payments:** {stats.get('pending_payment_requests', 0)}\n"
         f"**Pending Withdrawals:** {stats.get('pending_withdrawal_requests', 0)}\n"
-        f"**Today's Volume:** {stats['today_volume']/100:.2f} ETB\n"
-        f"**Total Games:** {stats['total_games']}\n"
-        f"**Completed Games:** {stats['completed_games']}"
+        f"**Today's Volume:** {stats.get('today_volume', 0)/100:.2f} ETB\n"
+        f"**Total Games:** {stats.get('total_games', 0)}\n"
+        f"**Completed Games:** {stats.get('completed_games', 0)}"
     )
     
     await query.edit_message_text(
@@ -1183,19 +1229,31 @@ async def admin_user_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = "👥 **User Leaderboards**\n\n"
     
     message += "**💰 Top Balances:**\n"
-    for i, u in enumerate(top_balance, 1):
-        name = u['first_name'] or u['username'] or f"User {u['user_id']}"
-        message += f"{i}. {name}: **{u['balance']/100:.2f} ETB**\n"
+    if top_balance and len(top_balance) > 0:
+        for i, u in enumerate(top_balance, 1):
+            name = u['first_name'] if 'first_name' in u.keys() else u['username'] if 'username' in u.keys() else f"User {u['user_id']}"
+            balance = u['balance'] if 'balance' in u.keys() else 0
+            message += f"{i}. {name}: **{balance/100:.2f} ETB**\n"
+    else:
+        message += "No data\n"
     
     message += "\n**🎮 Most Games Played:**\n"
-    for i, u in enumerate(top_players, 1):
-        name = u['first_name'] or u['username'] or f"User {u['user_id']}"
-        message += f"{i}. {name}: **{u['games_played']}** games\n"
+    if top_players and len(top_players) > 0:
+        for i, u in enumerate(top_players, 1):
+            name = u['first_name'] if 'first_name' in u.keys() else u['username'] if 'username' in u.keys() else f"User {u['user_id']}"
+            games = u['games_played'] if 'games_played' in u.keys() else 0
+            message += f"{i}. {name}: **{games}** games\n"
+    else:
+        message += "No data\n"
     
     message += "\n**🏆 Most Wins:**\n"
-    for i, u in enumerate(top_winners, 1):
-        name = u['first_name'] or u['username'] or f"User {u['user_id']}"
-        message += f"{i}. {name}: **{u['games_won']}** wins\n"
+    if top_winners and len(top_winners) > 0:
+        for i, u in enumerate(top_winners, 1):
+            name = u['first_name'] if 'first_name' in u.keys() else u['username'] if 'username' in u.keys() else f"User {u['user_id']}"
+            wins = u['games_won'] if 'games_won' in u.keys() else 0
+            message += f"{i}. {name}: **{wins}** wins\n"
+    else:
+        message += "No data\n"
     
     await query.edit_message_text(
         message,
@@ -1345,7 +1403,7 @@ def setup_handlers(application):
         states={
             WITHDRAW_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_amount_handler)],
             WITHDRAW_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_address_handler)],
-            WITHDRAW_ADDRESS + 1: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_name_handler)]
+            WITHDRAW_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, withdraw_name_handler)]
         },
         fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(show_main_menu, pattern='^main_menu$')],
         per_message=False,
