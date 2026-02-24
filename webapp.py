@@ -7,7 +7,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPExcept
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 import logging
 
 from models import Database
@@ -27,6 +27,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Initialize database
 db = Database()
+
+# Admin ID from environment
+ADMIN_USER_ID = os.getenv('ADMIN_USER_ID')
 
 # Load pre-generated cards from JSON file
 CARDS_FILE = "static/bingo_cards.json"
@@ -54,10 +57,13 @@ def load_cards():
     try:
         if os.path.exists(CARDS_FILE):
             with open(CARDS_FILE, 'r') as f:
-                return json.load(f)
+                cards = json.load(f)
+                logger.info(f"✅ Loaded {len(cards)} cards from {CARDS_FILE}")
+                return cards
         else:
-            # Create cards file from the HTML you provided
-            # For now, use default cards
+            logger.warning(f"⚠️ Cards file not found, using {len(DEFAULT_CARDS)} default cards")
+            # Create cards file
+            os.makedirs(os.path.dirname(CARDS_FILE) or '.', exist_ok=True)
             with open(CARDS_FILE, 'w') as f:
                 json.dump(DEFAULT_CARDS, f)
             return DEFAULT_CARDS
@@ -74,20 +80,16 @@ class GameManager:
         self.active_games: Dict[int, Dict[str, Any]] = {}
         self.game_connections: Dict[int, List[WebSocket]] = {}
         self.number_call_tasks: Dict[int, asyncio.Task] = {}
+        self.taken_cards: Dict[int, Set[int]] = {}  # Track taken cards per game
+        self.game_started: Dict[int, bool] = {}  # Track if game has started
         
     async def connect_to_game(self, game_id: int, websocket: WebSocket, user_id: int):
         """Connect user to game"""
         await websocket.accept()
         
-        if game_id not in self.game_connections:
-            self.game_connections[game_id] = []
-            # Start number calling for this game (every 2 seconds)
-            self.number_call_tasks[game_id] = asyncio.create_task(
-                self.call_numbers_periodically(game_id)
-            )
-            logger.info(f"Started number calling for game {game_id} (2-second interval)")
-        
-        self.game_connections[game_id].append(websocket)
+        self.game_connections.setdefault(game_id, []).append(websocket)
+        self.taken_cards.setdefault(game_id, set())
+        self.game_started.setdefault(game_id, False)
         
         # Initialize game if not exists
         if game_id not in self.active_games:
@@ -95,10 +97,11 @@ class GameManager:
                 'called_numbers': [],
                 'players': {},
                 'winner': None,
-                'prize_pool': 0
+                'prize_pool': 0,
+                'admin_id': ADMIN_USER_ID
             }
         
-        # Add player (card will be added when they select)
+        # Add player
         user = db.get_user(user_id)
         player_name = user['first_name'] if user and 'first_name' in user.keys() else f"Player{user_id}"
         self.active_games[game_id]['players'][user_id] = {
@@ -106,19 +109,27 @@ class GameManager:
             'card': None,
             'card_id': None,
             'marked_numbers': [],
-            'is_winner': False
+            'is_winner': False,
+            'ready': False
         }
         
-        # Update prize pool (20 ETB per player)
+        # Update prize pool
         player_count = len(self.active_games[game_id]['players'])
         self.active_games[game_id]['prize_pool'] = player_count * 2000  # 20 ETB in cents
+        
+        # Send current taken cards to new player
+        await websocket.send_json({
+            'type': 'card_taken',
+            'taken_cards': list(self.taken_cards[game_id])
+        })
         
         # Notify all players
         await self.broadcast_to_game(game_id, {
             'type': 'player_joined',
             'players': self.get_players_list(game_id),
             'player_id': user_id,
-            'prize_pool': self.active_games[game_id]['prize_pool'] / 100
+            'prize_pool': self.active_games[game_id]['prize_pool'] / 100,
+            'taken_cards': list(self.taken_cards[game_id])
         })
         
         logger.info(f"User {user_id} joined game {game_id}. Total players: {player_count}")
@@ -132,6 +143,10 @@ class GameManager:
             # Remove player from active game
             if game_id in self.active_games:
                 if user_id in self.active_games[game_id]['players']:
+                    player = self.active_games[game_id]['players'][user_id]
+                    # Free up their card
+                    if player['card_id']:
+                        self.taken_cards[game_id].discard(player['card_id'])
                     del self.active_games[game_id]['players'][user_id]
                     
                     # Update prize pool
@@ -154,13 +169,79 @@ class GameManager:
                 except:
                     pass
     
+    def select_card(self, game_id: int, user_id: int, card_id: int):
+        """Select a card for player - prevent duplicates"""
+        if game_id not in self.active_games:
+            return False
+        
+        # Check if card is already taken
+        if card_id in self.taken_cards[game_id]:
+            return False
+        
+        if user_id in self.active_games[game_id]['players']:
+            # Find the card
+            card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+            if card_data:
+                # Mark card as taken
+                self.taken_cards[game_id].add(card_id)
+                
+                # Assign to player
+                self.active_games[game_id]['players'][user_id]['card'] = card_data['card']
+                self.active_games[game_id]['players'][user_id]['card_id'] = card_id
+                self.active_games[game_id]['players'][user_id]['ready'] = True
+                
+                # Broadcast updated taken cards
+                asyncio.create_task(self.broadcast_to_game(game_id, {
+                    'type': 'card_taken',
+                    'taken_cards': list(self.taken_cards[game_id])
+                }))
+                
+                return True
+        return False
+    
+    def start_game(self, game_id: int, admin_id: int):
+        """Start the game (admin only)"""
+        if game_id not in self.active_games:
+            return False
+        
+        # Check if user is admin
+        if str(admin_id) != ADMIN_USER_ID:
+            return False
+        
+        # Check if game already started
+        if self.game_started[game_id]:
+            return False
+        
+        # Check if enough players (at least 1)
+        players = self.active_games[game_id]['players']
+        ready_players = [p for p in players.values() if p['ready']]
+        
+        if len(ready_players) < 1:
+            return False
+        
+        # Start the game
+        self.game_started[game_id] = True
+        
+        # Start number calling
+        self.number_call_tasks[game_id] = asyncio.create_task(
+            self.call_numbers_periodically(game_id)
+        )
+        
+        # Broadcast game started
+        asyncio.create_task(self.broadcast_to_game(game_id, {
+            'type': 'game_started'
+        }))
+        
+        logger.info(f"Game {game_id} started by admin {admin_id}")
+        return True
+    
     async def call_numbers_periodically(self, game_id: int):
         """Call numbers every 2 seconds"""
         try:
             while True:
                 await asyncio.sleep(2)  # Call number every 2 seconds
                 
-                if game_id in self.active_games:
+                if game_id in self.active_games and self.game_started.get(game_id, False):
                     game = self.active_games[game_id]
                     
                     # Generate random number 1-75 not called yet
@@ -204,21 +285,10 @@ class GameManager:
                 'id': user_id,
                 'name': data['name'],
                 'card_id': data.get('card_id'),
-                'is_winner': data.get('is_winner', False)
+                'is_winner': data.get('is_winner', False),
+                'ready': data.get('ready', False)
             })
         return players
-    
-    def select_card(self, game_id: int, user_id: int, card_id: int):
-        """Select a card for player"""
-        if game_id in self.active_games:
-            if user_id in self.active_games[game_id]['players']:
-                # Find the card
-                card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-                if card_data:
-                    self.active_games[game_id]['players'][user_id]['card'] = card_data['card']
-                    self.active_games[game_id]['players'][user_id]['card_id'] = card_id
-                    return True
-        return False
     
     def mark_number(self, game_id: int, user_id: int, number: int):
         """Mark number for player"""
@@ -372,7 +442,7 @@ async def health_check():
     }
 
 @app.get("/api/cards")
-async def get_cards(page: int = 1, limit: int = 20):
+async def get_cards(page: int = 1, limit: int = 1000):
     """Get paginated list of available cards"""
     start = (page - 1) * limit
     end = start + limit
@@ -395,23 +465,8 @@ async def get_card(card_id: int):
         return card
     return JSONResponse({"error": "Card not found"}, status_code=404)
 
-@app.get("/api/cards/preview")
-async def get_card_preview(card_id: int):
-    """Get card preview (first few numbers)"""
-    card = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-    if card:
-        # Return a preview (first row and column)
-        preview = {
-            "id": card["id"],
-            "first_row": [card["card"][col][0] for col in range(5)],
-            "first_col": [card["card"][0][row] for row in range(5)],
-            "has_free": card["card"][2][2] == "FREE"
-        }
-        return preview
-    return JSONResponse({"error": "Card not found"}, status_code=404)
-
 @app.get("/game", response_class=HTMLResponse)
-async def game_page(request: Request, user_id: int, game_id: int = None):
+async def game_page(request: Request, user_id: int, game_id: int = None, admin_id: str = None):
     """Serve bingo game page"""
     try:
         # Get or create game
@@ -435,7 +490,8 @@ async def game_page(request: Request, user_id: int, game_id: int = None):
                 "request": request,
                 "user_id": user_id,
                 "game_id": game_id,
-                "total_cards": len(BINGO_CARDS)
+                "total_cards": len(BINGO_CARDS),
+                "admin_id": admin_id or ADMIN_USER_ID
             }
         )
         
@@ -457,10 +513,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             data = await websocket.receive_json()
             
             if data['type'] == 'select_card':
-                # Select card
-                success = game_manager.select_card(
-                    game_id, user_id, data['card_id']
-                )
+                success = game_manager.select_card(game_id, user_id, data['card_id'])
                 await websocket.send_json({
                     'type': 'card_selected',
                     'success': success,
@@ -477,11 +530,16 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                             'card_id': data['card_id']
                         })
             
+            elif data['type'] == 'start_game':
+                # Check if user is admin
+                success = game_manager.start_game(game_id, user_id)
+                if success:
+                    await websocket.send_json({
+                        'type': 'game_started'
+                    })
+            
             elif data['type'] == 'mark_number':
-                # Mark number on card
-                success = game_manager.mark_number(
-                    game_id, user_id, data['number']
-                )
+                success = game_manager.mark_number(game_id, user_id, data['number'])
                 if success:
                     await websocket.send_json({
                         'type': 'number_marked',
@@ -490,9 +548,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             
             elif data['type'] == 'check_bingo':
                 # Check if player has bingo
-                valid = game_manager.check_bingo(
-                    game_id, user_id, data['marked']
-                )
+                valid = game_manager.check_bingo(game_id, user_id, data['marked'])
                 await websocket.send_json({
                     'type': 'bingo_result',
                     'valid': valid
@@ -590,14 +646,18 @@ async def get_game_state(game_id: int):
                 'called_numbers': game['called_numbers'],
                 'players': game_manager.get_players_list(game_id),
                 'winner': game['winner'],
-                'prize_pool': game['prize_pool'] / 100
+                'prize_pool': game['prize_pool'] / 100,
+                'game_started': game_manager.game_started.get(game_id, False),
+                'taken_cards': list(game_manager.taken_cards.get(game_id, set()))
             })
         
         return JSONResponse({
             'called_numbers': [],
             'players': [],
             'winner': None,
-            'prize_pool': 0
+            'prize_pool': 0,
+            'game_started': False,
+            'taken_cards': []
         })
     except Exception as e:
         logger.error(f"Game state error: {str(e)}")
