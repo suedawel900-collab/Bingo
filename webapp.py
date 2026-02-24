@@ -21,6 +21,8 @@ app = FastAPI(title="Bingo WebApp")
 
 # Setup templates and static files
 templates = Jinja2Templates(directory="templates")
+# Create static directory if it doesn't exist
+os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Initialize database
@@ -57,8 +59,9 @@ class GameManager:
         
         # Add player
         user = db.get_user(user_id)
+        player_name = user['first_name'] if user and 'first_name' in user.keys() else f"Player{user_id}"
         self.active_games[game_id]['players'][user_id] = {
-            'name': user['first_name'] or f"Player{user_id}",
+            'name': player_name,
             'card': None,
             'marked_numbers': [],
             'is_winner': False
@@ -85,7 +88,7 @@ class GameManager:
                     del self.active_games[game_id]['players'][user_id]
             
             # Stop number calling if no players left
-            if len(self.game_connections[game_id]) == 0:
+            if len(self.game_connections.get(game_id, [])) == 0:
                 if game_id in self.number_call_tasks:
                     self.number_call_tasks[game_id].cancel()
                     del self.number_call_tasks[game_id]
@@ -221,7 +224,7 @@ class GameManager:
             
             # Calculate prize (total buy-ins minus house fee)
             player_count = len(game['players'])
-            prize_pool = player_count * 200  # $2 per player in cents
+            prize_pool = player_count * 200  # 20 ETB per player in cents
             house_fee = int(prize_pool * 0.1)  # 10% house fee
             winner_prize = prize_pool - house_fee
             
@@ -255,13 +258,37 @@ class GameManager:
                 'type': 'game_won',
                 'winner_id': user_id,
                 'winner_name': game['players'][user_id]['name'],
-                'prize': f"${winner_prize/100:.2f}"
+                'prize': f"{winner_prize/100:.2f} ETB"
             }))
             
-            logger.info(f"Game {game_id} winner: User {user_id}, Prize: ${winner_prize/100:.2f}")
+            logger.info(f"Game {game_id} winner: User {user_id}, Prize: {winner_prize/100:.2f} ETB")
 
 # Initialize game manager
 game_manager = GameManager()
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "status": "online",
+        "service": "Bingo WebApp",
+        "version": "1.0.0",
+        "endpoints": [
+            "/game - Bingo game page",
+            "/health - Health check",
+            "/api/join-game - Join game API",
+            "/ws/{game_id}/{user_id} - WebSocket connection"
+        ]
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "bingo-webapp",
+        "timestamp": datetime.now().isoformat()
+    }
 
 @app.get("/game", response_class=HTMLResponse)
 async def game_page(request: Request, user_id: int, game_id: int = None):
@@ -275,11 +302,44 @@ async def game_page(request: Request, user_id: int, game_id: int = None):
             else:
                 # Create new game
                 game_code = f"GAME{random.randint(1000, 9999)}"
-                cursor = db.get_connection().cursor()
-                cursor.execute('''
-                    INSERT INTO games (game_code) VALUES (?)
-                ''', (game_code,))
-                game_id = cursor.lastrowid
+                with db.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT INTO games (game_code) VALUES (?)
+                    ''', (game_code,))
+                    game_id = cursor.lastrowid
+        
+        # Check if template exists
+        template_path = "templates/bingo.html"
+        if not os.path.exists(template_path):
+            # Create a simple HTML if template doesn't exist
+            html_content = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Bingo Game</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body { font-family: Arial; text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+                    .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; color: black; }
+                    button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-size: 18px; cursor: pointer; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>🎯 BINGO GAME</h1>
+                    <p>Game ID: {game_id}</p>
+                    <p>User ID: {user_id}</p>
+                    <p>The game is loading...</p>
+                    <button onclick="window.location.href='https://t.me/your_bot'">Return to Bot</button>
+                </div>
+                <script>
+                    console.log('Game started for user {user_id} in game {game_id}');
+                </script>
+            </body>
+            </html>
+            """.format(game_id=game_id, user_id=user_id)
+            return HTMLResponse(content=html_content)
         
         return templates.TemplateResponse(
             "bingo.html",
@@ -293,7 +353,7 @@ async def game_page(request: Request, user_id: int, game_id: int = None):
     except Exception as e:
         logger.error(f"Game page error: {str(e)}")
         return HTMLResponse(
-            content=f"<h1>Error loading game</h1><p>{str(e)}</p>",
+            content=f"<h1>Error Loading Game</h1><p>{str(e)}</p><p>Please try again later.</p>",
             status_code=500
         )
 
@@ -337,23 +397,29 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
 @app.post("/api/join-game")
 async def join_game(request: Request):
     """API endpoint to join game"""
-    data = await request.json()
-    user_id = data.get('user_id')
-    game_id = data.get('game_id')
-    card = data.get('card')
-    
     try:
-        # Deduct game fee
+        data = await request.json()
+        user_id = data.get('user_id')
+        game_id = data.get('game_id')
+        card = data.get('card')
+        
+        # Deduct game fee (20 ETB = 200 cents)
         result = db.update_balance(
             user_id=user_id,
-            amount=-200,  # $2 game fee
+            amount=-200,
             transaction_type='game_fee',
             description=f'Joined game #{game_id}'
         )
         
         if result:
             # Add player to game in database
-            db.join_game(game_id, user_id, card)
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO game_players (game_id, user_id, card_numbers)
+                    VALUES (?, ?, ?)
+                ''', (game_id, user_id, json.dumps(card)))
+                conn.commit()
             
             return JSONResponse({
                 'success': True,
@@ -375,49 +441,70 @@ async def join_game(request: Request):
 @app.post("/api/mark-number")
 async def mark_number(request: Request):
     """API endpoint to mark number"""
-    data = await request.json()
-    game_id = data.get('game_id')
-    user_id = data.get('user_id')
-    number = data.get('number')
-    
-    success = game_manager.mark_number(game_id, user_id, number)
-    
-    return JSONResponse({
-        'success': success
-    })
+    try:
+        data = await request.json()
+        game_id = data.get('game_id')
+        user_id = data.get('user_id')
+        number = data.get('number')
+        
+        success = game_manager.mark_number(game_id, user_id, number)
+        
+        return JSONResponse({
+            'success': success
+        })
+    except Exception as e:
+        logger.error(f"Mark number error: {str(e)}")
+        return JSONResponse({
+            'success': False,
+            'error': str(e)
+        }, status_code=500)
 
 @app.post("/api/check-bingo")
 async def check_bingo(request: Request):
     """API endpoint to check bingo"""
-    data = await request.json()
-    game_id = data.get('game_id')
-    user_id = data.get('user_id')
-    card = data.get('card')
-    marked = data.get('marked')
-    
-    valid = game_manager.check_bingo(game_id, user_id, card, marked)
-    
-    return JSONResponse({
-        'valid': valid
-    })
+    try:
+        data = await request.json()
+        game_id = data.get('game_id')
+        user_id = data.get('user_id')
+        card = data.get('card')
+        marked = data.get('marked')
+        
+        valid = game_manager.check_bingo(game_id, user_id, card, marked)
+        
+        return JSONResponse({
+            'valid': valid
+        })
+    except Exception as e:
+        logger.error(f"Check bingo error: {str(e)}")
+        return JSONResponse({
+            'valid': False,
+            'error': str(e)
+        }, status_code=500)
 
 @app.get("/api/game-state/{game_id}")
 async def get_game_state(game_id: int):
     """Get current game state"""
-    if game_id in game_manager.active_games:
-        game = game_manager.active_games[game_id]
+    try:
+        if game_id in game_manager.active_games:
+            game = game_manager.active_games[game_id]
+            return JSONResponse({
+                'called_numbers': game['called_numbers'],
+                'players': game_manager.get_players_list(game_id),
+                'winner': game['winner']
+            })
+        
         return JSONResponse({
-            'called_numbers': game['called_numbers'],
-            'players': game_manager.get_players_list(game_id),
-            'winner': game['winner']
+            'called_numbers': [],
+            'players': [],
+            'winner': None
         })
-    
-    return JSONResponse({
-        'called_numbers': [],
-        'players': [],
-        'winner': None
-    })
+    except Exception as e:
+        logger.error(f"Game state error: {str(e)}")
+        return JSONResponse({
+            'error': str(e)
+        }, status_code=500)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    port = int(os.getenv('PORT', 8001))
+    uvicorn.run(app, host="0.0.0.0", port=port)
