@@ -4,6 +4,7 @@ import asyncio
 import threading
 import logging
 import signal
+import time  # ← ADD THIS MISSING IMPORT
 import uvicorn
 
 logging.basicConfig(
@@ -40,7 +41,7 @@ def run_webapp():
             host="0.0.0.0",
             port=port,
             log_level="info",
-            workers=1  # Single worker to avoid conflicts
+            workers=1
         )
     except Exception as e:
         logger.error(f"❌ Webapp error: {e}")
