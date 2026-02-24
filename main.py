@@ -3,8 +3,8 @@ import sys
 import asyncio
 import threading
 import logging
-import uvicorn
 import signal
+import uvicorn
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +26,8 @@ def signal_handler(sig, frame):
         bot.set_shutdown_flag()
     except:
         pass
+    # Give processes time to clean up
+    time.sleep(2)
     sys.exit(0)
 
 def run_webapp():
@@ -37,7 +39,8 @@ def run_webapp():
             "webapp:app",
             host="0.0.0.0",
             port=port,
-            log_level="info"
+            log_level="info",
+            workers=1  # Single worker to avoid conflicts
         )
     except Exception as e:
         logger.error(f"❌ Webapp error: {e}")
@@ -65,6 +68,10 @@ def run_bot():
             sys.exit(1)
     finally:
         try:
+            # Cancel all tasks
+            for task in asyncio.all_tasks(loop):
+                task.cancel()
+            loop.run_until_complete(asyncio.sleep(0.1))
             loop.close()
         except:
             pass
