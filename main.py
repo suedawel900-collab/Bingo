@@ -4,7 +4,6 @@ import asyncio
 import threading
 import logging
 import uvicorn
-from concurrent.futures import ThreadPoolExecutor
 import signal
 
 logging.basicConfig(
@@ -21,6 +20,12 @@ def signal_handler(sig, frame):
     global shutdown_flag
     logger.info("🛑 Shutdown signal received...")
     shutdown_flag = True
+    # Set shutdown flag in bot module
+    try:
+        import bot
+        bot.set_shutdown_flag()
+    except:
+        pass
     sys.exit(0)
 
 def run_webapp():
@@ -64,11 +69,6 @@ def run_bot():
         except:
             pass
 
-async def run_bot_async():
-    """Async wrapper for bot"""
-    import bot
-    await bot.async_main()
-
 def main():
     """Main entry point"""
     logger.info("🚀 Starting Bingo Bot services...")
@@ -81,14 +81,8 @@ def main():
     webapp_thread = threading.Thread(target=run_webapp, daemon=True)
     webapp_thread.start()
     
-    # Run bot in main thread with asyncio
-    try:
-        asyncio.run(run_bot_async())
-    except KeyboardInterrupt:
-        logger.info("👋 Shutting down...")
-    except Exception as e:
-        logger.error(f"❌ Fatal error: {e}")
-        sys.exit(1)
+    # Run bot in main thread
+    run_bot()
 
 if __name__ == "__main__":
     main()
