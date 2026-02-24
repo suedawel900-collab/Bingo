@@ -3,56 +3,64 @@ import sys
 import threading
 import time
 import logging
-import uvicorn
-from fastapi import FastAPI, Request
-from telegram import Update
-from telegram.ext import Application
+import subprocess
+import signal
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
-app = FastAPI()
-
-@app.get("/")
-async def root():
-    return {"status": "online", "service": "Bingo Bot", "message": "Bot is running"}
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "timestamp": time.time()}
+def run_webapp():
+    """Run FastAPI webapp using uvicorn"""
+    import uvicorn
+    port = int(os.getenv('PORT', 8080))
+    logger.info(f"🌐 Starting webapp on port {port}")
+    uvicorn.run(
+        "webapp:app",
+        host="0.0.0.0",
+        port=port,
+        log_level="info"
+    )
 
 def run_bot():
-    """Run the Telegram bot"""
-    try:
-        import bot
-        bot.main()
-    except Exception as e:
-        logger.error(f"Bot error: {e}")
-
-def run_webapp():
-    """Run the webapp server"""
-    try:
-        port = int(os.getenv('PORT', 8080))
-        uvicorn.run(
-            "webapp:app",
-            host="0.0.0.0",
-            port=port,
-            log_level="info"
-        )
-    except Exception as e:
-        logger.error(f"Webapp error: {e}")
+    """Run Telegram bot"""
+    import bot
+    logger.info("🤖 Starting bot")
+    bot.main()
 
 if __name__ == "__main__":
     logger.info("🚀 Starting Bingo Bot services...")
     
-    # Start bot in separate thread
+    # Create threads for both services
+    webapp_thread = threading.Thread(target=run_webapp, daemon=True)
     bot_thread = threading.Thread(target=run_bot, daemon=True)
+    
+    # Start both services
+    webapp_thread.start()
     bot_thread.start()
     
-    # Run webapp in main thread
-    run_webapp()
+    # Handle shutdown gracefully
+    def signal_handler(sig, frame):
+        logger.info("🛑 Shutting down...")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Keep main thread alive
+    try:
+        while True:
+            time.sleep(1)
+            if not webapp_thread.is_alive():
+                logger.error("❌ Webapp thread died! Restarting...")
+                webapp_thread = threading.Thread(target=run_webapp, daemon=True)
+                webapp_thread.start()
+            if not bot_thread.is_alive():
+                logger.error("❌ Bot thread died! Restarting...")
+                bot_thread = threading.Thread(target=run_bot, daemon=True)
+                bot_thread.start()
+    except KeyboardInterrupt:
+        logger.info("👋 Shutting down...")
+        sys.exit(0)
