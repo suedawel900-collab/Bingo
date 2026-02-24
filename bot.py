@@ -413,14 +413,6 @@ async def create_payment_request(update_obj, context, method_id, amount_cents, p
     # Get primary account
     account = db.get_primary_account(method_id)
     
-    # Show payment instructions
-    instructions = method['instructions'] if 'instructions' in method.keys() and method['instructions'] else "No instructions available"
-    
-    # Replace account number placeholder if present
-    account_number = "0953933030"  # Default
-    if account and 'account_number' in account.keys():
-        account_number = account['account_number']
-    
     # Get method name safely
     method_name = method['method_name'] if 'method_name' in method.keys() else "Payment"
     
@@ -429,6 +421,11 @@ async def create_payment_request(update_obj, context, method_id, amount_cents, p
         emoji = "💚"
     else:
         emoji = "🔵"
+    
+    # Get account number
+    account_number = "0953933030"  # Default
+    if account and 'account_number' in account.keys():
+        account_number = account['account_number']
     
     # Customize instructions based on method
     if 'CBE' in method_name or 'ሲቢኢ' in method_name:
@@ -563,7 +560,7 @@ async def handle_payment_reference(update: Update, context: ContextTypes.DEFAULT
             f"**Request ID:** `{request_id}`\n"
             f"**User:** {user.first_name} (ID: `{user.id}`)\n"
             f"**Reference:** `{reference}`\n\n"
-            f"Use /verify_payment {request_id} to confirm"
+            f"Use the admin panel to approve/reject."
         )
         
         await context.bot.send_message(
@@ -945,8 +942,8 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     keyboard = [
-        [InlineKeyboardButton("📊 Pending Withdrawals", callback_data="admin_pending_withdrawals")],
         [InlineKeyboardButton("💰 Pending Payments", callback_data="admin_pending_payments")],
+        [InlineKeyboardButton("📊 Pending Withdrawals", callback_data="admin_pending_withdrawals")],
         [InlineKeyboardButton("📈 System Stats", callback_data="admin_stats")],
         [InlineKeyboardButton("👥 User Stats", callback_data="admin_user_stats")],
         [InlineKeyboardButton("◀️ Main Menu", callback_data="main_menu")]
@@ -961,10 +958,11 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def admin_pending_payments(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show pending payment requests"""
+    """Show pending payment requests with approval buttons"""
     query = update.callback_query
     await query.answer()
     
+    # Check if user is admin
     if str(update.effective_user.id) != ADMIN_USER_ID:
         await query.edit_message_text("❌ Unauthorized")
         return
@@ -980,30 +978,199 @@ async def admin_pending_payments(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
     
-    message = "💰 **Pending Payment Requests**\n\n"
-    for p in pending[:10]:  # Show first 10
+    # Send each pending payment with approve/reject buttons
+    for p in pending:
         created = datetime.fromisoformat(p['created_at']).strftime("%m/%d %H:%M")
         sender_phone = p['sender_phone'] if 'sender_phone' in p.keys() else 'N/A'
         method_name = p['method_name'] if 'method_name' in p.keys() else 'Unknown'
         first_name = p['first_name'] if 'first_name' in p.keys() else 'User'
         
-        message += (
-            f"• **{p['request_id']}**\n"
-            f"  User: {first_name} (ID: {p['user_id']})\n"
-            f"  Amount: {p['amount']/100:.0f} ETB\n"
-            f"  Method: {method_name}\n"
-            f"  Phone: {sender_phone}\n"
-            f"  Time: {created}\n\n"
+        # Set emoji based on method
+        if 'CBE' in method_name or 'ሲቢኢ' in method_name:
+            emoji = "💚"
+        else:
+            emoji = "🔵"
+        
+        # Create approve/reject buttons for this payment
+        keyboard = [
+            [
+                InlineKeyboardButton(f"{emoji} ✅ Approve", callback_data=f"approve_payment_{p['request_id']}"),
+                InlineKeyboardButton("❌ Reject", callback_data=f"reject_payment_{p['request_id']}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        message = (
+            f"{emoji} **Pending Payment Request**\n\n"
+            f"**Request ID:** `{p['request_id']}`\n"
+            f"**User:** {first_name} (ID: `{p['user_id']}`)\n"
+            f"**Amount:** {p['amount']/100:.0f} ETB\n"
+            f"**Method:** {method_name}\n"
+            f"**Phone:** {sender_phone}\n"
+            f"**Time:** {created}\n\n"
+            f"Select action:"
+        )
+        
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text=message,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
         )
     
-    await query.edit_message_text(
-        message,
-        parse_mode='Markdown',
+    # Send summary
+    await context.bot.send_message(
+        chat_id=update.effective_user.id,
+        text=f"📊 Showing {len(pending)} pending payment requests.\n"
+             f"Use the buttons above to approve or reject each payment.",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🔄 Refresh", callback_data="admin_pending_payments"),
-            InlineKeyboardButton("◀️ Back", callback_data="admin_panel")
+            InlineKeyboardButton("◀️ Admin Panel", callback_data="admin_panel")
         ]])
     )
+
+async def approve_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle payment approval"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    if str(update.effective_user.id) != ADMIN_USER_ID:
+        await query.edit_message_text("❌ Unauthorized")
+        return
+    
+    request_id = query.data.split('_')[2]  # approve_payment_REQUESTID
+    
+    # Get payment request details
+    request = db.get_payment_request(request_id)
+    
+    if not request:
+        await query.edit_message_text("❌ Payment request not found")
+        return
+    
+    try:
+        # Update payment request status
+        db.update_payment_request_status(
+            request_id=request_id,
+            status='completed',
+            admin_notes=f"Approved by admin {update.effective_user.id}"
+        )
+        
+        # Add funds to user balance
+        db.update_balance(
+            user_id=request['user_id'],
+            amount=request['amount'],
+            transaction_type='deposit',
+            description=f'Payment via {request_id}',
+            status='completed'
+        )
+        
+        # Get method name for emoji
+        method_name = request['method_name'] if 'method_name' in request.keys() else 'Payment'
+        if 'CBE' in method_name or 'ሲቢኢ' in method_name:
+            emoji = "💚"
+        else:
+            emoji = "🔵"
+        
+        # Notify user
+        await context.bot.send_message(
+            chat_id=request['user_id'],
+            text=f"{emoji} **Payment Approved!**\n\n"
+                 f"✅ Your payment of **{request['amount']/100:.0f} ETB** has been approved.\n"
+                 f"Funds have been added to your balance.\n\n"
+                 f"Request ID: `{request_id}`\n"
+                 f"Thank you for using Bingo Bot!",
+            parse_mode='Markdown'
+        )
+        
+        # Confirm to admin
+        await query.edit_message_text(
+            f"✅ **Payment Approved Successfully!**\n\n"
+            f"**Request ID:** `{request_id}`\n"
+            f"**User ID:** {request['user_id']}\n"
+            f"**Amount:** {request['amount']/100:.0f} ETB\n\n"
+            f"The user has been notified.",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back to Pending", callback_data="admin_pending_payments")
+            ]])
+        )
+        
+    except Exception as e:
+        logger.error(f"Error approving payment: {e}")
+        await query.edit_message_text(
+            f"❌ Error approving payment: {str(e)}",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back", callback_data="admin_pending_payments")
+            ]])
+        )
+
+async def reject_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle payment rejection"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    if str(update.effective_user.id) != ADMIN_USER_ID:
+        await query.edit_message_text("❌ Unauthorized")
+        return
+    
+    request_id = query.data.split('_')[2]  # reject_payment_REQUESTID
+    
+    # Get payment request details
+    request = db.get_payment_request(request_id)
+    
+    if not request:
+        await query.edit_message_text("❌ Payment request not found")
+        return
+    
+    try:
+        # Update payment request status
+        db.update_payment_request_status(
+            request_id=request_id,
+            status='rejected',
+            admin_notes=f"Rejected by admin {update.effective_user.id}"
+        )
+        
+        # Get method name for emoji
+        method_name = request['method_name'] if 'method_name' in request.keys() else 'Payment'
+        if 'CBE' in method_name or 'ሲቢኢ' in method_name:
+            emoji = "💚"
+        else:
+            emoji = "🔵"
+        
+        # Notify user
+        await context.bot.send_message(
+            chat_id=request['user_id'],
+            text=f"{emoji} **Payment Rejected**\n\n"
+                 f"❌ Your payment of **{request['amount']/100:.0f} ETB** has been rejected.\n\n"
+                 f"**Request ID:** `{request_id}`\n\n"
+                 f"Please contact support if you believe this is an error.\n"
+                 f"Make sure you sent the payment to the correct number and provided the right reference.",
+            parse_mode='Markdown'
+        )
+        
+        # Confirm to admin
+        await query.edit_message_text(
+            f"❌ **Payment Rejected**\n\n"
+            f"**Request ID:** `{request_id}`\n"
+            f"**User ID:** {request['user_id']}\n"
+            f"**Amount:** {request['amount']/100:.0f} ETB\n\n"
+            f"The user has been notified.",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back to Pending", callback_data="admin_pending_payments")
+            ]])
+        )
+        
+    except Exception as e:
+        logger.error(f"Error rejecting payment: {e}")
+        await query.edit_message_text(
+            f"❌ Error rejecting payment: {str(e)}",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back", callback_data="admin_pending_payments")
+            ]])
+        )
 
 async def admin_pending_withdrawals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show pending withdrawal requests"""
@@ -1025,30 +1192,55 @@ async def admin_pending_withdrawals(update: Update, context: ContextTypes.DEFAUL
         )
         return
     
-    message = "💸 **Pending Withdrawal Requests**\n\n"
-    for w in pending[:10]:  # Show first 10
+    # Send each pending withdrawal with approve/reject buttons
+    for w in pending:
         created = datetime.fromisoformat(w['created_at']).strftime("%m/%d %H:%M")
         first_name = w['first_name'] if 'first_name' in w.keys() else 'User'
         method_name = w['method_name'] if 'method_name' in w.keys() else 'Unknown'
         account_number = w['account_number'] if 'account_number' in w.keys() else 'N/A'
         account_name = w['account_name'] if 'account_name' in w.keys() else 'N/A'
         
-        message += (
-            f"• **{w['request_id']}**\n"
-            f"  User: {first_name} (ID: {w['user_id']})\n"
-            f"  Amount: {w['amount']/100:.0f} ETB\n"
-            f"  Method: {method_name}\n"
-            f"  Account: {account_number}\n"
-            f"  Name: {account_name}\n"
-            f"  Time: {created}\n\n"
+        # Set emoji based on method
+        if 'CBE' in method_name or 'ሲቢኢ' in method_name:
+            emoji = "💚"
+        else:
+            emoji = "🔵"
+        
+        # Create approve/reject buttons
+        keyboard = [
+            [
+                InlineKeyboardButton(f"{emoji} ✅ Approve", callback_data=f"approve_withdrawal_{w['request_id']}"),
+                InlineKeyboardButton("❌ Reject", callback_data=f"reject_withdrawal_{w['request_id']}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        message = (
+            f"{emoji} **Pending Withdrawal Request**\n\n"
+            f"**Request ID:** `{w['request_id']}`\n"
+            f"**User:** {first_name} (ID: {w['user_id']})\n"
+            f"**Amount:** {w['amount']/100:.0f} ETB\n"
+            f"**Method:** {method_name}\n"
+            f"**Account:** {account_number}\n"
+            f"**Name:** {account_name}\n"
+            f"**Time:** {created}\n\n"
+            f"Select action:"
+        )
+        
+        await context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text=message,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
         )
     
-    await query.edit_message_text(
-        message,
-        parse_mode='Markdown',
+    # Send summary
+    await context.bot.send_message(
+        chat_id=update.effective_user.id,
+        text=f"📊 Showing {len(pending)} pending withdrawal requests.",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🔄 Refresh", callback_data="admin_pending_withdrawals"),
-            InlineKeyboardButton("◀️ Back", callback_data="admin_panel")
+            InlineKeyboardButton("◀️ Admin Panel", callback_data="admin_panel")
         ]])
     )
 
@@ -1226,6 +1418,10 @@ def setup_handlers(application):
     application.add_handler(CallbackQueryHandler(admin_pending_withdrawals, pattern='^admin_pending_withdrawals$'))
     application.add_handler(CallbackQueryHandler(admin_stats, pattern='^admin_stats$'))
     application.add_handler(CallbackQueryHandler(admin_user_stats, pattern='^admin_user_stats$'))
+    
+    # Payment approval/rejection handlers
+    application.add_handler(CallbackQueryHandler(approve_payment_callback, pattern='^approve_payment_'))
+    application.add_handler(CallbackQueryHandler(reject_payment_callback, pattern='^reject_payment_'))
     
     # Add conversation handlers
     application.add_handler(deposit_conv)
