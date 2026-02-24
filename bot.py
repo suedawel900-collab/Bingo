@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
@@ -34,6 +35,9 @@ BASE_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'bingo-production-a078.up.railway.
 WEBAPP_URL = os.getenv('WEBAPP_URL', f"https://{BASE_URL}")
 ADMIN_USER_ID = os.getenv('ADMIN_USER_ID')
 
+# Global shutdown flag for async_main
+shutdown_flag = False
+
 # Check for required environment variables
 if not BOT_TOKEN:
     logger.error("❌ CRITICAL: BOT_TOKEN environment variable is not set!")
@@ -54,6 +58,11 @@ def get_method_emoji(method_type):
         'card': '💳'
     }
     return emojis.get(method_type, '💰')
+
+def set_shutdown_flag():
+    """Set shutdown flag for async_main"""
+    global shutdown_flag
+    shutdown_flag = True
 
 async def notify_admin(context: ContextTypes.DEFAULT_TYPE, message: str):
     """Send notification to admin"""
@@ -1429,14 +1438,16 @@ def setup_handlers(application):
     
     return application
 
-def main():
-    """Start the bot"""
+async def async_main():
+    """Async version of main for use with asyncio"""
+    global shutdown_flag
+    application = None
+    
     try:
         # Get token with validation
         BOT_TOKEN = os.getenv('BOT_TOKEN')
         if not BOT_TOKEN:
             logger.error("❌ BOT_TOKEN not found in environment variables")
-            logger.error("Please set BOT_TOKEN in Railway dashboard")
             return
         
         logger.info("🤖 Initializing bot...")
@@ -1453,12 +1464,47 @@ def main():
         if ADMIN_USER_ID:
             logger.info(f"👑 Admin ID: {ADMIN_USER_ID}")
         
-        # Start bot
-        application.run_polling()
+        # Initialize application
+        await application.initialize()
+        await application.start()
         
+        # Start polling
+        await application.updater.start_polling()
+        
+        # Keep running until stopped
+        while not shutdown_flag:
+            await asyncio.sleep(1)
+            
     except Exception as e:
         logger.error(f"❌ Bot error: {e}")
         raise
+    finally:
+        # Clean shutdown
+        if application:
+            try:
+                await application.updater.stop()
+                await application.stop()
+                await application.shutdown()
+                logger.info("✅ Bot shutdown complete")
+            except Exception as e:
+                logger.error(f"Error during shutdown: {e}")
 
-if __name__ == '__main__':
+def main():
+    """Synchronous main for backwards compatibility"""
+    # Create new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        # Run the async main
+        loop.run_until_complete(async_main())
+    except KeyboardInterrupt:
+        logger.info("👋 Bot stopped by user")
+    except Exception as e:
+        logger.error(f"❌ Fatal error: {e}")
+    finally:
+        # Clean up
+        loop.close()
+
+if __name__ == "__main__":
     main()
