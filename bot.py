@@ -8,7 +8,6 @@ from telegram.ext import (
 )
 
 from models import Database
-import requests
 
 # Configure logging
 logging.basicConfig(
@@ -30,13 +29,69 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 BOT_USERNAME = os.getenv('BOT_USERNAME', 'your_bot')
 BASE_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'bingo-production-a078.up.railway.app')
 WEBAPP_URL = os.getenv('WEBAPP_URL', f"https://{BASE_URL}")
+ADMIN_USER_ID = os.getenv('ADMIN_USER_ID')
 
 # Check for required environment variables
 if not BOT_TOKEN:
     logger.error("❌ CRITICAL: BOT_TOKEN environment variable is not set!")
     logger.error("Please add BOT_TOKEN to your Railway environment variables")
 
+if not ADMIN_USER_ID:
+    logger.warning("⚠️ ADMIN_USER_ID not set. Admin features will be disabled.")
+
 logger.info(f"✅ Using BASE_URL: {BASE_URL}")
+logger.info(f"✅ Admin ID: {ADMIN_USER_ID if ADMIN_USER_ID else 'Not set'}")
+
+async def notify_admin(context: ContextTypes.DEFAULT_TYPE, message: str):
+    """Send notification to admin"""
+    if not ADMIN_USER_ID:
+        logger.warning("ADMIN_USER_ID not set, skipping admin notification")
+        return
+    
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_USER_ID,
+            text=f"🔔 **Admin Alert**\n\n{message}",
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Failed to notify admin: {e}")
+
+async def notify_admin_withdrawal(user_id: int, amount: int, address: str, context: ContextTypes.DEFAULT_TYPE):
+    """Notify admin about withdrawal request"""
+    if not ADMIN_USER_ID:
+        return
+    
+    try:
+        # Get user info
+        user = await context.bot.get_chat(user_id)
+        username = user.username or f"User {user_id}"
+        
+        # Create approval buttons
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Approve", callback_data=f"approve_{user_id}_{amount}"),
+                InlineKeyboardButton("❌ Reject", callback_data=f"reject_{user_id}_{amount}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        message = (
+            f"💰 **New Withdrawal Request**\n\n"
+            f"**User:** {username} (ID: `{user_id}`)\n"
+            f"**Amount:** `${amount/100:.2f}`\n"
+            f"**Destination:** `{address}`\n"
+            f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        await context.bot.send_message(
+            chat_id=ADMIN_USER_ID,
+            text=message,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logger.error(f"Failed to notify admin about withdrawal: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command handler"""
@@ -105,6 +160,11 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("📊 History", callback_data="history")],
         [InlineKeyboardButton("❓ Help", callback_data="help")]
     ]
+    
+    # Add admin button if user is admin
+    if str(user.id) == ADMIN_USER_ID:
+        keyboard.append([InlineKeyboardButton("👑 Admin Panel", callback_data="admin_panel")])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     balance = user_data['balance'] / 100
@@ -347,26 +407,32 @@ async def withdraw_address_handler(update: Update, context: ContextTypes.DEFAULT
     user = update.effective_user
     
     try:
-        # Process withdrawal
+        # Create pending transaction
         result = db.update_balance(
             user_id=user.id,
             amount=-amount,
             transaction_type='withdrawal',
-            description=f'Withdrawal to {address}'
+            description=f'Withdrawal request to {address}',
+            status='pending'
         )
         
         if result:
+            # Notify user
             await update.message.reply_text(
                 f"✅ **Withdrawal Request Submitted**\n\n"
                 f"Amount: **${amount/100:.2f}**\n"
                 f"Destination: {address}\n\n"
-                f"Your withdrawal will be processed within 24 hours.\n"
-                f"New balance: **${result['new_balance']/100:.2f}**",
+                f"Your request has been sent to admin for approval.\n"
+                f"You will be notified once processed.",
                 parse_mode='Markdown',
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("◀️ Main Menu", callback_data="main_menu")
                 ]])
             )
+            
+            # Notify admin
+            await notify_admin_withdrawal(user.id, amount, address, context)
+            
         else:
             await update.message.reply_text(
                 "❌ Withdrawal failed. Please try again.",
@@ -497,6 +563,292 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]])
     )
 
+# ==================== ADMIN FUNCTIONS ====================
+
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin panel"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    if str(update.effective_user.id) != ADMIN_USER_ID:
+        await query.edit_message_text("❌ You are not authorized to access this panel.")
+        return
+    
+    keyboard = [
+        [InlineKeyboardButton("📊 Pending Withdrawals", callback_data="admin_pending")],
+        [InlineKeyboardButton("💰 Total Balance", callback_data="admin_total_balance")],
+        [InlineKeyboardButton("👥 User Stats", callback_data="admin_user_stats")],
+        [InlineKeyboardButton("📈 System Health", callback_data="admin_health")],
+        [InlineKeyboardButton("◀️ Main Menu", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        "👑 **Admin Control Panel**\n\n"
+        "Welcome to the admin panel. Select an option:",
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+
+async def admin_pending_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show pending withdrawals"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if admin
+    if str(update.effective_user.id) != ADMIN_USER_ID:
+        await query.edit_message_text("❌ Unauthorized")
+        return
+    
+    # Get pending withdrawals from database
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM transactions 
+            WHERE type = 'withdrawal' AND status = 'pending'
+            ORDER BY created_at DESC
+        ''')
+        pending = cursor.fetchall()
+    
+    if not pending:
+        await query.edit_message_text(
+            "📊 No pending withdrawals.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back to Admin", callback_data="admin_panel")
+            ]])
+        )
+        return
+    
+    message = "📊 **Pending Withdrawals**\n\n"
+    for p in pending:
+        created = datetime.fromisoformat(p['created_at']).strftime("%m/%d %H:%M")
+        message += f"• ID: `{p['id']}` | User: {p['user_id']}\n"
+        message += f"  Amount: **${p['amount']/100:.2f}** | {created}\n\n"
+    
+    await query.edit_message_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Back to Admin", callback_data="admin_panel")
+        ]])
+    )
+
+async def admin_total_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show total balance in system"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if admin
+    if str(update.effective_user.id) != ADMIN_USER_ID:
+        await query.edit_message_text("❌ Unauthorized")
+        return
+    
+    # Calculate totals
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Total user balances
+        cursor.execute('SELECT SUM(balance) as total FROM users')
+        total_balance = cursor.fetchone()['total'] or 0
+        
+        # Total deposits
+        cursor.execute('SELECT SUM(amount) as total FROM transactions WHERE type = "deposit" AND status = "completed"')
+        total_deposits = cursor.fetchone()['total'] or 0
+        
+        # Total withdrawals
+        cursor.execute('SELECT SUM(amount) as total FROM transactions WHERE type = "withdrawal" AND status = "completed"')
+        total_withdrawals = cursor.fetchone()['total'] or 0
+        
+        # Total users
+        cursor.execute('SELECT COUNT(*) as count FROM users')
+        total_users = cursor.fetchone()['count']
+    
+    message = (
+        f"💰 **System Financials**\n\n"
+        f"**Total Users:** {total_users}\n"
+        f"**Total Balance:** `${total_balance/100:.2f}`\n"
+        f"**Total Deposits:** `${total_deposits/100:.2f}`\n"
+        f"**Total Withdrawals:** `${total_withdrawals/100:.2f}`\n"
+        f"**Platform Profit:** `${(total_deposits - total_withdrawals - total_balance)/100:.2f}`"
+    )
+    
+    await query.edit_message_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Back to Admin", callback_data="admin_panel")
+        ]])
+    )
+
+async def admin_user_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user statistics"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if admin
+    if str(update.effective_user.id) != ADMIN_USER_ID:
+        await query.edit_message_text("❌ Unauthorized")
+        return
+    
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Top users by balance
+        cursor.execute('''
+            SELECT user_id, username, first_name, balance 
+            FROM users 
+            ORDER BY balance DESC 
+            LIMIT 5
+        ''')
+        top_users = cursor.fetchall()
+        
+        # Users with most games
+        cursor.execute('''
+            SELECT user_id, username, first_name, games_played 
+            FROM users 
+            ORDER BY games_played DESC 
+            LIMIT 5
+        ''')
+        top_players = cursor.fetchall()
+    
+    message = "👥 **User Statistics**\n\n"
+    
+    message += "**💰 Top Balances:**\n"
+    for u in top_users:
+        name = u['first_name'] or u['username'] or f"User {u['user_id']}"
+        message += f"• {name}: **${u['balance']/100:.2f}**\n"
+    
+    message += "\n**🎮 Most Games Played:**\n"
+    for u in top_players:
+        name = u['first_name'] or u['username'] or f"User {u['user_id']}"
+        message += f"• {name}: **{u['games_played']}** games\n"
+    
+    await query.edit_message_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Back to Admin", callback_data="admin_panel")
+        ]])
+    )
+
+async def admin_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show system health"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if admin
+    if str(update.effective_user.id) != ADMIN_USER_ID:
+        await query.edit_message_text("❌ Unauthorized")
+        return
+    
+    import platform
+    import psutil
+    
+    message = (
+        f"📈 **System Health**\n\n"
+        f"**Bot Status:** ✅ Online\n"
+        f"**Database:** ✅ Connected\n"
+        f"**Python Version:** {platform.python_version()}\n"
+        f"**Server Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"**BASE_URL:** `{BASE_URL}`\n"
+    )
+    
+    # Try to add memory info if available
+    try:
+        memory = psutil.virtual_memory()
+        message += f"**Memory Usage:** {memory.percent}%\n"
+    except:
+        pass
+    
+    await query.edit_message_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Back to Admin", callback_data="admin_panel"),
+            InlineKeyboardButton("🔄 Refresh", callback_data="admin_health")
+        ]])
+    )
+
+async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle admin approval/rejection"""
+    query = update.callback_query
+    await query.answer()
+    
+    # Check if user is admin
+    if str(update.effective_user.id) != ADMIN_USER_ID:
+        await query.edit_message_text("❌ You are not authorized to perform this action.")
+        return
+    
+    data = query.data
+    if data.startswith('approve_'):
+        parts = data.split('_')
+        user_id = int(parts[1])
+        amount = int(parts[2])
+        
+        try:
+            # Process approval
+            result = db.update_balance(
+                user_id=user_id,
+                amount=-amount,
+                transaction_type='withdrawal',
+                description='Withdrawal approved by admin',
+                status='completed'
+            )
+            
+            await query.edit_message_text(
+                f"✅ Withdrawal for user {user_id} of ${amount/100:.2f} has been approved.",
+                parse_mode='Markdown'
+            )
+            
+            # Notify user
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"✅ Your withdrawal of **${amount/100:.2f}** has been approved and processed!",
+                parse_mode='Markdown'
+            )
+            
+        except Exception as e:
+            logger.error(f"Error approving withdrawal: {e}")
+            await query.edit_message_text(
+                f"❌ Error approving withdrawal: {str(e)}",
+                parse_mode='Markdown'
+            )
+        
+    elif data.startswith('reject_'):
+        parts = data.split('_')
+        user_id = int(parts[1])
+        amount = int(parts[2])
+        
+        try:
+            # Refund the amount back to user
+            db.update_balance(
+                user_id=user_id,
+                amount=amount,
+                transaction_type='refund',
+                description='Withdrawal rejected, funds returned',
+                status='completed'
+            )
+            
+            await query.edit_message_text(
+                f"❌ Withdrawal for user {user_id} of ${amount/100:.2f} has been rejected.",
+                parse_mode='Markdown'
+            )
+            
+            # Notify user
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=f"❌ Your withdrawal of **${amount/100:.2f}** was rejected. Funds have been returned to your balance.",
+                parse_mode='Markdown'
+            )
+            
+        except Exception as e:
+            logger.error(f"Error rejecting withdrawal: {e}")
+            await query.edit_message_text(
+                f"❌ Error rejecting withdrawal: {str(e)}",
+                parse_mode='Markdown'
+            )
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel conversation"""
     await update.message.reply_text(
@@ -515,6 +867,15 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ An error occurred. Please try again."
+            )
+        
+        # Notify admin
+        if ADMIN_USER_ID:
+            error_msg = f"🔴 **Bot Error**\n\n{context.error}"
+            await context.bot.send_message(
+                chat_id=ADMIN_USER_ID,
+                text=error_msg,
+                parse_mode='Markdown'
             )
     except:
         pass
@@ -556,6 +917,14 @@ def setup_handlers(application):
     application.add_handler(CallbackQueryHandler(play_command, pattern='^play$'))
     application.add_handler(CallbackQueryHandler(help_command, pattern='^help$'))
     
+    # Admin handlers
+    application.add_handler(CallbackQueryHandler(admin_panel, pattern='^admin_panel$'))
+    application.add_handler(CallbackQueryHandler(admin_pending_handler, pattern='^admin_pending$'))
+    application.add_handler(CallbackQueryHandler(admin_total_balance, pattern='^admin_total_balance$'))
+    application.add_handler(CallbackQueryHandler(admin_user_stats, pattern='^admin_user_stats$'))
+    application.add_handler(CallbackQueryHandler(admin_health, pattern='^admin_health$'))
+    application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^(approve|reject)_'))
+    
     # Add conversation handlers
     application.add_handler(deposit_conv)
     application.add_handler(withdraw_conv)
@@ -583,6 +952,8 @@ def main():
         logger.info("✅ Bot initialized successfully!")
         logger.info(f"🚀 Starting bot polling with token: {BOT_TOKEN[:10]}...")
         logger.info(f"🌐 Using BASE_URL: {BASE_URL}")
+        if ADMIN_USER_ID:
+            logger.info(f"👑 Admin ID: {ADMIN_USER_ID}")
         
         # Start bot
         application.run_polling()
