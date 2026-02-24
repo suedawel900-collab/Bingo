@@ -115,10 +115,6 @@
             color: #333;
         }
         
-        .card-cell:active {
-            transform: scale(0.9);
-        }
-        
         .bingo-button {
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: white;
@@ -136,12 +132,6 @@
         .bingo-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 25px rgba(245, 87, 108, 0.4);
-        }
-        
-        .bingo-button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
         }
         
         .status-message {
@@ -164,48 +154,15 @@
             display: block;
         }
         
-        .status-message.info {
-            background: #d1ecf1;
-            color: #0c5460;
+        .back-button {
             display: block;
-        }
-        
-        .players-list {
-            padding: 15px;
-            background: #f8f9fa;
-            border-top: 1px solid #eee;
-        }
-        
-        .players-title {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 10px;
-        }
-        
-        .player-badges {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        
-        .player-badge {
-            background: #e9ecef;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 13px;
-            color: #495057;
-        }
-        
-        .player-badge.winner {
-            background: #ffd700;
-            color: #333;
-            font-weight: bold;
-        }
-        
-        @media (max-width: 480px) {
-            .card-cell {
-                font-size: 16px;
-            }
+            text-align: center;
+            margin-top: 15px;
+            padding: 10px;
+            background: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
         }
     </style>
 </head>
@@ -213,7 +170,8 @@
     <div class="game-container">
         <div class="game-header">
             <h1>🎯 BINGO</h1>
-            <p>Game #<span id="game-id">1234</span></p>
+            <p>Game #<span id="game-id">{{ game_id }}</span></p>
+            <p>Player ID: {{ user_id }}</p>
         </div>
         
         <div class="game-info">
@@ -222,11 +180,11 @@
                 <div class="info-value" id="player-count">1</div>
             </div>
             <div class="info-item">
-                <div class="info-label">Prize</div>
-                <div class="info-value" id="prize-pool">$10</div>
+                <div class="info-label">Prize Pool</div>
+                <div class="info-value" id="prize-pool">20 ETB</div>
             </div>
             <div class="info-item">
-                <div class="info-label">Called</div>
+                <div class="info-label">Numbers Called</div>
                 <div class="info-value" id="called-count">0</div>
             </div>
         </div>
@@ -245,28 +203,25 @@
             <button class="bingo-button" id="bingo-button" onclick="checkBingo()">
                 🎯 BINGO!
             </button>
-        </div>
-        
-        <div class="players-list">
-            <div class="players-title">Players in this game:</div>
-            <div class="player-badges" id="players-list">
-                <span class="player-badge">You</span>
-            </div>
+            
+            <a href="https://t.me/your_bot" class="back-button">◀️ Back to Bot</a>
         </div>
     </div>
 
     <script>
         // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
-        const userId = urlParams.get('user_id');
-        const gameId = urlParams.get('game_id') || '1';
+        const userId = parseInt(urlParams.get('user_id') || '{{ user_id }}');
+        const gameId = parseInt(urlParams.get('game_id') || '{{ game_id }}');
+        
+        console.log('Game starting for user', userId, 'in game', gameId);
         
         // Game state
         let card = [];
         let markedNumbers = [];
         let calledNumbers = [];
-        let players = [];
         let gameActive = true;
+        let ws = null;
         
         // Generate random bingo card
         function generateCard() {
@@ -309,6 +264,9 @@
                     
                     const number = card[col][row];
                     cell.textContent = number;
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.dataset.number = number;
                     
                     if (number === 'FREE') {
                         cell.classList.add('free', 'marked');
@@ -331,15 +289,12 @@
                 renderCard();
                 
                 // Send to server
-                fetch('/api/mark-number', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        user_id: userId,
-                        game_id: gameId,
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'mark_number',
                         number: number
-                    })
-                });
+                    }));
+                }
             }
         }
         
@@ -396,20 +351,20 @@
                 return;
             }
             
-            // No bingo
             showStatus('No BINGO yet! Keep playing...', 'info');
         }
         
         // Declare bingo
         async function declareBingo() {
-            gameActive = false;
+            if (!gameActive) return;
             
+            gameActive = false;
             showStatus('🎉 BINGO! Checking with server...', 'info');
             
             try {
                 const response = await fetch('/api/check-bingo', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         user_id: userId,
                         game_id: gameId,
@@ -429,6 +384,7 @@
                 }
                 
             } catch (error) {
+                console.error('Error checking bingo:', error);
                 showStatus('Error checking BINGO', 'error');
                 gameActive = true;
             }
@@ -441,33 +397,60 @@
             statusDiv.className = `status-message ${type}`;
             
             setTimeout(() => {
-                if (statusDiv.className.includes(type)) {
-                    statusDiv.style.display = 'none';
-                }
+                statusDiv.style.display = 'none';
             }, 3000);
         }
         
-        // Connect to WebSocket for real-time updates
+        // Connect to WebSocket
         function connectWebSocket() {
-            const ws = new WebSocket(`wss://${window.location.host}/ws/${gameId}/${userId}`);
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/${gameId}/${userId}`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                showStatus('Connected to game!', 'success');
+                
+                // Join game
+                fetch('/api/join-game', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        game_id: gameId,
+                        card: card
+                    })
+                }).then(res => res.json()).then(data => {
+                    if (data.success) {
+                        console.log('Joined game successfully');
+                    } else {
+                        showStatus('Failed to join game: ' + data.error, 'error');
+                    }
+                });
+            };
             
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
+                console.log('WebSocket message:', data);
                 
                 if (data.type === 'number_called') {
                     calledNumbers.push(data.number);
                     document.getElementById('last-number').textContent = `🎲 ${data.number}`;
                     document.getElementById('called-count').textContent = calledNumbers.length;
                     
-                    if (markedNumbers.includes(data.number)) {
-                        // Your number was called!
-                        showStatus(`✅ Number ${data.number} is on your card!`, 'success');
+                    // Check if number is on player's card
+                    for (let col = 0; col < 5; col++) {
+                        for (let row = 0; row < 5; row++) {
+                            if (card[col][row] === data.number) {
+                                showStatus(`✅ Number ${data.number} is on your card!`, 'success');
+                                return;
+                            }
+                        }
                     }
                     
                 } else if (data.type === 'player_joined') {
-                    players = data.players;
-                    updatePlayersList();
-                    document.getElementById('player-count').textContent = players.length;
+                    document.getElementById('player-count').textContent = data.players.length;
                     
                 } else if (data.type === 'game_won') {
                     gameActive = false;
@@ -479,53 +462,28 @@
                         showStatus(`👑 Player ${data.winner_name} won!`, 'info');
                     }
                     
-                    // Update prize pool
-                    document.getElementById('prize-pool').textContent = `$${data.prize}`;
+                    document.getElementById('prize-pool').textContent = data.prize;
                 }
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
             };
         }
         
-        // Update players list
-        function updatePlayersList() {
-            const container = document.getElementById('players-list');
-            container.innerHTML = '';
-            
-            players.forEach(player => {
-                const badge = document.createElement('span');
-                badge.className = 'player-badge';
-                badge.textContent = player.name;
-                
-                if (player.is_winner) {
-                    badge.classList.add('winner');
-                    badge.textContent += ' 👑';
-                }
-                
-                container.appendChild(badge);
-            });
-        }
-        
         // Initialize game
-        async function initGame() {
+        function initGame() {
             // Generate card
             card = generateCard();
             renderCard();
             
-            // Show game ID
-            document.getElementById('game-id').textContent = gameId;
-            
             // Connect WebSocket
             connectWebSocket();
-            
-            // Join game
-            await fetch('/api/join-game', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    user_id: userId,
-                    game_id: gameId,
-                    card: card
-                })
-            });
         }
         
         // Start game
