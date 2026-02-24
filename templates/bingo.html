@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Bingo Game - Multi-Card</title>
+    <title>Bingo Game - 10 ETB Edition</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -25,11 +25,54 @@
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 20px;
+            padding: 15px;
             text-align: center;
         }
-        .header h1 { font-size: 32px; margin-bottom: 5px; }
-        .header p { font-size: 14px; opacity: 0.9; }
+        .header h1 { font-size: 28px; margin-bottom: 5px; }
+        .header p { font-size: 12px; opacity: 0.9; }
+        
+        /* Wallet Bar */
+        .wallet-bar {
+            background: #2c3e50;
+            color: white;
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+        .wallet-item {
+            text-align: center;
+        }
+        .wallet-label {
+            font-size: 10px;
+            opacity: 0.7;
+            margin-bottom: 2px;
+        }
+        .wallet-value {
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .wallet-value.green { color: #4CAF50; }
+        .wallet-value.blue { color: #64b5f6; }
+        .wallet-value.orange { color: #ff9800; }
+        
+        /* Timer */
+        .timer-container {
+            background: #34495e;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-size: 36px;
+            font-weight: bold;
+            font-family: monospace;
+        }
+        .timer-label {
+            font-size: 12px;
+            opacity: 0.7;
+            margin-bottom: 5px;
+        }
+        
         .status {
             display: inline-block;
             padding: 5px 15px;
@@ -43,56 +86,73 @@
         .status.playing { background: #4CAF50; color: white; }
         .status.winner { background: #9c27b0; color: white; }
         
-        /* Balance Display */
-        .balance-bar {
-            background: #f0f0f0;
-            padding: 10px 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #ddd;
-        }
-        .balance {
-            font-weight: bold;
-            color: #4CAF50;
-        }
-        
         /* Card Selection */
         .selection {
-            padding: 20px;
+            padding: 15px;
         }
-        .selection h2 { text-align: center; margin-bottom: 10px; }
-        .selection p { text-align: center; color: #666; margin-bottom: 15px; }
+        .selection h2 { text-align: center; margin-bottom: 10px; font-size: 20px; }
+        .selection p { text-align: center; color: #666; margin-bottom: 10px; font-size: 14px; }
         
         .info-panel {
             background: #e3f2fd;
-            padding: 15px;
+            padding: 10px;
             border-radius: 10px;
             margin-bottom: 15px;
             display: flex;
-            justify-content: space-between;
+            justify-content: space-around;
         }
         .info-item { text-align: center; }
-        .info-label { font-size: 12px; color: #1976d2; }
-        .info-value { font-size: 20px; font-weight: bold; color: #0d47a1; }
+        .info-label { font-size: 11px; color: #1976d2; }
+        .info-value { font-size: 18px; font-weight: bold; color: #0d47a1; }
         
+        /* Selected Cards with Up/Down Controls */
         .selected-cards-panel {
             background: #fff3e0;
             padding: 15px;
             border-radius: 10px;
             margin-bottom: 15px;
         }
+        .selected-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
         .selected-title {
             font-size: 14px;
             color: #e65100;
-            margin-bottom: 10px;
             font-weight: bold;
+        }
+        .selected-controls {
+            display: flex;
+            gap: 10px;
+        }
+        .control-btn {
+            background: #ff9800;
+            color: white;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .control-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         .selected-badges {
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
             margin-bottom: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+            padding: 5px;
         }
         .card-badge {
             background: #ff9800;
@@ -101,24 +161,40 @@
             border-radius: 20px;
             font-size: 12px;
             font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .remove-card {
+            background: none;
+            border: none;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
         }
         .total-cost {
             font-size: 16px;
             font-weight: bold;
             color: #e65100;
             text-align: right;
+            border-top: 1px solid #ffb74d;
+            padding-top: 10px;
         }
         
+        /* Scrollable Card Grid */
+        .card-grid-container {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+        }
         .card-grid {
             display: grid;
             grid-template-columns: repeat(10, 1fr);
             gap: 5px;
-            max-height: 200px;
-            overflow-y: auto;
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 10px;
-            margin-bottom: 15px;
         }
         .card-btn {
             aspect-ratio: 1;
@@ -126,9 +202,10 @@
             color: white;
             border: none;
             border-radius: 5px;
-            font-size: 14px;
+            font-size: 12px;
             cursor: pointer;
             transition: all 0.2s;
+            font-weight: bold;
         }
         .card-btn.taken {
             background: #dc3545;
@@ -137,13 +214,14 @@
         }
         .card-btn.selected {
             background: #4CAF50;
-            transform: scale(1.1);
+            transform: scale(1.05);
             box-shadow: 0 0 0 2px gold;
         }
         .card-btn:hover:not(.taken) {
             transform: translateY(-2px);
         }
         
+        /* Preview */
         .preview {
             background: #f8f9fa;
             padding: 15px;
@@ -154,6 +232,7 @@
             display: flex;
             justify-content: space-between;
             margin-bottom: 10px;
+            font-size: 14px;
         }
         .preview-grid {
             display: grid;
@@ -168,19 +247,24 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            font-size: 12px;
         }
         .preview-cell.free { background: #ffd700; }
         
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
         .action-btn {
-            width: 100%;
-            padding: 15px;
+            flex: 1;
+            padding: 12px;
             border: none;
-            border-radius: 10px;
-            font-size: 18px;
+            border-radius: 8px;
+            font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            margin-bottom: 10px;
         }
         .confirm-btn {
             background: #4CAF50;
@@ -198,20 +282,23 @@
         /* Game Screen */
         .game-screen {
             display: none;
-            padding: 20px;
+            padding: 15px;
         }
         
         .card-tabs {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 8px;
             margin-bottom: 15px;
+            max-height: 80px;
+            overflow-y: auto;
+            padding: 5px;
         }
         .card-tab {
             background: #f0f0f0;
-            padding: 8px 15px;
+            padding: 6px 12px;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 12px;
             cursor: pointer;
             border: 2px solid transparent;
         }
@@ -230,20 +317,20 @@
             display: flex;
             justify-content: space-around;
             background: #f8f9fa;
-            padding: 15px;
+            padding: 10px;
             border-radius: 10px;
             margin-bottom: 15px;
         }
         .info-item { text-align: center; }
-        .info-label { font-size: 12px; color: #666; }
-        .info-value { font-size: 24px; font-weight: bold; color: #667eea; }
+        .info-label { font-size: 11px; color: #666; }
+        .info-value { font-size: 20px; font-weight: bold; color: #667eea; }
         
         .last-number {
             background: #4CAF50;
             color: white;
-            padding: 20px;
+            padding: 15px;
             text-align: center;
-            font-size: 48px;
+            font-size: 40px;
             font-weight: bold;
             border-radius: 10px;
             margin-bottom: 15px;
@@ -260,17 +347,17 @@
         .bingo-card {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: 8px;
+            gap: 6px;
         }
         .card-cell {
             aspect-ratio: 1;
             background: white;
-            border: 3px solid #ddd;
-            border-radius: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
             cursor: pointer;
         }
@@ -286,12 +373,12 @@
         
         .bingo-btn {
             width: 100%;
-            padding: 20px;
+            padding: 15px;
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: white;
             border: none;
-            border-radius: 50px;
-            font-size: 28px;
+            border-radius: 30px;
+            font-size: 24px;
             font-weight: bold;
             cursor: pointer;
             margin-bottom: 15px;
@@ -306,23 +393,23 @@
         }
         .start-btn {
             width: 100%;
-            padding: 15px;
+            padding: 12px;
             background: #ff9800;
             color: white;
             border: none;
-            border-radius: 10px;
-            font-size: 20px;
+            border-radius: 8px;
+            font-size: 18px;
             font-weight: bold;
             cursor: pointer;
         }
         .next-round-btn {
             width: 100%;
-            padding: 15px;
+            padding: 12px;
             background: #9c27b0;
             color: white;
             border: none;
-            border-radius: 10px;
-            font-size: 20px;
+            border-radius: 8px;
+            font-size: 18px;
             font-weight: bold;
             cursor: pointer;
             margin-top: 10px;
@@ -332,14 +419,16 @@
             background: #f8f9fa;
             padding: 15px;
             border-radius: 10px;
+            max-height: 120px;
+            overflow-y: auto;
         }
         .player-badge {
             display: inline-block;
-            padding: 5px 10px;
+            padding: 4px 8px;
             background: white;
-            border-radius: 20px;
+            border-radius: 15px;
             margin: 3px;
-            font-size: 12px;
+            font-size: 11px;
             border: 2px solid #ddd;
         }
         .player-badge.winner {
@@ -351,7 +440,7 @@
         .winner-announcement {
             background: gold;
             color: #333;
-            padding: 20px;
+            padding: 15px;
             border-radius: 10px;
             text-align: center;
             margin-bottom: 15px;
@@ -361,16 +450,17 @@
         
         @keyframes pulse {
             0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
+            50% { transform: scale(1.02); }
             100% { transform: scale(1); }
         }
         
         .message {
             text-align: center;
-            padding: 10px;
+            padding: 8px;
             margin: 10px 0;
             border-radius: 8px;
             display: none;
+            font-size: 14px;
         }
         .message.success { background: #d4edda; color: #155724; display: block; }
         .message.error { background: #f8d7da; color: #721c24; display: block; }
@@ -379,12 +469,13 @@
         .back-btn {
             display: block;
             text-align: center;
-            padding: 12px;
+            padding: 10px;
             background: #6c757d;
             color: white;
             text-decoration: none;
             border-radius: 8px;
             margin-top: 15px;
+            font-size: 14px;
         }
     </style>
 </head>
@@ -396,16 +487,32 @@
             <div id="status" class="status waiting">⏳ WAITING</div>
         </div>
         
-        <!-- Balance Display -->
-        <div class="balance-bar">
-            <span>Your Balance:</span>
-            <span class="balance" id="balance">Loading...</span>
+        <!-- Wallet Bar -->
+        <div class="wallet-bar">
+            <div class="wallet-item">
+                <div class="wallet-label">WALLET</div>
+                <div class="wallet-value green" id="wallet-balance">{{ initial_balance }} ETB</div>
+            </div>
+            <div class="wallet-item">
+                <div class="wallet-label">ACTIVE GAMES</div>
+                <div class="wallet-value blue" id="active-games">{{ initial_active_games }}</div>
+            </div>
+            <div class="wallet-item">
+                <div class="wallet-label">STAKE</div>
+                <div class="wallet-value orange" id="total-stake">{{ initial_stake }} ETB</div>
+            </div>
+        </div>
+        
+        <!-- Timer -->
+        <div class="timer-container">
+            <div class="timer-label">NEXT NUMBER IN</div>
+            <div id="timer">0:15</div>
         </div>
         
         <!-- Card Selection Screen -->
         <div id="selection" class="selection">
             <h2>Choose Your Cards</h2>
-            <p>20 ETB per card | Max {{ max_cards }} cards</p>
+            <p>{{ price_per_card }} ETB per card | Max {{ max_cards }} cards</p>
             
             <div class="info-panel">
                 <div class="info-item">
@@ -418,15 +525,23 @@
                 </div>
             </div>
             
-            <!-- Selected Cards Display -->
+            <!-- Selected Cards with Up/Down Controls -->
             <div id="selected-panel" class="selected-cards-panel" style="display: none;">
-                <div class="selected-title">Your Selected Cards:</div>
+                <div class="selected-header">
+                    <span class="selected-title">Your Selected Cards:</span>
+                    <div class="selected-controls">
+                        <button class="control-btn" id="move-up" onclick="moveSelection('up')" disabled>↑</button>
+                        <button class="control-btn" id="move-down" onclick="moveSelection('down')" disabled>↓</button>
+                    </div>
+                </div>
                 <div id="selected-badges" class="selected-badges"></div>
                 <div id="total-cost" class="total-cost">Total: 0 ETB</div>
             </div>
             
-            <!-- Card Grid -->
-            <div id="card-grid" class="card-grid"></div>
+            <!-- Scrollable Card Grid -->
+            <div class="card-grid-container">
+                <div id="card-grid" class="card-grid"></div>
+            </div>
             
             <!-- Card Preview -->
             <div id="preview" class="preview" style="display: none;">
@@ -438,12 +553,14 @@
             </div>
             
             <!-- Action Buttons -->
-            <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()" style="display: none;">
-                Clear Selection
-            </button>
-            <button class="action-btn confirm-btn" id="confirm-btn" onclick="finalizeSelection()" disabled>
-                Confirm Selection (0 ETB)
-            </button>
+            <div class="action-buttons">
+                <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()" style="display: none;">
+                    Clear
+                </button>
+                <button class="action-btn confirm-btn" id="confirm-btn" onclick="finalizeSelection()" disabled>
+                    Confirm (0 ETB)
+                </button>
+            </div>
         </div>
         
         <!-- Game Screen -->
@@ -467,7 +584,7 @@
             
             <div class="last-number" id="last-number">🎲 Ready</div>
             
-            <!-- Card Tabs -->
+            <!-- Card Tabs (scrollable) -->
             <div id="card-tabs" class="card-tabs"></div>
             
             <!-- Current Card Display -->
@@ -481,15 +598,15 @@
                 🎯 BINGO!
             </button>
             
-            <!-- Admin Controls -->
+            <!-- Admin Controls - "Biggins to start game" -->
             <div id="admin-controls" class="admin-controls" style="display: none;">
-                <button class="start-btn" onclick="startGame()">🚀 START GAME</button>
+                <button class="start-btn" onclick="startGame()">🚀 BIGGINS TO START GAME</button>
                 <button class="next-round-btn" onclick="nextRound()" style="display: none;">➡️ NEXT ROUND</button>
             </div>
             
-            <!-- Players List -->
+            <!-- Players List (scrollable) -->
             <div class="players-list">
-                <div style="margin-bottom: 10px;">Players:</div>
+                <div style="margin-bottom: 5px; font-size: 12px;">Players:</div>
                 <div id="players-list"></div>
             </div>
             
@@ -510,22 +627,24 @@
         
         // State
         let ws = null;
-        let selectedCards = [];  // Array of selected card IDs
-        let myCards = {};  // Dict of card_id -> card data
-        let marked = {};  // Dict of card_id -> marked numbers
+        let selectedCards = [];
+        let myCards = {};
+        let marked = {};
         let called = [];
         let players = [];
         let takenCards = new Set();
         let gameStarted = false;
         let currentRound = 1;
         let currentWinner = null;
-        let currentCardIndex = 0;  // Index of currently displayed card
-        let balance = 0;
+        let currentCardIndex = 0;
+        let balance = {{ initial_balance }};
+        let activeGames = {{ initial_active_games }};
+        let totalStake = {{ initial_stake }};
+        let countdown = 15;
         
         // Initialize
         loadCards();
         connectWebSocket();
-        fetchBalance();
         
         if (isAdmin) {
             document.getElementById('admin-controls').style.display = 'block';
@@ -533,15 +652,11 @@
             document.getElementById('status').textContent = '👑 ADMIN';
         }
         
-        // Fetch user balance
-        async function fetchBalance() {
-            try {
-                const user = await fetch(`/api/user/${userId}`).then(r => r.json());
-                balance = user.balance / 100;
-                document.getElementById('balance').textContent = `${balance.toFixed(2)} ETB`;
-            } catch (e) {
-                console.error('Error fetching balance:', e);
-            }
+        // Update wallet display
+        function updateWallet() {
+            document.getElementById('wallet-balance').textContent = `${balance.toFixed(2)} ETB`;
+            document.getElementById('active-games').textContent = activeGames;
+            document.getElementById('total-stake').textContent = `${totalStake.toFixed(2)} ETB`;
         }
         
         // WebSocket connection
@@ -564,9 +679,16 @@
                     currentRound = data.round || 1;
                     gameStarted = data.game_started || false;
                     called = data.called_numbers || [];
+                    countdown = data.countdown || 15;
+                    balance = data.balance || balance;
+                    activeGames = data.active_games || activeGames;
+                    totalStake = data.total_stake || totalStake;
                     
+                    updateTimer();
+                    updateWallet();
                     updateCardGrid();
                     updatePlayersList();
+                    updateReadyCount();
                     
                     if (gameStarted) {
                         showGameScreen();
@@ -601,7 +723,9 @@
                         showMessage('✅ Cards confirmed! Waiting for game to start...', 'success');
                         document.getElementById('confirm-btn').disabled = true;
                         document.getElementById('confirm-btn').textContent = '✓ CONFIRMED';
-                        fetchBalance(); // Update balance
+                        activeGames++;
+                        totalStake += selectedCards.length * pricePerCard;
+                        updateWallet();
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
                     }
@@ -610,6 +734,16 @@
                     players = data.players || [];
                     updatePlayersList();
                     updateReadyCount();
+                }
+                else if (data.type === 'stats_update') {
+                    balance = data.balance;
+                    activeGames = data.active_games;
+                    totalStake = data.total_stake;
+                    updateWallet();
+                }
+                else if (data.type === 'countdown') {
+                    countdown = data.time;
+                    updateTimer();
                 }
                 else if (data.type === 'game_started') {
                     gameStarted = true;
@@ -627,7 +761,6 @@
                     document.getElementById('called-count').textContent = `${called.length}/75`;
                 }
                 else if (data.type === 'number_marked') {
-                    // Update marked status
                     if (marked[data.card_id]) {
                         marked[data.card_id].push(data.number);
                     }
@@ -653,21 +786,20 @@
                     
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
                     
-                    // Show next round button for admin
                     if (isAdmin) {
                         document.querySelector('.next-round-btn').style.display = 'block';
                     }
                     
-                    fetchBalance(); // Update balance
+                    balance += data.prize;
+                    activeGames--;
+                    updateWallet();
                 }
                 else if (data.type === 'game_reset') {
-                    // Reset for next round
                     gameStarted = false;
                     currentWinner = null;
                     currentRound = data.round;
                     called = [];
                     
-                    // Clear marked numbers
                     for (let cardId in marked) {
                         marked[cardId] = [];
                     }
@@ -678,6 +810,8 @@
                     document.getElementById('winner-announcement').style.display = 'none';
                     document.getElementById('last-number').textContent = '🎲 Ready';
                     document.getElementById('called-count').textContent = '0/75';
+                    countdown = data.countdown || 15;
+                    updateTimer();
                     
                     if (isAdmin) {
                         document.querySelector('.next-round-btn').style.display = 'none';
@@ -687,10 +821,6 @@
                     updatePlayersList();
                     
                     showMessage(`🔄 Round ${currentRound} ready!`, 'info');
-                }
-                else if (data.type === 'balance') {
-                    balance = data.balance;
-                    document.getElementById('balance').textContent = `${balance.toFixed(2)} ETB`;
                 }
                 else if (data.type === 'error') {
                     showMessage(`❌ ${data.message}`, 'error');
@@ -703,6 +833,13 @@
             };
         }
         
+        // Update timer display
+        function updateTimer() {
+            const minutes = Math.floor(countdown / 60);
+            const seconds = countdown % 60;
+            document.getElementById('timer').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
         // Load available cards
         async function loadCards() {
             const res = await fetch('/api/cards');
@@ -711,13 +848,13 @@
             const grid = document.getElementById('card-grid');
             grid.innerHTML = '';
             
-            data.cards.forEach(c => {
+            for (let i = 1; i <= 100; i++) {
                 const btn = document.createElement('button');
                 btn.className = 'card-btn';
-                btn.textContent = c.id;
-                btn.onclick = () => toggleCardSelection(c.id);
+                btn.textContent = i;
+                btn.onclick = () => toggleCardSelection(i);
                 grid.appendChild(btn);
-            });
+            }
             
             updateCardGrid();
         }
@@ -742,8 +879,64 @@
                 selectedCards.push(cardId);
             }
             
+            // Sort selected cards
+            selectedCards.sort((a, b) => a - b);
+            
             updateSelectedDisplay();
             previewCard(cardId);
+            updateMoveButtons();
+        }
+        
+        // Move selection up/down
+        function moveSelection(direction) {
+            if (selectedCards.length === 0) return;
+            
+            // Find currently selected card in preview
+            const previewId = document.getElementById('preview-id').textContent;
+            if (!previewId) return;
+            
+            const currentIndex = selectedCards.indexOf(parseInt(previewId));
+            if (currentIndex === -1) return;
+            
+            let newIndex;
+            if (direction === 'up' && currentIndex > 0) {
+                newIndex = currentIndex - 1;
+            } else if (direction === 'down' && currentIndex < selectedCards.length - 1) {
+                newIndex = currentIndex + 1;
+            } else {
+                return;
+            }
+            
+            // Swap in array
+            [selectedCards[currentIndex], selectedCards[newIndex]] = 
+            [selectedCards[newIndex], selectedCards[currentIndex]];
+            
+            updateSelectedDisplay();
+            previewCard(selectedCards[newIndex]);
+            updateMoveButtons();
+        }
+        
+        // Update move buttons state
+        function updateMoveButtons() {
+            const upBtn = document.getElementById('move-up');
+            const downBtn = document.getElementById('move-down');
+            
+            if (selectedCards.length <= 1) {
+                upBtn.disabled = true;
+                downBtn.disabled = true;
+                return;
+            }
+            
+            const previewId = document.getElementById('preview-id').textContent;
+            if (!previewId) {
+                upBtn.disabled = true;
+                downBtn.disabled = true;
+                return;
+            }
+            
+            const currentIndex = selectedCards.indexOf(parseInt(previewId));
+            upBtn.disabled = currentIndex <= 0;
+            downBtn.disabled = currentIndex >= selectedCards.length - 1;
         }
         
         // Preview card
@@ -779,6 +972,8 @@
                 status.textContent = 'Available';
                 status.style.color = '#667eea';
             }
+            
+            updateMoveButtons();
         }
         
         // Update selected cards display
@@ -794,10 +989,10 @@
                 clearBtn.style.display = 'block';
                 
                 badges.innerHTML = '';
-                selectedCards.sort((a, b) => a - b).forEach(id => {
+                selectedCards.forEach(id => {
                     const badge = document.createElement('span');
                     badge.className = 'card-badge';
-                    badge.textContent = `#${id}`;
+                    badge.innerHTML = `#${id} <button class="remove-card" onclick="removeCard(${id})">✕</button>`;
                     badges.appendChild(badge);
                 });
                 
@@ -806,19 +1001,33 @@
                 
                 if (cost <= balance) {
                     confirmBtn.disabled = false;
-                    confirmBtn.textContent = `Confirm Selection (${cost.toFixed(2)} ETB)`;
+                    confirmBtn.textContent = `Confirm (${cost.toFixed(2)} ETB)`;
                 } else {
                     confirmBtn.disabled = true;
-                    confirmBtn.textContent = `Insufficient Balance (${cost.toFixed(2)} ETB)`;
+                    confirmBtn.textContent = `Insufficient (${cost.toFixed(2)} ETB)`;
                 }
             } else {
                 panel.style.display = 'none';
                 clearBtn.style.display = 'none';
                 confirmBtn.disabled = true;
-                confirmBtn.textContent = 'Confirm Selection (0 ETB)';
+                confirmBtn.textContent = 'Confirm (0 ETB)';
             }
             
             updateCardGrid();
+        }
+        
+        // Remove specific card
+        function removeCard(cardId) {
+            const index = selectedCards.indexOf(cardId);
+            if (index >= 0) {
+                selectedCards.splice(index, 1);
+                updateSelectedDisplay();
+                if (selectedCards.length > 0) {
+                    previewCard(selectedCards[0]);
+                } else {
+                    document.getElementById('preview').style.display = 'none';
+                }
+            }
         }
         
         // Clear selection
@@ -843,7 +1052,7 @@
                 card_ids: selectedCards
             }));
             
-            // Then finalize
+            // Then finalize after a short delay
             setTimeout(() => {
                 ws.send(JSON.stringify({
                     type: 'finalize'
@@ -860,7 +1069,7 @@
             const tabs = document.getElementById('card-tabs');
             tabs.innerHTML = '';
             
-            const cardIds = Object.keys(myCards).sort((a, b) => a - b);
+            const cardIds = Object.keys(myCards).sort((a, b) => parseInt(a) - parseInt(b));
             cardIds.forEach((id, index) => {
                 const tab = document.createElement('span');
                 tab.className = 'card-tab';
@@ -892,7 +1101,7 @@
         
         // Render current card
         function renderCurrentCard() {
-            const cardIds = Object.keys(myCards).sort((a, b) => a - b);
+            const cardIds = Object.keys(myCards).sort((a, b) => parseInt(a) - parseInt(b));
             if (cardIds.length === 0) return;
             
             const cardId = cardIds[currentCardIndex];
@@ -917,7 +1126,7 @@
                         cell.classList.add('marked');
                     }
                     
-                    cell.onclick = () => markNumber(cardId, num);
+                    cell.onclick = () => markNumber(parseInt(cardId), num);
                     cardDiv.appendChild(cell);
                 }
             }
@@ -935,7 +1144,7 @@
             
             ws.send(JSON.stringify({
                 type: 'mark_number',
-                card_id: parseInt(cardId),
+                card_id: cardId,
                 number: num
             }));
         }
@@ -943,8 +1152,6 @@
         // Check for bingo
         function checkBingo() {
             if (!gameStarted) return;
-            
-            // Simple alert - server will validate
             alert('BINGO claimed! Server will validate...');
         }
         
@@ -957,7 +1164,7 @@
         // Next round (admin only)
         function nextRound() {
             if (!isAdmin) return;
-            ws.send(JSON.stringify({type: 'start_game'})); // Start next round
+            ws.send(JSON.stringify({type: 'start_game'}));
         }
         
         // Update card grid
@@ -992,10 +1199,7 @@
                 badge.className = 'player-badge';
                 if (p.winner) badge.classList.add('winner');
                 
-                badge.textContent = `${p.name} (${p.card_count} cards)`;
-                if (p.card_count > 0) {
-                    badge.textContent += ` [${p.card_ids.join(', ')}]`;
-                }
+                badge.textContent = `${p.name} (${p.card_count})`;
                 if (p.id == userId) badge.textContent += ' (You)';
                 
                 list.appendChild(badge);
