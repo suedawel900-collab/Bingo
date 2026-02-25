@@ -4,6 +4,7 @@
     <title>Bingo Game - 1000 Cards</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
+        /* (CSS unchanged – same as your original) */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: Arial, sans-serif;
@@ -668,13 +669,15 @@
                 🎯 BINGO!
             </button>
             
-            <!-- Admin Controls (with number input) -->
+            <!-- Admin Controls (with number input and NEW ROUND button) -->
             <div id="admin-controls" class="admin-controls" style="display: none;">
                 <button class="start-btn" onclick="startGame()">🚀 START GAME</button>
                 <div style="margin-top: 10px; display: flex; gap: 5px;">
                     <input type="number" id="call-number" min="1" max="75" placeholder="Number" style="flex:1; padding:8px; border-radius:5px; border:1px solid #ccc;">
                     <button onclick="callNumber()" style="background:#4CAF50; color:white; border:none; border-radius:5px; padding:8px 15px; cursor:pointer;">Call</button>
                 </div>
+                <!-- New Round button -->
+                <button class="start-btn" onclick="startNewRound()" style="background:#9c27b0; margin-top:10px;">🔄 NEW ROUND</button>
             </div>
             
             <!-- Players List -->
@@ -819,7 +822,7 @@
                 const data = JSON.parse(event.data);
                 console.log('📩 Received:', data.type, data);
                 
-                // --- NEW: handle redirect (for new game ID) ---
+                // Handle redirect
                 if (data.type === 'redirect') {
                     window.location.href = data.url;
                     return;
@@ -1024,12 +1027,12 @@
         async function manualRefresh() {
             showMessage('Refreshing...', 'info');
             try {
-                const response = await fetch(`/api/game/${gameId}/state`);
+                const response = await fetch(`/api/game-state/${gameId}`);
                 const data = await response.json();
                 if (data) {
                     players = data.players || players;
                     called = data.called_numbers || called;
-                    gameStarted = data.game_started;
+                    gameStarted = data.started;
                     takenCards = new Set(data.taken_cards || []);
                     calculatePrizePool(); // recalculates based on fresh player list
                     updatePlayersList();
@@ -1308,8 +1311,6 @@
         
         function checkBingo() {
             if (!gameStarted) return;
-            // In this version, we claim bingo by sending a message to server
-            // For now, just show message; you can extend to send 'claim_bingo' with card id
             if (Object.keys(myCards).length === 0) return;
             const currentCardId = parseInt(Object.keys(myCards)[currentCardIndex]);
             ws.send(JSON.stringify({
@@ -1336,6 +1337,17 @@
             calculatePrizePool();
             showMessage(`💰 Prize pool: ${prizePool.toFixed(2)} ETB from ${players.filter(p => p.card_count > 0).length} players`, 'info');
             ws.send(JSON.stringify({type: 'start_game'}));
+        }
+        
+        // NEW: Start a new round (admin only)
+        function startNewRound() {
+            if (!isAdmin) return;
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                showMessage('❌ Not connected', 'error');
+                return;
+            }
+            ws.send(JSON.stringify({ type: 'new_round' }));
+            showMessage('🔄 Creating new round...', 'info');
         }
         
         function updateCardGrid() {
