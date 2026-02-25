@@ -80,12 +80,17 @@ class GameManager:
         self.round_number = {}
         self.number_tasks = {}
         self.countdown_timers = {}  # Track countdown per game
-        self.next_game_id = 1  # track the next available game ID
+        # Initialize next_game_id from database
+        self.next_game_id = db.get_last_game_id() + 1
+        logger.info(f"GameManager initialized. Next game ID will be {self.next_game_id}")
 
     def create_new_game(self):
-        """Create a fresh game and return its new ID"""
-        game_id = self.next_game_id
-        self.next_game_id += 1
+        """Create a fresh game and return its new ID (persisted in DB)"""
+        # Insert into database first
+        game_id = db.create_game()
+        # Ensure our in‑memory counter stays in sync
+        if game_id >= self.next_game_id:
+            self.next_game_id = game_id + 1
 
         # Initialize all game structures for this new ID
         self.active_games[game_id] = {
@@ -105,11 +110,16 @@ class GameManager:
         self.number_tasks[game_id] = None
         self.countdown_timers[game_id] = 15
 
-        logger.info(f"✅ Created new game with ID {game_id}")
+        logger.info(f"✅ Created new game with ID {game_id} (DB persisted)")
         return game_id
 
     def get_current_game_id(self):
         """Return the highest (latest) game ID, or create one if none exist"""
+        # First try to get the latest active game from DB
+        active = db.get_active_game()
+        if active:
+            return active['id']
+        # If no active game, return the next one (but don't create automatically)
         if self.next_game_id == 1:
             return self.create_new_game()
         return self.next_game_id - 1
@@ -545,7 +555,9 @@ class GameManager:
             'house_fee': house_fee / 100
         })
 
-        logger.info(f"Game {game_id} winner: {player['name']} with card #{card_id}, prize: {winner_prize/100} ETB")
+        # End the game in the database
+        db.end_game(game_id, winner=f"{player['name']} (user {user_id})")
+        logger.info(f"Game {game_id} winner: {player['name']} with card #{card_id}, prize: {winner_prize/100} ETB (recorded in DB)")
 
         # Cancel number generation
         if self.number_tasks[game_id]:
@@ -728,8 +740,11 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
                     continue
 
+                # End the current game in DB
+                db.end_game(game_id, winner="Game ended for new round")
+
+                # Create a new game
                 new_game_id = game_manager.create_new_game()
-                # Redirect all players in the current game to the new game
                 redirect_url = f"{BASE_URL}/game?user_id={{user_id}}&game_id={new_game_id}&admin_id={ADMIN_USER_ID}"
                 await game_manager.broadcast(game_id, {
                     'type': 'redirect',
