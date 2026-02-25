@@ -668,9 +668,13 @@
                 🎯 BINGO!
             </button>
             
-            <!-- Admin Controls -->
+            <!-- Admin Controls (with number input) -->
             <div id="admin-controls" class="admin-controls" style="display: none;">
                 <button class="start-btn" onclick="startGame()">🚀 START GAME</button>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <input type="number" id="call-number" min="1" max="75" placeholder="Number" style="flex:1; padding:8px; border-radius:5px; border:1px solid #ccc;">
+                    <button onclick="callNumber()" style="background:#4CAF50; color:white; border:none; border-radius:5px; padding:8px 15px; cursor:pointer;">Call</button>
+                </div>
             </div>
             
             <!-- Players List -->
@@ -815,6 +819,12 @@
                 const data = JSON.parse(event.data);
                 console.log('📩 Received:', data.type, data);
                 
+                // --- NEW: handle redirect (for new game ID) ---
+                if (data.type === 'redirect') {
+                    window.location.href = data.url;
+                    return;
+                }
+                
                 if (data.type === 'connected') {
                     takenCards = new Set(data.taken_cards || []);
                     players = data.players || [];
@@ -872,7 +882,6 @@
                         fetchBalance();
                         
                         // OPTIMISTIC PRIZE POOL UPDATE: add our contribution
-                        // (server will broadcast updated players soon, but we show immediate feedback)
                         prizePool += selectedCards.length * pricePerCard;
                         document.getElementById('prize-pool').textContent = `${prizePool.toFixed(2)} ETB`;
                         document.getElementById('game-prize').textContent = `${prizePool.toFixed(2)} ETB`;
@@ -1176,9 +1185,6 @@
                     ws.send(JSON.stringify({
                         type: 'finalize'
                     }));
-                    
-                    // OPTIMISTIC PRIZE POOL UPDATE (already handled on 'finalized' event, but we also add here in case of lag)
-                    // However, we already have optimistic update in the message handler, so it's fine.
                 }
             }, 500);
         }
@@ -1302,7 +1308,27 @@
         
         function checkBingo() {
             if (!gameStarted) return;
+            // In this version, we claim bingo by sending a message to server
+            // For now, just show message; you can extend to send 'claim_bingo' with card id
+            if (Object.keys(myCards).length === 0) return;
+            const currentCardId = parseInt(Object.keys(myCards)[currentCardIndex]);
+            ws.send(JSON.stringify({
+                type: 'claim_bingo',
+                card_id: currentCardId
+            }));
             showMessage('🎯 BINGO claimed! Server will validate...', 'info');
+        }
+        
+        // Admin: call a number
+        function callNumber() {
+            if (!isAdmin) return;
+            const number = parseInt(document.getElementById('call-number').value);
+            if (number < 1 || number > 75) {
+                showMessage('Enter a number between 1 and 75', 'error');
+                return;
+            }
+            ws.send(JSON.stringify({ type: 'call_number', number: number }));
+            document.getElementById('call-number').value = '';
         }
         
         function startGame() {
