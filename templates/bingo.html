@@ -57,23 +57,39 @@
         .wallet-value.blue { color: #64b5f6; }
         .wallet-value.orange { color: #ff9800; }
         
-        /* Prize Pool Display */
-        .prize-bar {
-            background: #ffd700;
-            color: #333;
+        /* Info Bar - Prize Pool beside Active Game */
+        .info-bar-top {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
             padding: 12px 15px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-weight: bold;
-            border-bottom: 2px solid #daa520;
         }
-        .prize-label {
-            font-size: 14px;
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .info-icon {
+            font-size: 20px;
+        }
+        .info-text {
+            display: flex;
+            flex-direction: column;
+        }
+        .info-label {
+            font-size: 10px;
+            opacity: 0.8;
+        }
+        .info-value {
+            font-size: 18px;
+            font-weight: bold;
         }
         .prize-value {
+            color: #ffd700;
             font-size: 20px;
-            color: #2c3e50;
         }
         
         /* Timer - Hidden until game starts */
@@ -130,45 +146,45 @@
         .info-label { font-size: 11px; color: #1976d2; }
         .info-value { font-size: 18px; font-weight: bold; color: #0d47a1; }
         
-        /* Selected Cards - Scrollable */
+        /* Selected Cards - Scrollable with minimized size */
         .selected-cards-panel {
             background: #fff3e0;
-            padding: 15px;
+            padding: 12px;
             border-radius: 10px;
             margin-bottom: 15px;
-            max-height: 150px;
+            max-height: 120px;
             overflow-y: auto;
         }
         .selected-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             position: sticky;
             top: 0;
             background: #fff3e0;
             padding: 5px 0;
         }
         .selected-title {
-            font-size: 14px;
+            font-size: 13px;
             color: #e65100;
             font-weight: bold;
         }
         .selected-badges {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 5px;
         }
         .card-badge {
             background: #ff9800;
             color: white;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 12px;
+            padding: 3px 6px;
+            border-radius: 15px;
+            font-size: 10px;
             font-weight: bold;
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 3px;
         }
         .remove-card {
             background: none;
@@ -176,16 +192,17 @@
             color: white;
             font-weight: bold;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 12px;
+            padding: 0 2px;
         }
         .total-cost {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
             color: #e65100;
             text-align: right;
             border-top: 1px solid #ffb74d;
-            padding-top: 10px;
-            margin-top: 10px;
+            padding-top: 8px;
+            margin-top: 8px;
             position: sticky;
             bottom: 0;
             background: #fff3e0;
@@ -204,15 +221,15 @@
         .card-grid {
             display: grid;
             grid-template-columns: repeat(10, 1fr);
-            gap: 3px;
+            gap: 2px;
         }
         .card-btn {
             aspect-ratio: 1;
             background: #667eea;
             color: white;
             border: none;
-            border-radius: 4px;
-            font-size: 10px;
+            border-radius: 3px;
+            font-size: 9px;
             cursor: pointer;
             transition: all 0.2s;
             font-weight: bold;
@@ -559,10 +576,22 @@
             </div>
         </div>
         
-        <!-- Prize Pool Display (Always visible) -->
-        <div class="prize-bar">
-            <span class="prize-label">💰 CURRENT ROUND PRIZE</span>
-            <span class="prize-value" id="prize-pool">0 ETB</span>
+        <!-- Info Bar - Prize Pool beside Active Game -->
+        <div class="info-bar-top">
+            <div class="info-item">
+                <span class="info-icon">🎮</span>
+                <div class="info-text">
+                    <span class="info-label">ACTIVE GAME</span>
+                    <span class="info-value" id="active-game-display">Round 1</span>
+                </div>
+            </div>
+            <div class="info-item">
+                <span class="info-icon">💰</span>
+                <div class="info-text">
+                    <span class="info-label">ROUND PRIZE</span>
+                    <span class="prize-value" id="prize-pool">0 ETB</span>
+                </div>
+            </div>
         </div>
         
         <!-- Players Ready Display -->
@@ -583,10 +612,10 @@
             <h2>Choose Your Cards</h2>
             <p>{{ price_per_card }} ETB per card | Max {{ max_cards }} cards</p>
             
-            <!-- Selected Cards - Scrollable -->
+            <!-- Selected Cards - Scrollable with minimized size -->
             <div id="selected-panel" class="selected-cards-panel" style="display: none;">
                 <div class="selected-header">
-                    <span class="selected-title">Your Selected Cards:</span>
+                    <span class="selected-title">Your Cards ({{ max_cards }} max):</span>
                 </div>
                 <div id="selected-badges" class="selected-badges"></div>
                 <div id="total-cost" class="total-cost">Total: 0 ETB</div>
@@ -648,7 +677,7 @@
             
             <!-- Admin Controls - Only visible to admin -->
             <div id="admin-controls" class="admin-controls" style="display: none;">
-                <button class="start-btn" onclick="startGame()">🚀 START GAME (Calculate Prize & Players)</button>
+                <button class="start-btn" onclick="startGame()">🚀 START GAME</button>
             </div>
             
             <!-- Players List -->
@@ -746,6 +775,30 @@
             return prizePool;
         }
         
+        // Reset for new round - players can select new cards
+        function resetForNewRound() {
+            // Clear selections
+            selectedCards = [];
+            myCards = {};
+            marked = {};
+            called = [];
+            gameStarted = false;
+            currentWinner = null;
+            
+            // Update UI
+            document.getElementById('selection').style.display = 'block';
+            document.getElementById('game').style.display = 'none';
+            document.getElementById('timer-container').style.display = 'none';
+            document.getElementById('status').className = 'status waiting';
+            document.getElementById('status').textContent = '⏳ WAITING FOR ADMIN';
+            document.getElementById('last-number').textContent = '🎲 Waiting for admin to start...';
+            
+            // Clear selected badges
+            updateSelectedDisplay();
+            
+            showMessage('🔄 New round! Select your cards again.', 'info');
+        }
+        
         // WebSocket connection
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -778,7 +831,7 @@
                     gameStarted = data.game_started || false;
                     called = data.called_numbers || [];
                     
-                    document.getElementById('round').textContent = currentRound;
+                    document.getElementById('active-game-display').textContent = `Round ${currentRound}`;
                     calculatePrizePool();
                     updateCalledNumbersList();
                     updateCardGrid();
@@ -846,7 +899,7 @@
                 else if (data.type === 'game_started') {
                     gameStarted = true;
                     currentRound = data.round || currentRound;
-                    document.getElementById('round').textContent = currentRound;
+                    document.getElementById('active-game-display').textContent = `Round ${currentRound}`;
                     document.getElementById('status').className = 'status playing';
                     document.getElementById('status').textContent = '🎮 PLAYING';
                     document.getElementById('bingo-btn').disabled = false;
@@ -894,28 +947,14 @@
                     fetchBalance();
                 }
                 else if (data.type === 'game_reset') {
-                    gameStarted = false;
-                    currentWinner = null;
-                    currentRound = data.round;
-                    called = [];
-                    
-                    for (let cardId in marked) {
-                        marked[cardId] = [];
-                    }
-                    
-                    document.getElementById('round').textContent = currentRound;
-                    document.getElementById('status').className = 'status waiting';
-                    document.getElementById('status').textContent = '⏳ WAITING FOR ADMIN';
-                    document.getElementById('winner-announcement').style.display = 'none';
-                    document.getElementById('last-number').textContent = '🎲 Waiting for admin to start...';
-                    document.getElementById('timer-container').style.display = 'none';
-                    updateCalledNumbersList();
+                    // Round ended - players can select new cards
+                    resetForNewRound();
                     
                     players = data.players || [];
                     calculatePrizePool();
                     updatePlayersList();
                     
-                    showMessage(`🔄 Round ${currentRound} ready!`, 'info');
+                    showMessage(`🔄 Round ${currentRound} ended! Select cards for next round.`, 'info');
                 }
                 else if (data.type === 'error') {
                     showMessage(`❌ ${data.message}`, 'error');
@@ -1013,7 +1052,7 @@
             updateCardGrid();
         }
         
-        // Update selected cards display (scrollable)
+        // Update selected cards display (scrollable with minimized badges)
         function updateSelectedDisplay() {
             const panel = document.getElementById('selected-panel');
             const badges = document.getElementById('selected-badges');
