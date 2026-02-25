@@ -4,10 +4,9 @@
     <title>Bingo Game - 1000 Cards</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        /* (CSS unchanged – same as your original) */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Courier New', monospace; /* Use monospace for a classic look */
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -16,7 +15,7 @@
             padding: 10px;
         }
         .game-container {
-            max-width: 600px;
+            max-width: 800px;
             width: 100%;
             background: white;
             border-radius: 20px;
@@ -328,9 +327,9 @@
             font-weight: bold;
         }
         
-        /* Card List - each card in a box */
+        /* Card List - each card in a box, exactly like the image */
         .cards-list {
-            max-height: 400px;
+            max-height: 500px;
             overflow-y: auto;
             border: 2px solid #ddd;
             border-radius: 10px;
@@ -340,48 +339,50 @@
         }
         .card-item {
             background: white;
+            border: 1px solid #ccc;
             border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            font-family: 'Courier New', monospace;
         }
         .card-header {
             font-weight: bold;
-            font-size: 14px;
-            margin-bottom: 8px;
+            font-size: 18px;
+            margin-bottom: 5px;
             color: #333;
+            text-transform: uppercase;
         }
-        .card-header span {
-            color: #667eea;
+        .card-player {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
         }
-        .mini-card {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 2px;
+        .bingo-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: center;
+        }
+        .bingo-table th {
             background: #f0f0f0;
-            padding: 2px;
-            border-radius: 4px;
-        }
-        .mini-cell {
-            aspect-ratio: 1;
-            background: white;
-            border: 1px solid #ccc;
-            border-radius: 3px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
             font-weight: bold;
+            padding: 8px;
+            border: 1px solid #ccc;
+        }
+        .bingo-table td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            font-size: 16px;
             cursor: pointer;
         }
-        .mini-cell.marked {
+        .bingo-table td.marked {
             background: #4CAF50;
             color: white;
-            border-color: #4CAF50;
+            font-weight: bold;
         }
-        .mini-cell.free {
+        .bingo-table td.free {
             background: #ffd700;
-            border-color: #ffd700;
+            font-weight: bold;
         }
         
         .bingo-btn {
@@ -1001,12 +1002,11 @@
                     players = data.players || players;
                     called = data.called_numbers || called;
                     gameStarted = data.started;
-                    takenCards = new Set(data.taken_cards || []);
+                    // takenCards not returned, but we don't need it here
                     calculatePrizePool(); // recalculates based on fresh player list
                     updatePlayersList();
                     updateReadyCount();
                     updateCalledNumbersList();
-                    updateCardGrid();
                     renderAllCards(); // update card display
                     showMessage('Refreshed!', 'success');
                 }
@@ -1169,7 +1169,13 @@
             document.getElementById('game-players').textContent = players.filter(p => p.card_count > 0).length;
         }
         
-        // Render all cards in the list
+        // Format number with leading zero (e.g., 6 -> "06")
+        function formatNumber(num) {
+            if (num === 'FREE') return '*';
+            return num.toString().padStart(2, '0');
+        }
+        
+        // Render all cards in the list, exactly like the image
         function renderAllCards() {
             const container = document.getElementById('cards-list');
             container.innerHTML = '';
@@ -1183,57 +1189,75 @@
                 const cardDiv = document.createElement('div');
                 cardDiv.className = 'card-item';
                 
-                // Header
+                // Header: CARDBOARD #id
                 const header = document.createElement('div');
                 header.className = 'card-header';
-                header.innerHTML = `CARDBOARD #${cardId} <span>Player ${userId}</span>`;
+                header.textContent = `CARDBOARD #${cardId}`;
                 cardDiv.appendChild(header);
                 
-                // Mini grid
-                const grid = document.createElement('div');
-                grid.className = 'mini-card';
+                // Player line
+                const playerLine = document.createElement('div');
+                playerLine.className = 'card-player';
+                playerLine.textContent = `Player ${userId}`;
+                cardDiv.appendChild(playerLine);
                 
+                // Create table with B I N G O headers
+                const table = document.createElement('table');
+                table.className = 'bingo-table';
+                
+                // Header row
+                const thead = document.createElement('thead');
+                const headerRow = document.createElement('tr');
+                ['B', 'I', 'N', 'G', 'O'].forEach(letter => {
+                    const th = document.createElement('th');
+                    th.textContent = letter;
+                    headerRow.appendChild(th);
+                });
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+                
+                // Body rows (5 rows)
+                const tbody = document.createElement('tbody');
                 for (let row = 0; row < 5; row++) {
+                    const tr = document.createElement('tr');
                     for (let col = 0; col < 5; col++) {
-                        const num = card[col][row];
-                        const cell = document.createElement('div');
-                        cell.className = 'mini-cell';
-                        cell.textContent = num;
+                        const val = card[col][row];
+                        const td = document.createElement('td');
+                        td.textContent = formatNumber(val);
                         
-                        if (num === 'FREE') {
-                            cell.classList.add('free', 'marked');
-                        } else if (markedNumbers.includes(num)) {
-                            cell.classList.add('marked');
+                        // Mark if number is in marked list (and not FREE)
+                        if (val !== 'FREE' && markedNumbers.includes(val)) {
+                            td.classList.add('marked');
+                        } else if (val === 'FREE') {
+                            td.classList.add('free');
                         }
                         
-                        // Mark number on click if game is active
-                        cell.onclick = () => {
-                            if (gameStarted && num !== 'FREE') {
-                                if (!called.includes(num)) {
-                                    showMessage(`❌ Number ${num} not called yet`, 'error');
+                        // Click handler for marking
+                        td.onclick = () => {
+                            if (gameStarted && val !== 'FREE') {
+                                if (!called.includes(val)) {
+                                    showMessage(`❌ Number ${val} not called yet`, 'error');
                                     return;
                                 }
-                                if (!markedNumbers.includes(num)) {
+                                if (!markedNumbers.includes(val)) {
                                     ws.send(JSON.stringify({
                                         type: 'mark_number',
                                         card_id: parseInt(cardId),
-                                        number: num
+                                        number: val
                                     }));
                                 }
                             }
                         };
                         
-                        grid.appendChild(cell);
+                        tr.appendChild(td);
                     }
+                    tbody.appendChild(tr);
                 }
-                cardDiv.appendChild(grid);
+                table.appendChild(tbody);
+                cardDiv.appendChild(table);
+                
                 container.appendChild(cardDiv);
             }
-        }
-        
-        function markNumber(cardId, num) {
-            // This is now handled by the cell onclick in renderAllCards
-            // Keep for backward compatibility if needed
         }
         
         function checkBingo() {
