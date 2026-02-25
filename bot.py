@@ -1470,11 +1470,10 @@ async def async_main():
         # Delete any existing webhook before starting polling
         await application.bot.delete_webhook()
         
-        # Start polling with custom settings to avoid conflicts
+        # Start polling with correct parameters (removed invalid 'read_latency')
         await application.updater.start_polling(
             poll_interval=1.0,
             timeout=10,
-            read_latency=2.0,
             bootstrap_retries=0,  # Don't retry on conflict
             allowed_updates=['message', 'callback_query']
         )
@@ -1493,7 +1492,9 @@ async def async_main():
         if application:
             try:
                 logger.info("🛑 Stopping bot...")
-                await application.updater.stop()
+                # Check if updater exists and is running
+                if hasattr(application, 'updater') and application.updater.running:
+                    await application.updater.stop()
                 await application.stop()
                 await application.shutdown()
                 logger.info("✅ Bot shutdown complete")
@@ -1503,10 +1504,10 @@ async def async_main():
 def main():
     """Synchronous main for backwards compatibility"""
     # Create new event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
     try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         # Run the async main
         loop.run_until_complete(async_main())
     except KeyboardInterrupt:
@@ -1517,9 +1518,13 @@ def main():
         # Clean up
         try:
             # Cancel all tasks
-            for task in asyncio.all_tasks(loop):
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
                 task.cancel()
-            loop.run_until_complete(asyncio.sleep(0.1))
+            # Wait for tasks to cancel
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()
         except:
             pass
