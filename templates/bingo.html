@@ -777,7 +777,7 @@
             return prizePool;
         }
         
-        // Reset for new round
+        // Reset for new round (kept for backward compatibility, but new rounds use redirect)
         function resetForNewRound() {
             selectedCards = [];
             myCards = {};
@@ -952,11 +952,31 @@
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
                     
                     if (isAdmin) {
-                        document.querySelector('.start-btn').style.display = 'block';
-                        document.querySelector('.start-btn').textContent = '🚀 START NEXT ROUND';
+                        const startBtn = document.querySelector('.start-btn');
+                        startBtn.style.display = 'block';
+                        startBtn.textContent = '🚀 START NEXT ROUND';
+                        startBtn.onclick = startNewRound; // change to new round
                     }
                     
                     fetchBalance();
+                }
+                else if (data.type === 'game_over') {
+                    gameStarted = false;
+                    currentWinner = null;
+                    
+                    document.getElementById('status').className = 'status waiting';
+                    document.getElementById('status').textContent = '⏳ GAME OVER';
+                    document.getElementById('bingo-btn').disabled = true;
+                    document.getElementById('timer-container').style.display = 'none';
+                    
+                    showMessage('Game over – no winner this round.', 'info');
+                    
+                    if (isAdmin) {
+                        const startBtn = document.querySelector('.start-btn');
+                        startBtn.style.display = 'block';
+                        startBtn.textContent = '🚀 START NEXT ROUND';
+                        startBtn.onclick = startNewRound; // change to new round
+                    }
                 }
                 else if (data.type === 'game_reset') {
                     resetForNewRound();
