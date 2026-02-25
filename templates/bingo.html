@@ -57,6 +57,7 @@
             justify-content: space-between;
             align-items: center;
             font-weight: bold;
+            position: relative;
         }
         .info-item { display: flex; align-items: center; gap: 8px; }
         .info-icon { font-size: 20px; }
@@ -64,6 +65,21 @@
         .info-label { font-size: 10px; opacity: 0.8; }
         .info-value { font-size: 18px; font-weight: bold; }
         .prize-value { color: #ffd700; font-size: 20px; }
+        .refresh-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 18px;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .refresh-btn:hover { background: rgba(255,255,255,0.3); }
         
         /* Timer - Hidden until game starts */
         .timer-container {
@@ -253,7 +269,7 @@
         .ready-label { color: #1976d2; font-weight: bold; }
         .ready-value { font-size: 18px; color: #0d47a1; font-weight: bold; }
         
-        /* ----- CHANGED: Card list (vertical) instead of tabs ----- */
+        /* Vertical card list (replacing tabs) */
         .card-navigation {
             margin-bottom: 15px;
             background: #f0f0f0;
@@ -320,7 +336,6 @@
             color: #333;
             font-weight: bold;
         }
-        /* ----- End of vertical list changes ----- */
         
         /* Auto-daub toggle */
         .auto-daub-container {
@@ -535,7 +550,7 @@
             </div>
         </div>
         
-        <!-- Info Bar - Prize Pool beside Active Game -->
+        <!-- Info Bar - Prize Pool beside Active Game + Refresh button -->
         <div class="info-bar-top">
             <div class="info-item">
                 <span class="info-icon">🎮</span>
@@ -551,6 +566,7 @@
                     <span class="prize-value" id="prize-pool">0 ETB</span>
                 </div>
             </div>
+            <button class="refresh-btn" onclick="manualRefresh()" title="Refresh prize pool">⟳</button>
         </div>
         
         <!-- Players Ready Display -->
@@ -600,10 +616,13 @@
         <div id="game" class="game-screen">
             <div id="winner-announcement" class="winner-announcement" style="display: none;"></div>
             
-            <!-- Prize Pool in Game -->
-            <div class="game-prize-bar">
-                <span class="game-prize-label">💰 ROUND PRIZE</span>
-                <span class="game-prize-value" id="game-prize">0 ETB</span>
+            <!-- Prize Pool in Game (with refresh button) -->
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 15px;">
+                <div class="game-prize-bar" style="flex:1;">
+                    <span class="game-prize-label">💰 ROUND PRIZE</span>
+                    <span class="game-prize-value" id="game-prize">0 ETB</span>
+                </div>
+                <button class="refresh-btn" onclick="manualRefresh()" style="flex-shrink:0;">⟳</button>
             </div>
             
             <!-- Players Ready in Game -->
@@ -620,13 +639,13 @@
                 <div id="called-numbers-list" class="called-grid"></div>
             </div>
             
-            <!-- Auto-daub toggle (NEW) -->
+            <!-- Auto-daub toggle -->
             <div class="auto-daub-container">
                 <label for="autoDaub">🤖 Auto-mark numbers</label>
                 <input type="checkbox" id="autoDaub" onchange="toggleAutoDaub()">
             </div>
             
-            <!-- CHANGED: Card navigation (vertical list + up/down) instead of tabs -->
+            <!-- Vertical card navigation -->
             <div class="card-navigation">
                 <div class="card-list-header">
                     <span class="card-list-title">Your Cards</span>
@@ -644,12 +663,12 @@
                 <div id="card-display" class="bingo-card"></div>
             </div>
             
-            <!-- Bingo Button (Disabled until game starts) -->
+            <!-- Bingo Button -->
             <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>
                 🎯 BINGO!
             </button>
             
-            <!-- Admin Controls - Only visible to admin -->
+            <!-- Admin Controls -->
             <div id="admin-controls" class="admin-controls" style="display: none;">
                 <button class="start-btn" onclick="startGame()">🚀 START GAME</button>
             </div>
@@ -699,7 +718,7 @@
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
         
-        // NEW: auto-daub flag
+        // Auto-daub flag
         let autoDaubEnabled = false;
         
         // Initialize
@@ -751,9 +770,8 @@
             return prizePool;
         }
         
-        // Reset for new round - players can select new cards
+        // Reset for new round
         function resetForNewRound() {
-            // Clear selections
             selectedCards = [];
             myCards = {};
             marked = {};
@@ -761,7 +779,6 @@
             gameStarted = false;
             currentWinner = null;
             
-            // Update UI
             document.getElementById('selection').style.display = 'block';
             document.getElementById('game').style.display = 'none';
             document.getElementById('timer-container').style.display = 'none';
@@ -769,7 +786,6 @@
             document.getElementById('status').textContent = '⏳ WAITING FOR ADMIN';
             document.getElementById('last-number').textContent = '🎲 Waiting for admin to start...';
             
-            // Clear selected badges
             updateSelectedDisplay();
             
             showMessage('🔄 New round! Select your cards again.', 'info');
@@ -854,6 +870,12 @@
                         activeGames++;
                         totalStake += selectedCards.length * pricePerCard;
                         fetchBalance();
+                        
+                        // OPTIMISTIC PRIZE POOL UPDATE: add our contribution
+                        // (server will broadcast updated players soon, but we show immediate feedback)
+                        prizePool += selectedCards.length * pricePerCard;
+                        document.getElementById('prize-pool').textContent = `${prizePool.toFixed(2)} ETB`;
+                        document.getElementById('game-prize').textContent = `${prizePool.toFixed(2)} ETB`;
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
                     }
@@ -888,7 +910,6 @@
                     document.getElementById('numbers-left').textContent = `${data.left} numbers left`;
                     updateCalledNumbersList();
                     
-                    // NEW: Auto-daub if enabled
                     if (autoDaubEnabled && data.number && data.number !== 'FREE') {
                         autoMarkNumber(data.number);
                     }
@@ -957,15 +978,14 @@
             };
         }
         
-        // NEW: Auto-mark a number on all cards
+        // Auto-mark a number on all cards
         function autoMarkNumber(number) {
             if (!gameStarted) return;
-            const num = parseInt(number); // called numbers are strings? but we store as numbers
+            const num = parseInt(number);
             if (isNaN(num)) return;
             
             Object.keys(myCards).forEach(cardId => {
                 const card = myCards[cardId];
-                // Check if number exists on card and not already marked
                 let found = false;
                 for (let row = 0; row < 5; row++) {
                     for (let col = 0; col < 5; col++) {
@@ -976,7 +996,6 @@
                     }
                 }
                 if (found) {
-                    // Send mark to server
                     ws.send(JSON.stringify({
                         type: 'mark_number',
                         card_id: parseInt(cardId),
@@ -990,6 +1009,30 @@
         function toggleAutoDaub() {
             autoDaubEnabled = document.getElementById('autoDaub').checked;
             showMessage(autoDaubEnabled ? 'Auto-mark ON' : 'Auto-mark OFF', 'info');
+        }
+        
+        // Manual refresh: fetch latest game state
+        async function manualRefresh() {
+            showMessage('Refreshing...', 'info');
+            try {
+                const response = await fetch(`/api/game/${gameId}/state`);
+                const data = await response.json();
+                if (data) {
+                    players = data.players || players;
+                    called = data.called_numbers || called;
+                    gameStarted = data.game_started;
+                    takenCards = new Set(data.taken_cards || []);
+                    calculatePrizePool(); // recalculates based on fresh player list
+                    updatePlayersList();
+                    updateReadyCount();
+                    updateCalledNumbersList();
+                    updateCardGrid();
+                    showMessage('Refreshed!', 'success');
+                }
+            } catch (e) {
+                showMessage('Refresh failed, reconnecting...', 'error');
+                connectWebSocket();
+            }
         }
         
         // Update called numbers list display
@@ -1127,11 +1170,15 @@
                 card_ids: selectedCards
             }));
             
+            // After selection, finalize
             setTimeout(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
                         type: 'finalize'
                     }));
+                    
+                    // OPTIMISTIC PRIZE POOL UPDATE (already handled on 'finalized' event, but we also add here in case of lag)
+                    // However, we already have optimistic update in the message handler, so it's fine.
                 }
             }, 500);
         }
@@ -1141,7 +1188,6 @@
             document.getElementById('selection').style.display = 'none';
             document.getElementById('game').style.display = 'block';
             
-            // Build vertical card list (replacing tabs)
             const cardListDiv = document.getElementById('card-list');
             cardListDiv.innerHTML = '';
             
@@ -1162,7 +1208,6 @@
                 switchCard(0);
             }
             
-            // Update nav buttons state
             updateNavButtons();
             
             document.getElementById('game-players').textContent = players.filter(p => p.card_count > 0).length;
@@ -1188,7 +1233,6 @@
             
             currentCardIndex = index;
             
-            // Update list items
             document.querySelectorAll('.card-list-item').forEach((item, i) => {
                 if (i === index) {
                     item.classList.add('active');
@@ -1207,7 +1251,7 @@
             document.getElementById('nextCardBtn').disabled = (currentCardIndex >= cardIds.length - 1);
         }
         
-        // Render current card (minimized size)
+        // Render current card
         function renderCurrentCard() {
             const cardIds = Object.keys(myCards).sort((a, b) => parseInt(a) - parseInt(b));
             if (cardIds.length === 0) return;
