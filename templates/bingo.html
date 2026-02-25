@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Bingo Game - Multi-Card</title>
+    <title>Bingo Game - 1000 Cards</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -123,28 +123,6 @@
             color: #e65100;
             font-weight: bold;
         }
-        .selected-controls {
-            display: flex;
-            gap: 10px;
-        }
-        .control-btn {
-            background: #ff9800;
-            color: white;
-            border: none;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .control-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
         .selected-badges {
             display: flex;
             flex-wrap: wrap;
@@ -182,14 +160,15 @@
             padding-top: 10px;
         }
         
-        /* Scrollable Card Grid */
+        /* Scrollable Card Grid - 1000 cards */
         .card-grid-container {
-            max-height: 250px;
+            max-height: 300px;
             overflow-y: auto;
             border: 2px solid #ddd;
             border-radius: 10px;
             margin-bottom: 15px;
             padding: 10px;
+            background: #f8f9fa;
         }
         .card-grid {
             display: grid;
@@ -206,6 +185,9 @@
             cursor: pointer;
             transition: all 0.2s;
             font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .card-btn.taken {
             background: #dc3545;
@@ -220,36 +202,6 @@
         .card-btn:hover:not(.taken) {
             transform: translateY(-2px);
         }
-        
-        /* Preview */
-        .preview {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-        }
-        .preview-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-        .preview-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 5px;
-        }
-        .preview-cell {
-            aspect-ratio: 1;
-            background: white;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-        }
-        .preview-cell.free { background: #ffd700; }
         
         /* Action Buttons */
         .action-buttons {
@@ -531,7 +483,7 @@
             <div class="info-panel">
                 <div class="info-item">
                     <div class="info-label">Cards Available</div>
-                    <div class="info-value">{{ total_cards }}</div>
+                    <div class="info-value">1000</div>
                 </div>
                 <div class="info-item">
                     <div class="info-label">Players Ready</div>
@@ -543,30 +495,17 @@
             <div id="selected-panel" class="selected-cards-panel" style="display: none;">
                 <div class="selected-header">
                     <span class="selected-title">Your Selected Cards:</span>
-                    <div class="selected-controls">
-                        <button class="control-btn" id="move-up" onclick="moveSelection('up')" disabled>↑</button>
-                        <button class="control-btn" id="move-down" onclick="moveSelection('down')" disabled>↓</button>
-                    </div>
                 </div>
                 <div id="selected-badges" class="selected-badges"></div>
                 <div id="total-cost" class="total-cost">Total: 0 ETB</div>
             </div>
             
-            <!-- Scrollable Card Grid -->
+            <!-- Scrollable Card Grid - 1000 cards -->
             <div class="card-grid-container">
                 <div id="card-grid" class="card-grid"></div>
             </div>
             
-            <!-- Card Preview -->
-            <div id="preview" class="preview" style="display: none;">
-                <div class="preview-header">
-                    <span>Card #<span id="preview-id"></span></span>
-                    <span id="preview-status"></span>
-                </div>
-                <div id="preview-grid" class="preview-grid"></div>
-            </div>
-            
-            <!-- Action Buttons -->
+            <!-- Action Buttons (Preview removed) -->
             <div class="action-buttons">
                 <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()" style="display: none;">
                     Clear
@@ -598,7 +537,7 @@
             
             <div class="last-number" id="last-number">🎲 Ready</div>
             
-            <!-- Card Tabs (scrollable) -->
+            <!-- Card Tabs -->
             <div id="card-tabs" class="card-tabs"></div>
             
             <!-- Current Card Display -->
@@ -637,7 +576,6 @@
         const adminId = '{{ admin_id }}';
         const pricePerCard = {{ price_per_card }};
         const maxCards = {{ max_cards }};
-        const totalCards = {{ total_cards }};
         const isAdmin = (userId == adminId);
         
         // State
@@ -799,7 +737,6 @@
                     document.getElementById('status').className = 'status playing';
                     document.getElementById('status').textContent = '🎮 PLAYING';
                     document.getElementById('bingo-btn').disabled = false;
-                    document.getElementById('timer-info').style.display = 'block';
                     document.getElementById('last-number').textContent = '🎲 Game Started!';
                     showMessage('🚀 Game started!', 'success');
                 }
@@ -898,23 +835,26 @@
             document.getElementById('timer').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
         }
         
-        // Load available cards
+        // Load available cards (1-1000)
         async function loadCards() {
             const grid = document.getElementById('card-grid');
-            grid.innerHTML = '<div class="loading">Loading cards</div>';
+            grid.innerHTML = '<div class="loading">Loading 1000 cards</div>';
             
             try {
-                const res = await fetch('/api/cards');
-                const data = await res.json();
-                
                 grid.innerHTML = '';
                 
-                for (let i = 1; i <= totalCards; i++) {
+                // Generate 1000 cards (1 to 1000)
+                for (let i = 1; i <= 1000; i++) {
                     const btn = document.createElement('button');
                     btn.className = 'card-btn';
                     btn.textContent = i;
                     btn.onclick = () => toggleCardSelection(i);
                     grid.appendChild(btn);
+                    
+                    // Add a small delay to prevent UI freeze
+                    if (i % 100 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
                 }
                 
                 updateCardGrid();
@@ -948,100 +888,7 @@
             selectedCards.sort((a, b) => a - b);
             
             updateSelectedDisplay();
-            previewCard(cardId);
-            updateMoveButtons();
-        }
-        
-        // Move selection up/down
-        function moveSelection(direction) {
-            if (selectedCards.length === 0) return;
-            
-            const previewId = document.getElementById('preview-id').textContent;
-            if (!previewId) return;
-            
-            const currentIndex = selectedCards.indexOf(parseInt(previewId));
-            if (currentIndex === -1) return;
-            
-            let newIndex;
-            if (direction === 'up' && currentIndex > 0) {
-                newIndex = currentIndex - 1;
-            } else if (direction === 'down' && currentIndex < selectedCards.length - 1) {
-                newIndex = currentIndex + 1;
-            } else {
-                return;
-            }
-            
-            // Swap in array
-            [selectedCards[currentIndex], selectedCards[newIndex]] = 
-            [selectedCards[newIndex], selectedCards[currentIndex]];
-            
-            updateSelectedDisplay();
-            previewCard(selectedCards[newIndex]);
-            updateMoveButtons();
-        }
-        
-        // Update move buttons state
-        function updateMoveButtons() {
-            const upBtn = document.getElementById('move-up');
-            const downBtn = document.getElementById('move-down');
-            
-            if (selectedCards.length <= 1) {
-                upBtn.disabled = true;
-                downBtn.disabled = true;
-                return;
-            }
-            
-            const previewId = document.getElementById('preview-id').textContent;
-            if (!previewId) {
-                upBtn.disabled = true;
-                downBtn.disabled = true;
-                return;
-            }
-            
-            const currentIndex = selectedCards.indexOf(parseInt(previewId));
-            upBtn.disabled = currentIndex <= 0;
-            downBtn.disabled = currentIndex >= selectedCards.length - 1;
-        }
-        
-        // Preview card
-        async function previewCard(cardId) {
-            try {
-                const res = await fetch(`/api/card/${cardId}`);
-                const card = await res.json();
-                
-                const preview = document.getElementById('preview-grid');
-                preview.innerHTML = '';
-                
-                for (let row = 0; row < 2; row++) {
-                    for (let col = 0; col < 5; col++) {
-                        const cell = document.createElement('div');
-                        cell.className = 'preview-cell';
-                        const val = card.card[col][row];
-                        cell.textContent = val;
-                        if (val === 'FREE') cell.classList.add('free');
-                        preview.appendChild(cell);
-                    }
-                }
-                
-                document.getElementById('preview-id').textContent = cardId;
-                document.getElementById('preview').style.display = 'block';
-                
-                const status = document.getElementById('preview-status');
-                if (selectedCards.includes(cardId)) {
-                    status.textContent = '✓ Selected';
-                    status.style.color = '#4CAF50';
-                } else if (takenCards.has(cardId)) {
-                    status.textContent = '❌ Taken';
-                    status.style.color = '#dc3545';
-                } else {
-                    status.textContent = 'Available';
-                    status.style.color = '#667eea';
-                }
-                
-                updateMoveButtons();
-            } catch (error) {
-                console.error('Error previewing card:', error);
-            }
+            updateCardGrid();
         }
         
         // Update selected cards display
@@ -1079,7 +926,6 @@
                 clearBtn.style.display = 'none';
                 confirmBtn.disabled = true;
                 confirmBtn.textContent = 'Confirm (0 ETB)';
-                document.getElementById('preview').style.display = 'none';
             }
             
             updateCardGrid();
@@ -1091,9 +937,6 @@
             if (index >= 0) {
                 selectedCards.splice(index, 1);
                 updateSelectedDisplay();
-                if (selectedCards.length > 0) {
-                    previewCard(selectedCards[0]);
-                }
             }
         }
         
@@ -1224,10 +1067,6 @@
         function checkBingo() {
             if (!gameStarted) return;
             showMessage('🎯 BINGO claimed! Server will validate...', 'info');
-            ws.send(JSON.stringify({
-                type: 'check_bingo',
-                marked: marked[currentCardIndex]
-            }));
         }
         
         // Start game (admin only)
