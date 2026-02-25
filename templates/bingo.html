@@ -280,19 +280,195 @@
             color: white;
         }
 
-        .message {
-            margin-top: 12px;
-            padding: 10px;
+        /* Game screen */
+        .game-screen {
+            background: #ecf3fa;
+            padding: 20px 16px;
+        }
+        .game-prize-bar {
+            background: #f1c40f;
+            padding: 14px 20px;
+            border-radius: 40px;
+            display: flex;
+            justify-content: space-between;
+            font-weight: 800;
+            margin-bottom: 15px;
+        }
+        .game-prize-value {
+            font-size: 1.6rem;
+            color: #1e3c5c;
+        }
+        .auto-toggle {
+            background: #1f4a6e;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 15px 0;
+            font-weight: 600;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 56px; height: 28px;
+        }
+        .switch input { opacity:0; width:0; height:0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top:0; left:0; right:0; bottom:0;
+            background-color: #b0c4de;
+            border-radius: 34px;
+            transition: 0.2s;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 24px; width: 24px; left: 2px; bottom: 2px;
+            background-color: white;
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+        input:checked + .slider { background-color: #4caf50; }
+        input:checked + .slider:before { transform: translateX(28px); }
+
+        .last-number {
+            background: #1e3f5a;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 2.4rem;
+            font-weight: 800;
             border-radius: 30px;
+            margin-bottom: 15px;
+            word-break: break-word;
+        }
+
+        .called-numbers-container {
+            background: #d9e6f2;
+            border-radius: 28px;
+            padding: 16px;
+            max-height: 110px;
+            overflow-y: auto;
+            margin-bottom: 18px;
+        }
+        .called-title { font-size: 0.8rem; color: #1e2b4a; font-weight: 600; margin-bottom: 8px; }
+        .called-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+        .called-badge { background: #2e7d32; color: white; padding: 4px 12px; border-radius: 30px; font-size: 0.85rem; font-weight: 600; }
+
+        .card-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 16px;
+            max-height: 70px;
+            overflow-y: auto;
+            padding: 4px 2px;
+        }
+        .card-tab {
+            background: white;
+            border: 1px solid #aaa;
+            border-radius: 30px;
+            padding: 5px 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .card-tab.active { background: #4361ee; color: white; border-color: gold; }
+
+        .bingo-card {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+            background: #1f3b58;
+            padding: 14px;
+            border-radius: 28px;
+            margin: 10px 0;
+        }
+        .card-cell {
+            aspect-ratio: 1/1;
+            background: #eef3fc;
+            border: 2px solid white;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: #102331;
+        }
+        .card-cell.marked { background: #2e7d32; color: white; border-color: #a5d6a5; }
+        .card-cell.free { background: #f9d857; border-color: gold; }
+
+        .bingo-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(145deg, #e66465, #f09b4a);
+            color: white;
+            border: none;
+            border-radius: 60px;
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 16px 0;
+        }
+        .bingo-btn:disabled { opacity: 0.4; }
+
+        .start-btn {
+            width:100%;
+            padding: 18px;
+            background: #f5b342;
+            border-radius: 60px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border: none;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } }
+
+        .players-list {
+            background: #dee7f0;
+            border-radius: 30px;
+            padding: 14px;
+            max-height: 120px;
+            overflow-y: auto;
+            font-size: 0.8rem;
+        }
+        .player-badge {
+            display: inline-block;
+            background: white;
+            padding: 4px 12px;
+            border-radius: 40px;
+            margin: 3px;
+            border: 1px solid #aaa;
+        }
+        .player-badge.winner { background: gold; font-weight: bold; }
+
+        .winner-announcement {
+            background: #ffde7a;
+            color: #1e1e1e;
+            padding: 24px;
+            border-radius: 50px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 15px;
+            animation: pulse 1s infinite;
+        }
+
+        .message {
+            padding: 12px;
+            margin: 10px 16px 20px;
+            border-radius: 60px;
+            display: none;
             text-align: center;
             font-weight: 600;
-            display: none;
         }
-        .message.show {
-            display: block;
-        }
-        .message.success { background: #b9f6ca; color: #1b5e20; }
-        .message.error { background: #ffcdd2; color: #b71c1c; }
+        .message.success { background: #b9f6ca; color: #1b5e20; display: block; }
+        .message.error { background: #ffcdd2; color: #b71c1c; display: block; }
+        .message.info { background: #b3e5fc; color: #01579b; display: block; }
+
+        .back-btn { display: block; text-align: center; color: #6b8cae; margin-top: 12px; text-decoration: none; }
     </style>
 </head>
 <body>
@@ -331,12 +507,12 @@
         <span class="ready-count" id="ready">2</span>
     </div>
 
-    <!-- Main Content -->
-    <div class="content">
+    <!-- Selection Screen -->
+    <div id="selectionScreen" class="content">
         <h2 class="pick-title">Pick cards (max 20)</h2>
         <p class="price-info">10 ETB each · one round only</p>
 
-        <!-- Selected Cards Panel (hidden initially) -->
+        <!-- Selected Cards Panel -->
         <div id="selectedPanel" class="selected-panel" style="display: none;">
             <div class="selected-header">
                 <span>Your cards:</span>
@@ -360,210 +536,447 @@
         <!-- Message -->
         <div id="message" class="message"></div>
     </div>
+
+    <!-- Game Screen (initially hidden) -->
+    <div id="gameScreen" class="game-screen" style="display: none;">
+        <div id="winnerAnnouncement" class="winner-announcement" style="display: none;"></div>
+        <div class="game-prize-bar">
+            <span>🏆 ROUND PRIZE</span>
+            <span class="game-prize-value" id="gamePrize">30.00 ETB</span>
+        </div>
+
+        <!-- Auto toggle -->
+        <div class="auto-toggle">
+            <span>🤖 Auto‑daub numbers</span>
+            <label class="switch">
+                <input type="checkbox" id="autoDaubToggle" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <div class="last-number" id="lastNumber">🎲 waiting for start...</div>
+
+        <div class="called-numbers-container">
+            <div class="called-title">📋 CALLED</div>
+            <div id="calledNumbersList" class="called-grid"></div>
+        </div>
+
+        <div id="cardTabs" class="card-tabs"></div>
+
+        <div id="currentCardArea">
+            <div id="currentCardTitle" style="font-weight:600;">Card #—</div>
+            <div id="cardDisplay" class="bingo-card"></div>
+        </div>
+
+        <button class="bingo-btn" id="bingoBtn" onclick="checkBingo()" disabled>🎯 BINGO!</button>
+
+        <div id="adminControls" class="admin-controls" style="display: none;">
+            <button class="start-btn" onclick="startGame()">🚀 START GAME</button>
+        </div>
+
+        <div class="players-list">
+            <div>Players:</div>
+            <div id="playersList"></div>
+        </div>
+        <a href="https://t.me/Treeeeestbot" class="back-btn">◀️ back</a>
+    </div>
 </div>
 
 <script>
-    // Get URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const userId = urlParams.get('user_id') || '7222251017';
-    const gameId = urlParams.get('game_id') || '1';
-    const adminId = urlParams.get('admin_id') || '8741250511';
-    
-    // Update UI with params
-    document.getElementById('player-id').textContent = userId;
-    document.getElementById('game-id').textContent = gameId;
-    
-    // Check if current user is admin
-    const isAdmin = (userId === adminId);
-    const statusDiv = document.getElementById('status');
-    if (isAdmin) {
-        statusDiv.textContent = 'ADMIN';
-        statusDiv.classList.add('admin');
-    } else {
-        statusDiv.textContent = 'WAITING';
-    }
-    
-    // Game state
-    const PRICE_PER_CARD = 10;
-    const MAX_CARDS = 20;
-    let balance = 610.00;
-    let selectedCards = [];
-    
-    // Mock taken cards (cards already bought by other players)
-    let takenCards = new Set([5, 12, 18, 23, 27, 31, 42, 56, 63, 78, 84, 91, 105, 118, 127, 133, 149, 152, 168, 173, 189, 194, 210]);
-    
-    // Initialize grid with 1000 cards
-    function initCardGrid() {
-        const grid = document.getElementById('cardGrid');
-        grid.innerHTML = '';
-        
-        for (let i = 1; i <= 1000; i++) {
-            const btn = document.createElement('button');
-            btn.className = 'card-btn';
-            if (takenCards.has(i)) {
-                btn.classList.add('taken');
-            }
-            btn.textContent = i;
-            btn.onclick = () => toggleCard(i);
-            grid.appendChild(btn);
-        }
-    }
-    
-    // Toggle card selection
-    function toggleCard(cardId) {
-        if (takenCards.has(cardId)) {
-            showMessage(`Card #${cardId} is already taken`, 'error');
-            return;
-        }
-        
-        const index = selectedCards.indexOf(cardId);
-        if (index > -1) {
-            // Remove from selection
-            selectedCards.splice(index, 1);
-        } else {
-            // Add to selection (if under max)
-            if (selectedCards.length >= MAX_CARDS) {
-                showMessage(`Maximum ${MAX_CARDS} cards allowed`, 'error');
-                return;
-            }
-            selectedCards.push(cardId);
-        }
-        
-        // Sort selected cards
-        selectedCards.sort((a, b) => a - b);
-        
-        // Update UI
-        updateSelectedDisplay();
-        updateGridHighlight();
-    }
-    
-    // Update grid highlighting
-    function updateGridHighlight() {
-        const buttons = document.querySelectorAll('.card-btn');
-        buttons.forEach(btn => {
-            const id = parseInt(btn.textContent);
-            btn.classList.remove('selected');
-            if (selectedCards.includes(id)) {
-                btn.classList.add('selected');
-            }
-        });
-    }
-    
-    // Update selected cards panel
-    function updateSelectedDisplay() {
-        const panel = document.getElementById('selectedPanel');
-        const badges = document.getElementById('selectedBadges');
-        const totalCost = document.getElementById('totalCost');
+    (function() {
+        // ------ CONFIG (from URL) ------
+        const urlParams = new URLSearchParams(window.location.search);
+        const USER_ID = parseInt(urlParams.get('user_id')) || 7222251017;
+        const GAME_ID = parseInt(urlParams.get('game_id')) || 1;
+        const ADMIN_ID = urlParams.get('admin_id') || '8741250511';
+        const PRICE_PER_CARD = 10;
+        const MAX_CARDS = 20;
+        const INIT_BALANCE = 610.00;
+        const INIT_ACTIVE = 0;
+        const INIT_STAKE = 0.00;
+
+        // ------ GLOBAL STATE ------
+        const isAdmin = (USER_ID == ADMIN_ID);
+        const TOTAL_NUMBERS = 75;
+        let selectedCards = [];
+        let myCards = {};              // cardId -> 5x5 matrix
+        let marked = {};                // cardId -> marked numbers[]
+        let called = [];
+        let players = [];
+        let takenCards = new Set([5, 12, 18, 23, 27, 31, 42, 56, 63, 78, 84, 91, 105, 118, 127, 133, 149, 152, 168, 173, 189, 194, 210]); // mock
+        let gameStarted = false;
+        let currentRound = 1;
+        let currentWinner = null;
+        let currentCardIndex = 0;
+        let balance = INIT_BALANCE;
+        let activeGames = INIT_ACTIVE;
+        let totalStake = INIT_STAKE;
+        let prizePool = 30.00;          // from screenshot
+        let autoDaub = true;
+
+        // DOM elements
+        const statusDiv = document.getElementById('status');
+        const selectionScreen = document.getElementById('selectionScreen');
+        const gameScreen = document.getElementById('gameScreen');
         const confirmBtn = document.getElementById('confirmBtn');
         const clearBtn = document.getElementById('clearBtn');
-        const selectedCount = document.getElementById('selectedCount');
-        
-        if (selectedCards.length > 0) {
-            panel.style.display = 'block';
-            clearBtn.style.display = 'block';
-            selectedCount.textContent = `${selectedCards.length}/${MAX_CARDS}`;
-            
-            // Create badges
-            badges.innerHTML = '';
-            selectedCards.forEach(id => {
-                const badge = document.createElement('span');
-                badge.className = 'card-badge';
-                badge.innerHTML = `#${id} <button class="remove-card" onclick="removeCard(${id})">✕</button>`;
-                badges.appendChild(badge);
-            });
-            
-            // Update total cost
-            const cost = selectedCards.length * PRICE_PER_CARD;
-            totalCost.textContent = `Total: ${cost.toFixed(2)} ETB`;
-            
-            // Enable confirm button if within balance
-            if (cost <= balance) {
-                confirmBtn.disabled = false;
-                confirmBtn.textContent = `✔ Confirm (${cost.toFixed(2)} ETB)`;
-            } else {
-                confirmBtn.disabled = true;
-                confirmBtn.textContent = `Insufficient (${cost.toFixed(2)} ETB)`;
-            }
+        const selectedPanel = document.getElementById('selectedPanel');
+        const selectedBadges = document.getElementById('selectedBadges');
+        const totalCostSpan = document.getElementById('totalCost');
+        const prizeSpan = document.getElementById('prize');
+        const gamePrizeSpan = document.getElementById('gamePrize');
+        const readySpan = document.getElementById('ready');
+        const playersListDiv = document.getElementById('playersList');
+        const lastNumberDiv = document.getElementById('lastNumber');
+        const calledListDiv = document.getElementById('calledNumbersList');
+        const walletBalance = document.getElementById('wallet');
+        const activeGamesSpan = document.getElementById('active');
+        const totalStakeSpan = document.getElementById('stake');
+        const bingoBtn = document.getElementById('bingoBtn');
+        const winnerAnnounce = document.getElementById('winnerAnnouncement');
+        const autoToggle = document.getElementById('autoDaubToggle');
+        const adminControls = document.getElementById('adminControls');
+        const cardTabs = document.getElementById('cardTabs');
+        const currentCardTitle = document.getElementById('currentCardTitle');
+        const cardDisplay = document.getElementById('cardDisplay');
+
+        // Set player info
+        document.getElementById('player-id').innerText = USER_ID;
+        document.getElementById('game-id').innerText = GAME_ID;
+
+        if (isAdmin) {
+            statusDiv.innerText = 'ADMIN';
+            statusDiv.classList.add('admin');
+            adminControls.style.display = 'block';
         } else {
-            panel.style.display = 'none';
-            clearBtn.style.display = 'none';
-            confirmBtn.disabled = true;
-            confirmBtn.textContent = '✔ Confirm (0 ETB)';
+            statusDiv.innerText = 'WAITING';
         }
-    }
-    
-    // Remove specific card
-    window.removeCard = function(cardId) {
-        const index = selectedCards.indexOf(cardId);
-        if (index > -1) {
-            selectedCards.splice(index, 1);
+
+        // Update wallet
+        function updateWallet() {
+            walletBalance.innerText = balance.toFixed(2) + ' ETB';
+            activeGamesSpan.innerText = activeGames;
+            totalStakeSpan.innerText = totalStake.toFixed(2) + ' ETB';
+        }
+        updateWallet();
+
+        // Prize update
+        function updatePrize() {
+            prizeSpan.innerText = prizePool.toFixed(2) + ' ETB';
+            gamePrizeSpan.innerText = prizePool.toFixed(2) + ' ETB';
+        }
+        updatePrize();
+
+        // Helper: generate random bingo card (5x5, numbers 1-75, unique per card, FREE center)
+        function generateBingoCard() {
+            const card = [];
+            const used = new Set();
+            for (let row = 0; row < 5; row++) {
+                const rowArr = [];
+                for (let col = 0; col < 5; col++) {
+                    if (row === 2 && col === 2) {
+                        rowArr.push('FREE');
+                        continue;
+                    }
+                    let num;
+                    do {
+                        num = Math.floor(Math.random() * 75) + 1;
+                    } while (used.has(num));
+                    used.add(num);
+                    rowArr.push(num);
+                }
+                card.push(rowArr);
+            }
+            return card;
+        }
+
+        // Initialize 1000-card grid
+        function initCardGrid() {
+            const grid = document.getElementById('cardGrid');
+            grid.innerHTML = '';
+            for (let i = 1; i <= 1000; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'card-btn';
+                if (takenCards.has(i)) btn.classList.add('taken');
+                btn.textContent = i;
+                btn.onclick = () => toggleCard(i);
+                grid.appendChild(btn);
+            }
+        }
+
+        // Toggle card selection
+        function toggleCard(cardId) {
+            if (takenCards.has(cardId) && !selectedCards.includes(cardId)) {
+                showMessage(`Card #${cardId} already taken`, 'error');
+                return;
+            }
+            const idx = selectedCards.indexOf(cardId);
+            if (idx > -1) {
+                selectedCards.splice(idx, 1);
+            } else {
+                if (selectedCards.length >= MAX_CARDS) {
+                    showMessage(`Max ${MAX_CARDS} cards allowed`, 'error');
+                    return;
+                }
+                selectedCards.push(cardId);
+            }
+            selectedCards.sort((a,b) => a - b);
             updateSelectedDisplay();
             updateGridHighlight();
         }
-    };
-    
-    // Clear all selections
-    window.clearSelection = function() {
-        selectedCards = [];
-        updateSelectedDisplay();
-        updateGridHighlight();
-    };
-    
-    // Confirm selection
-    window.confirmSelection = function() {
-        if (selectedCards.length === 0) return;
-        
-        const cost = selectedCards.length * PRICE_PER_CARD;
-        if (cost > balance) {
-            showMessage('Insufficient balance', 'error');
-            return;
+
+        function updateGridHighlight() {
+            document.querySelectorAll('.card-btn').forEach(btn => {
+                const id = parseInt(btn.textContent);
+                btn.classList.remove('selected');
+                if (selectedCards.includes(id)) btn.classList.add('selected');
+            });
         }
-        
-        // Deduct balance
-        balance -= cost;
-        document.getElementById('wallet').textContent = `${balance.toFixed(2)} ETB`;
-        
-        // Add to active and stake
-        const activeEl = document.getElementById('active');
-        const stakeEl = document.getElementById('stake');
-        activeEl.textContent = parseInt(activeEl.textContent) + 1;
-        stakeEl.textContent = `${(parseFloat(stakeEl.textContent) + cost).toFixed(2)} ETB`;
-        
-        // Mark selected cards as taken
-        selectedCards.forEach(id => takenCards.add(id));
-        
-        // Update ready count
-        const readyEl = document.getElementById('ready');
-        readyEl.textContent = parseInt(readyEl.textContent) + 1;
-        
-        // Update prize pool (30 ETB + new cards)
-        const prizeEl = document.getElementById('prize');
-        const currentPrize = parseFloat(prizeEl.textContent);
-        prizeEl.textContent = `${(currentPrize + cost).toFixed(2)} ETB`;
-        
-        // Show success message
-        showMessage(`Selected ${selectedCards.length} cards for ${cost.toFixed(2)} ETB`, 'success');
-        
-        // Clear selection
-        selectedCards = [];
-        updateSelectedDisplay();
-        updateGridHighlight();
-    };
-    
-    // Show message
-    function showMessage(text, type) {
-        const msg = document.getElementById('message');
-        msg.textContent = text;
-        msg.className = `message ${type} show`;
-        setTimeout(() => {
-            msg.classList.remove('show');
-        }, 3000);
-    }
-    
-    // Initialize on load
-    window.onload = function() {
+
+        function updateSelectedDisplay() {
+            if (selectedCards.length > 0) {
+                selectedPanel.style.display = 'block';
+                clearBtn.style.display = 'block';
+                document.getElementById('selectedCount').innerText = `${selectedCards.length}/${MAX_CARDS}`;
+                let html = '';
+                selectedCards.forEach(id => {
+                    html += `<span class="card-badge">#${id} <button class="remove-card" onclick="removeCard(${id})">✕</button></span>`;
+                });
+                selectedBadges.innerHTML = html;
+                const cost = selectedCards.length * PRICE_PER_CARD;
+                totalCostSpan.innerText = `Total: ${cost.toFixed(2)} ETB`;
+                confirmBtn.disabled = (cost > balance);
+                confirmBtn.innerText = cost > balance ? `❌ Insufficient (${cost.toFixed(2)} ETB)` : `✔ Confirm (${cost.toFixed(2)} ETB)`;
+            } else {
+                selectedPanel.style.display = 'none';
+                clearBtn.style.display = 'none';
+                confirmBtn.disabled = true;
+                confirmBtn.innerText = '✔ Confirm (0 ETB)';
+            }
+        }
+
+        window.removeCard = function(cardId) {
+            const idx = selectedCards.indexOf(cardId);
+            if (idx > -1) selectedCards.splice(idx, 1);
+            updateSelectedDisplay();
+            updateGridHighlight();
+        };
+
+        window.clearSelection = function() {
+            selectedCards = [];
+            updateSelectedDisplay();
+            updateGridHighlight();
+        };
+
+        // CONFIRM SELECTION – deduct balance, generate cards, switch to game screen
+        window.confirmSelection = function() {
+            if (selectedCards.length === 0) return;
+            const cost = selectedCards.length * PRICE_PER_CARD;
+            if (cost > balance) {
+                showMessage('Insufficient balance', 'error');
+                return;
+            }
+            // Deduct balance
+            balance -= cost;
+            totalStake += cost;
+            activeGames++;
+            updateWallet();
+
+            // Mark cards as taken
+            selectedCards.forEach(id => takenCards.add(id));
+
+            // Update ready count and prize
+            const ready = parseInt(readySpan.innerText) + 1;
+            readySpan.innerText = ready;
+            prizePool += cost;
+            updatePrize();
+
+            // Generate bingo cards for each selected card
+            selectedCards.forEach(id => {
+                myCards[id] = generateBingoCard();
+                marked[id] = [];
+            });
+
+            // Add player to list (mock)
+            players.push({ id: USER_ID, name: 'Player' + USER_ID, card_count: selectedCards.length });
+            updatePlayersList();
+
+            // Clear selection
+            selectedCards = [];
+            updateSelectedDisplay();
+            updateGridHighlight();
+
+            // Switch to game screen
+            showGameScreen();
+
+            showMessage(`Cards confirmed! Total: ${cost.toFixed(2)} ETB`, 'success');
+        };
+
+        // Switch to game screen and render cards
+        function showGameScreen() {
+            selectionScreen.style.display = 'none';
+            gameScreen.style.display = 'block';
+
+            // Build card tabs
+            const ids = Object.keys(myCards).sort((a,b) => +a - +b);
+            cardTabs.innerHTML = '';
+            ids.forEach((id, idx) => {
+                const tab = document.createElement('span');
+                tab.className = 'card-tab' + (idx === 0 ? ' active' : '');
+                tab.innerText = '#' + id;
+                tab.onclick = () => switchCard(idx);
+                cardTabs.appendChild(tab);
+            });
+            if (ids.length) switchCard(0);
+        }
+
+        function switchCard(index) {
+            currentCardIndex = index;
+            Array.from(cardTabs.children).forEach((tab, i) => {
+                if (i === index) tab.classList.add('active');
+                else tab.classList.remove('active');
+            });
+            renderCurrentCard();
+        }
+
+        function renderCurrentCard() {
+            const ids = Object.keys(myCards).sort((a,b) => +a - +b);
+            if (!ids.length) return;
+            const cardId = ids[currentCardIndex];
+            const matrix = myCards[cardId];
+            const markedArr = marked[cardId] || [];
+            currentCardTitle.innerText = `Card #${cardId}`;
+            cardDisplay.innerHTML = '';
+            for (let r = 0; r < 5; r++) {
+                for (let c = 0; c < 5; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'card-cell';
+                    const val = matrix[c][r]; // column, row – works with our generation
+                    if (val === 'FREE') {
+                        cell.classList.add('free', 'marked');
+                        cell.innerText = '⭐';
+                    } else {
+                        cell.innerText = val;
+                        if (markedArr.includes(val)) cell.classList.add('marked');
+                    }
+                    // Manual marking
+                    cell.onclick = () => {
+                        if (!gameStarted) return;
+                        if (autoDaub) {
+                            showMessage('Auto‑daub is ON, toggle off to mark manually', 'info');
+                            return;
+                        }
+                        if (val === 'FREE') return;
+                        if (!called.includes(val)) {
+                            showMessage('❌ Number not called yet', 'error');
+                            return;
+                        }
+                        if (markedArr.includes(val)) return;
+                        // Demo mark
+                        marked[cardId].push(val);
+                        renderCurrentCard();
+                    };
+                    cardDisplay.appendChild(cell);
+                }
+            }
+        }
+
+        // Auto toggle
+        if (autoToggle) {
+            autoToggle.addEventListener('change', (e) => {
+                autoDaub = e.target.checked;
+                showMessage(autoDaub ? 'Auto‑daub ON' : 'Manual mode ON', 'info');
+            });
+        }
+
+        // Called numbers display
+        function updateCalledList() {
+            calledListDiv.innerHTML = called.map(n => `<span class="called-badge">${n}</span>`).join('');
+        }
+
+        // Players list
+        function updatePlayersList() {
+            playersListDiv.innerHTML = players.map(p => 
+                `<span class="player-badge">${p.name} (${p.card_count})${p.id===USER_ID?' 👈':''}</span>`
+            ).join(' ');
+        }
+
+        // Admin start game
+        window.startGame = function() {
+            if (!isAdmin) return;
+            gameStarted = true;
+            statusDiv.innerText = 'PLAYING';
+            statusDiv.classList.remove('admin');
+            statusDiv.classList.add('playing');
+            bingoBtn.disabled = false;
+            showMessage('🚀 Game started!', 'success');
+            // Simulate first number after 2 sec
+            setTimeout(callRandomNumber, 2000);
+        };
+
+        function callRandomNumber() {
+            if (!gameStarted) return;
+            let newNum = Math.floor(Math.random() * 75) + 1;
+            while (called.includes(newNum)) newNum = Math.floor(Math.random() * 75) + 1;
+            called.push(newNum);
+            lastNumberDiv.innerText = `🎲 ${newNum}`;
+            updateCalledList();
+
+            if (autoDaub) {
+                Object.keys(myCards).forEach(cid => {
+                    const flat = myCards[cid].flat();
+                    if (flat.includes(newNum) && !marked[cid].includes(newNum)) {
+                        marked[cid].push(newNum);
+                    }
+                });
+                renderCurrentCard();
+            }
+
+            if (called.length < 75) setTimeout(callRandomNumber, 4000);
+        }
+
+        window.checkBingo = function() {
+            if (!gameStarted) return;
+            showMessage('🎯 Bingo claimed! (demo)', 'success');
+            gameStarted = false;
+            currentWinner = { id: USER_ID, name: 'You', card_id: Object.keys(myCards)[0] };
+            statusDiv.innerText = 'WINNER';
+            statusDiv.classList.add('winner');
+            winnerAnnounce.style.display = 'block';
+            winnerAnnounce.innerText = `🏆 YOU WIN with card #${currentWinner.card_id} 🏆`;
+            bingoBtn.disabled = true;
+            // After 6 seconds, reset to selection (cards expire)
+            setTimeout(() => {
+                // Reset
+                selectionScreen.style.display = 'block';
+                gameScreen.style.display = 'none';
+                gameStarted = false;
+                myCards = {};
+                marked = {};
+                called = [];
+                winnerAnnounce.style.display = 'none';
+                statusDiv.innerText = isAdmin ? 'ADMIN' : 'WAITING';
+                statusDiv.classList.remove('winner', 'playing');
+                if (isAdmin) statusDiv.classList.add('admin');
+                // Reset players card count (mock)
+                players = players.filter(p => p.id !== USER_ID);
+                updatePlayersList();
+                // Refresh grid
+                initCardGrid();
+            }, 6000);
+        };
+
+        function showMessage(text, type) {
+            const msg = document.getElementById('message');
+            msg.innerText = text;
+            msg.className = `message ${type}`;
+            setTimeout(() => msg.style.display = 'none', 2800);
+        }
+
+        // Initialize
         initCardGrid();
-    };
+        updatePlayersList();
+    })();
 </script>
 </body>
 </html>
