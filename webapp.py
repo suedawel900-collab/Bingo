@@ -255,7 +255,7 @@ class GameManager:
             return False, "Game already started", 0
 
         if self.game_winner[game_id]:
-            return False, "Game ended, wait for next round", 0
+            return False, "This round has ended. Please wait for the next round.", 0
 
         if user_id not in self.active_games[game_id]['players']:
             return False, "Player not found", 0
@@ -364,7 +364,7 @@ class GameManager:
             return False, "Game already started"
 
         if self.game_winner[game_id]:
-            await self.reset_game(game_id)
+            return False, "This round has already ended. Start a new round instead."
 
         # Check if any players are ready
         ready_count = sum(1 for p in self.active_games[game_id]['players'].values() if p['ready'])
@@ -393,41 +393,6 @@ class GameManager:
 
         return True, "Game started"
 
-    async def reset_game(self, game_id: int):
-        """Reset game for next round"""
-        if game_id not in self.active_games:
-            return
-
-        # Cancel number generation
-        if self.number_tasks[game_id]:
-            self.number_tasks[game_id].cancel()
-            self.number_tasks[game_id] = None
-
-        # Reset game state
-        self.game_started[game_id] = False
-        self.game_winner[game_id] = None
-        self.active_games[game_id]['called_numbers'] = []
-        self.countdown_timers[game_id] = 15
-
-        # Reset player ready status but keep their cards
-        for player in self.active_games[game_id]['players'].values():
-            player['ready'] = False
-            player['winner'] = False
-            # Clear marked numbers but keep cards
-            for card_id in player['marked']:
-                player['marked'][card_id] = []
-
-        self.round_number[game_id] += 1
-
-        await self.broadcast(game_id, {
-            'type': 'game_reset',
-            'round': self.round_number[game_id],
-            'players': self.get_players(game_id),
-            'countdown': 15
-        })
-
-        logger.info(f"Game {game_id} reset for round {self.round_number[game_id]}")
-
     async def generate_numbers(self, game_id: int):
         """Generate numbers every 2 seconds"""
         try:
@@ -455,12 +420,13 @@ class GameManager:
                         'left': len(available) - 1
                     })
                 else:
-                    # No more numbers - game over
+                    # No more numbers - game over, do NOT reset
+                    self.game_started[game_id] = False
                     await self.broadcast(game_id, {
                         'type': 'game_over',
-                        'message': 'All numbers called'
+                        'message': 'All numbers called. No winner this round.'
                     })
-                    await self.reset_game(game_id)
+                    logger.info(f"Game {game_id} ended: all numbers called")
                     break
 
         except asyncio.CancelledError:
