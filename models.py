@@ -39,11 +39,15 @@ class Database:
         finally:
             conn.close()
     
+    @contextmanager
+    def get_cursor(self):
+        """Get database cursor (convenience method)"""
+        with self.get_connection() as conn:
+            yield conn.cursor()
+    
     def _create_tables(self):
         """Create all tables"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
+        with self.get_cursor() as cursor:
             # Users table with welcome bonus tracking
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
@@ -151,14 +155,11 @@ class Database:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_active_games_user_id ON active_games(user_id)')
             
-            conn.commit()
             logger.info("✅ Database tables created/verified")
     
     def create_user(self, user_id, username=None, first_name=None, last_name=None, phone_number=None, country='ET', currency='ETB'):
         """Create a new user with all parameters"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
+        with self.get_cursor() as cursor:
             # Check if user already exists
             cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
             existing = cursor.fetchone()
@@ -176,7 +177,7 @@ class Database:
                         updated_at = CURRENT_TIMESTAMP
                     WHERE user_id = ?
                 ''', (username, first_name, last_name, phone_number, country, currency, user_id))
-                conn.commit()
+                
                 return self.get_user(user_id)
             
             # Create new user with welcome bonus
@@ -188,7 +189,6 @@ class Database:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (user_id, username, first_name, last_name, phone_number, country, currency, welcome_bonus, True))
             
-            conn.commit()
             logger.info(f"✅ New user {user_id} created with {welcome_bonus/100} ETB welcome bonus")
             
             # Record welcome bonus transaction
@@ -203,8 +203,7 @@ class Database:
     
     def get_user(self, user_id):
         """Get user by ID"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
             row = cursor.fetchone()
             if row:
@@ -217,8 +216,7 @@ class Database:
         if user:
             # Update user info if provided
             if username or first_name or last_name or phone_number:
-                with self.get_connection() as conn:
-                    cursor = conn.cursor()
+                with self.get_cursor() as cursor:
                     cursor.execute('''
                         UPDATE users 
                         SET username = COALESCE(?, username),
@@ -228,7 +226,6 @@ class Database:
                             updated_at = CURRENT_TIMESTAMP
                         WHERE user_id = ?
                     ''', (username, first_name, last_name, phone_number, user_id))
-                    conn.commit()
                 user = self.get_user(user_id)
             return user
         return self.create_user(user_id, username, first_name, last_name, phone_number)
@@ -298,7 +295,7 @@ class Database:
         else:
             conn = self.get_connection()
             cursor = conn.cursor()
-            external_conn = False
+            close_conn = True
         
         try:
             cursor.execute('''
@@ -309,31 +306,28 @@ class Database:
             
             transaction_id = cursor.lastrowid
             
-            if not external_conn:
+            if close_conn:
                 conn.commit()
                 conn.close()
             
             return transaction_id
         except Exception as e:
-            if not external_conn:
+            if close_conn:
                 conn.close()
             raise e
     
     def add_active_game(self, user_id, game_id, card_ids, stake):
         """Track active game for user"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 INSERT INTO active_games (user_id, game_id, card_ids, stake)
                 VALUES (?, ?, ?, ?)
             ''', (user_id, game_id, json.dumps(card_ids), stake))
-            conn.commit()
             return cursor.lastrowid
     
     def get_active_games_count(self, user_id):
         """Get number of active games for user"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 SELECT COUNT(*) as count FROM active_games 
                 WHERE user_id = ? AND status = 'active'
@@ -343,8 +337,7 @@ class Database:
     
     def get_total_stake(self, user_id):
         """Get total stake for user's active games"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 SELECT COALESCE(SUM(stake), 0) as total FROM active_games 
                 WHERE user_id = ? AND status = 'active'
@@ -354,22 +347,18 @@ class Database:
     
     def complete_game(self, user_id, game_id):
         """Mark game as completed"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 UPDATE active_games 
                 SET status = 'completed' 
                 WHERE user_id = ? AND game_id = ?
             ''', (user_id, game_id))
-            conn.commit()
             return cursor.rowcount > 0
     
     # Payment methods
     def get_payment_methods(self, type=None, active_only=True):
         """Get payment methods"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
+        with self.get_cursor() as cursor:
             query = "SELECT * FROM payment_methods WHERE 1=1"
             params = []
             
@@ -386,8 +375,7 @@ class Database:
     
     def get_payment_method(self, method_id):
         """Get payment method by ID"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('SELECT * FROM payment_methods WHERE id = ?', (method_id,))
             row = cursor.fetchone()
             return dict(row) if row else None
@@ -402,20 +390,17 @@ class Database:
         """Create payment request"""
         request_id = f"PAY-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
         
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 INSERT INTO payment_requests 
                 (request_id, user_id, method_id, amount, sender_phone)
                 VALUES (?, ?, ?, ?, ?)
             ''', (request_id, user_id, method_id, amount, sender_phone))
-            conn.commit()
             return request_id
     
     def get_payment_request(self, request_id):
         """Get payment request by ID"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 SELECT pr.*, pm.method_name 
                 FROM payment_requests pr
@@ -427,8 +412,7 @@ class Database:
     
     def get_user_payment_requests(self, user_id, limit=10):
         """Get user payment requests"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 SELECT * FROM payment_requests 
                 WHERE user_id = ? 
@@ -440,8 +424,7 @@ class Database:
     
     def get_pending_payment_requests(self, limit=20):
         """Get pending payment requests"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 SELECT pr.*, u.username, u.first_name, u.last_name, pm.method_name
                 FROM payment_requests pr
@@ -456,9 +439,7 @@ class Database:
     
     def update_payment_request_status(self, request_id, status, admin_notes=None):
         """Update payment request status"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
+        with self.get_cursor() as cursor:
             if status == 'completed':
                 cursor.execute('''
                     UPDATE payment_requests 
@@ -472,20 +453,16 @@ class Database:
                     WHERE request_id = ?
                 ''', (status, request_id))
             
-            conn.commit()
             return cursor.rowcount > 0
     
     def add_payment_proof(self, request_id, proof_type, proof_data, file_path=None):
         """Add payment proof"""
-        # Simplified - just update the request with reference
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 UPDATE payment_requests 
                 SET transaction_reference = ?
                 WHERE request_id = ?
             ''', (proof_data, request_id))
-            conn.commit()
             return cursor.rowcount > 0
     
     # Withdrawal requests
@@ -509,13 +486,11 @@ class Database:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (request_id, user_id, method_id, amount, account_number, account_name, phone_number))
             
-            conn.commit()
             return request_id
     
     def get_user_withdrawal_requests(self, user_id, limit=10):
         """Get user withdrawal requests"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 SELECT * FROM withdrawal_requests 
                 WHERE user_id = ? 
@@ -527,8 +502,7 @@ class Database:
     
     def get_pending_withdrawal_requests(self, limit=20):
         """Get pending withdrawal requests"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 SELECT wr.*, u.username, u.first_name, u.last_name
                 FROM withdrawal_requests wr
@@ -548,8 +522,7 @@ class Database:
     
     def get_user_transactions(self, user_id, limit=10):
         """Get user transactions"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
+        with self.get_cursor() as cursor:
             cursor.execute('''
                 SELECT * FROM transactions 
                 WHERE user_id = ? 
@@ -561,9 +534,7 @@ class Database:
     
     def get_system_stats(self):
         """Get system statistics"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
+        with self.get_cursor() as cursor:
             stats = {}
             
             cursor.execute('SELECT COUNT(*) as count FROM users')
@@ -597,9 +568,7 @@ class Database:
     
     def get_top_users(self, by='balance', limit=5):
         """Get top users"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
+        with self.get_cursor() as cursor:
             if by == 'balance':
                 cursor.execute('''
                     SELECT user_id, username, first_name, balance 
