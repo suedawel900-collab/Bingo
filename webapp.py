@@ -225,11 +225,7 @@ class GameManager:
         # Save to DB (upsert)
         db.add_player_to_game(game_id, user_id, all_card_ids, marked)
 
-        # Update prize pool in game (sum of all cards)
-        total_cards = sum(len(p['card_ids']) for p in db.get_game_players(game_id))
-        prize_pool = total_cards * CARD_PRICE
-        db.update_game_state(game_id, prize_pool=prize_pool)
-
+        # Do NOT update prize pool here – only after payment (finalize)
         logger.info(f"User {user_id} selected {len(card_ids)} cards in game {game_id}")
 
         return True, f"Selected {len(card_ids)} cards", total_cost
@@ -268,8 +264,9 @@ class GameManager:
         # Mark player as ready
         db.set_player_ready(game_id, user_id, True)
 
-        # Update prize pool
-        total_cards = sum(len(p['card_ids']) for p in db.get_game_players(game_id))
+        # Update prize pool based on READY players only
+        all_players = db.get_game_players(game_id)
+        total_cards = sum(len(p['card_ids']) for p in all_players if p['ready'])
         prize_pool = total_cards * CARD_PRICE
         db.update_game_state(game_id, prize_pool=prize_pool)
 
@@ -408,7 +405,7 @@ class GameManager:
             return True
         return False
 
-    async def declare_winner(self, game_id: int, user_id: int, card_id: int, winning_number: int):
+    async def declare_winner(self, game_id: int, user_id: int, card_id: int, winning_number: int = None):
         """Declare winner and stop the game"""
         game = db.get_game(game_id)
         if not game or game['winner_user_id']:
@@ -418,7 +415,12 @@ class GameManager:
         if not player:
             return
 
-        # Calculate prize (90% of pool)
+        # If winning_number not provided, use the last called number
+        if winning_number is None:
+            called = json.loads(game['called_numbers'])
+            winning_number = called[-1] if called else 0
+
+        # Prize pool is already based on ready players
         prize_pool = game['prize_pool']
         winner_prize = int(prize_pool * 0.9)
         house_fee = prize_pool - winner_prize
@@ -472,9 +474,6 @@ class GameManager:
         new_round = old_game['round_number'] + 1
         new_game_id = db.create_game(round_number=new_round)
 
-        # Get players from old game
-        players = db.get_game_players(old_game_id)
-
         # Broadcast reset message to all connected clients
         await self.broadcast(old_game_id, {
             'type': 'game_reset',
@@ -514,6 +513,38 @@ class GameManager:
         db.update_player_marked(game_id, user_id, card_id, marked_list)
 
         return True
+
+    async def claim_bingo(self, game_id: int, user_id: int, card_id: int):
+        """Manual bingo claim from player"""
+        game = db.get_game(game_id)
+        if not game or game['status'] != 'active' or game['winner_user_id']:
+            return False, "Game not active or already won"
+
+        players = db.get_game_players(game_id)
+        player = next((p for p in players if p['user_id'] == user_id), None)
+        if not player or not player['ready']:
+            return False, "You are not ready or have no cards"
+
+        if card_id not in player['card_ids']:
+            return False, "Card not yours"
+
+        marked = set(player['marked_numbers'].get(str(card_id), []))
+        card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+        if not card_data:
+            return False, "Card not found"
+
+        card = card_data['card']
+        if card[2][2] == 'FREE':
+            marked.add('FREE')
+
+        if self._check_card_bingo(card, marked):
+            # Declare winner with the last called number
+            called = json.loads(game['called_numbers'])
+            last_num = called[-1] if called else 0
+            await self.declare_winner(game_id, user_id, card_id, last_num)
+            return True, "Bingo confirmed! You win!"
+        else:
+            return False, "Not a valid bingo"
 
     async def get_user_stats(self, user_id: int):
         """Get user statistics"""
@@ -673,6 +704,17 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                         'number': data['number']
                     })
 
+            elif data['type'] == 'claim_bingo':
+                card_id = data.get('card_id')
+                if not card_id:
+                    await websocket.send_json({'type': 'error', 'message': 'Card ID required'})
+                    continue
+                success, message = await game_manager.claim_bingo(game_id, user_id, card_id)
+                if success:
+                    await websocket.send_json({'type': 'bingo_result', 'success': True, 'message': message})
+                else:
+                    await websocket.send_json({'type': 'bingo_result', 'success': False, 'message': message})
+
             elif data['type'] == 'get_stats':
                 stats = await game_manager.get_user_stats(user_id)
                 await websocket.send_json({
@@ -762,7 +804,7 @@ async def get_game_state(game_id: int):
         'round': game['round_number'],
         'called_numbers': json.loads(game['called_numbers']) if game['called_numbers'] else [],
         'prize_pool': game['prize_pool'] / 100 if game['prize_pool'] else 0,
-        'total_cards': sum(len(p['card_ids']) for p in players),
+        'total_cards': sum(len(p['card_ids']) for p in players if p['ready']),  # only ready
         'countdown': 15  # not stored, but broadcast via timer
     }
 
