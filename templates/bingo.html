@@ -764,9 +764,9 @@
             document.getElementById('total-stake').textContent = `${totalStake.toFixed(2)} ETB`;
         }
         
-        // Calculate prize pool based on ready players
+        // Calculate prize pool based on READY players (paid)
         function calculatePrizePool() {
-            const readyPlayers = players.filter(p => p.card_count > 0);
+            const readyPlayers = players.filter(p => p.ready);
             let totalCards = 0;
             readyPlayers.forEach(p => totalCards += p.card_count);
             prizePool = totalCards * pricePerCard;
@@ -966,6 +966,13 @@
                     calculatePrizePool();
                     updatePlayersList();
                     showMessage(`🔄 Round ${currentRound} started! Select cards for next round.`, 'info');
+                }
+                else if (data.type === 'bingo_result') {
+                    if (data.success) {
+                        showMessage(`🎉 ${data.message}`, 'success');
+                    } else {
+                        showMessage(`❌ ${data.message}`, 'error');
+                    }
                 }
                 else if (data.type === 'error') {
                     showMessage(`❌ ${data.message}`, 'error');
@@ -1313,8 +1320,6 @@
         
         function checkBingo() {
             if (!gameStarted) return;
-            // In this version, we claim bingo by sending a message to server
-            // For now, just show message; you can extend to send 'claim_bingo' with card id
             if (Object.keys(myCards).length === 0) return;
             const currentCardId = parseInt(Object.keys(myCards)[currentCardIndex]);
             ws.send(JSON.stringify({
@@ -1339,7 +1344,7 @@
         function startGame() {
             if (!isAdmin) return;
             calculatePrizePool();
-            showMessage(`💰 Prize pool: ${prizePool.toFixed(2)} ETB from ${players.filter(p => p.card_count > 0).length} players`, 'info');
+            showMessage(`💰 Prize pool: ${prizePool.toFixed(2)} ETB from ${players.filter(p => p.ready).length} players`, 'info');
             ws.send(JSON.stringify({type: 'start_game'}));
         }
         
@@ -1358,7 +1363,7 @@
         }
         
         function updateReadyCount() {
-            const ready = players.filter(p => p.card_count > 0).length;
+            const ready = players.filter(p => p.ready).length;
             document.getElementById('ready-count').textContent = ready;
             document.getElementById('total-players').textContent = players.length;
             document.getElementById('game-players').textContent = ready;
