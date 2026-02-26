@@ -32,7 +32,6 @@ ADMIN_USER_ID = os.getenv('ADMIN_USER_ID', '8741250511')
 CARD_PRICE = 1000  # 10 ETB per card in cents
 MAX_CARDS_PER_PLAYER = 20
 WELCOME_BONUS = 1000  # 10 ETB welcome bonus
-BASE_URL = os.getenv('WEBAPP_URL', 'https://bingo-production-a078.up.railway.app')  # for redirects
 
 # Load pre-generated cards from JSON file
 CARDS_FILE = "static/bingo_cards.json"
@@ -69,108 +68,51 @@ except Exception as e:
     logger.error(f"Error loading cards: {e}")
     BINGO_CARDS = generate_default_cards()
 
-# Game manager
+# Game manager with database persistence
 class GameManager:
     def __init__(self):
-        self.active_games = {}
-        self.game_connections = {}
-        self.taken_cards = {}
-        self.game_started = {}
-        self.game_winner = {}
-        self.round_number = {}
-        self.number_tasks = {}
-        self.countdown_timers = {}  # Track countdown per game
-        # Initialize next_game_id from database
-        self.next_game_id = db.get_last_game_id() + 1
-        logger.info(f"GameManager initialized. Next game ID will be {self.next_game_id}")
-
-    def create_new_game(self):
-        """Create a fresh game and return its new ID (persisted in DB)"""
-        # Insert into database first
-        game_id = db.create_game()
-        # Ensure our in‑memory counter stays in sync
-        if game_id >= self.next_game_id:
-            self.next_game_id = game_id + 1
-
-        # Initialize all game structures for this new ID
-        self.active_games[game_id] = {
-            'called_numbers': [],
-            'players': {},
-            'prize_pool': 0,
-            'total_cards_sold': 0,
-            'last_winner': None,
-            'countdown': 15,
-            'next_number_time': None
-        }
-        self.game_connections[game_id] = []
-        self.taken_cards[game_id] = set()
-        self.game_started[game_id] = False
-        self.game_winner[game_id] = None
-        self.round_number[game_id] = 1
-        self.number_tasks[game_id] = None
-        self.countdown_timers[game_id] = 15
-
-        logger.info(f"✅ Created new game with ID {game_id} (DB persisted)")
-        return game_id
-
-    def get_current_game_id(self):
-        """Return the highest (latest) game ID, or create one if none exist"""
-        # First try to get the latest active game from DB
-        active = db.get_active_game()
-        if active:
-            return active['id']
-        # If no active game, return the next one (but don't create automatically)
-        if self.next_game_id == 1:
-            return self.create_new_game()
-        return self.next_game_id - 1
+        self.active_connections = {}  # game_id -> list of websockets
+        self.number_tasks = {}         # game_id -> asyncio task
+        self.countdown_timers = {}     # game_id -> timer task
 
     async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
         await websocket.accept()
         logger.info(f"User {user_id} connected to game {game_id}")
 
-        # Get or create user with welcome bonus
-        user = db.get_or_create_user(
-            user_id=user_id,
-            username=None,
-            first_name=None,
-            last_name=None
-        )
+        # Get or create user
+        user = db.get_or_create_user(user_id)
 
-        if game_id not in self.game_connections:
-            self.game_connections[game_id] = []
-            self.taken_cards[game_id] = set()
-            self.game_started[game_id] = False
-            self.game_winner[game_id] = None
-            self.round_number[game_id] = 1
-            self.number_tasks[game_id] = None
-            self.countdown_timers[game_id] = 15
-            self.active_games[game_id] = {
-                'called_numbers': [],
-                'players': {},
-                'prize_pool': 0,
-                'total_cards_sold': 0,
-                'last_winner': None,
-                'countdown': 15,
-                'next_number_time': None
-            }
+        # Get game from DB
+        game = db.get_game(game_id)
+        if not game:
+            await websocket.send_json({"type": "error", "message": "Game not found"})
+            await websocket.close()
+            return
 
-        self.game_connections[game_id].append(websocket)
+        # Add to active connections
+        if game_id not in self.active_connections:
+            self.active_connections[game_id] = []
+        self.active_connections[game_id].append(websocket)
 
-        # Add player
-        player_name = user['first_name'] if user and user.get('first_name') else f"Player{user_id}"
+        # Start countdown timer for this game if not already running
+        if game_id not in self.countdown_timers:
+            self.countdown_timers[game_id] = asyncio.create_task(self.run_countdown(game_id))
 
-        if user_id not in self.active_games[game_id]['players']:
-            self.active_games[game_id]['players'][user_id] = {
-                'name': player_name,
-                'cards': [],
-                'card_ids': [],
-                'marked': {},
-                'ready': False,
-                'winner': False,
-                'total_spent': 0,
-                'cards_won': 0,
-                'balance': user['balance']
-            }
+        # Get players for this game
+        players = db.get_game_players(game_id)
+        player_list = []
+        taken_cards = set()
+        for p in players:
+            player_list.append({
+                'id': p['user_id'],
+                'name': p['first_name'] or f"Player{p['user_id']}",
+                'card_count': len(p['card_ids']),
+                'ready': p['ready']
+            })
+            taken_cards.update(p['card_ids'])
+
+        # Get called numbers
+        called_numbers = json.loads(game['called_numbers']) if game['called_numbers'] else []
 
         # Get user's active games and stake
         active_games = db.get_active_games_count(user_id)
@@ -179,138 +121,114 @@ class GameManager:
         # Send current state
         await websocket.send_json({
             'type': 'connected',
-            'taken_cards': list(self.taken_cards[game_id]),
-            'players': self.get_players(game_id),
-            'round': self.round_number[game_id],
-            'game_started': self.game_started[game_id],
-            'winner': self.game_winner[game_id],
-            'called_numbers': self.active_games[game_id]['called_numbers'],
-            'countdown': self.countdown_timers[game_id],
+            'taken_cards': list(taken_cards),
+            'players': player_list,
+            'round': game['round_number'],
+            'game_started': game['status'] == 'active',
+            'winner': game['winner_user_id'],
+            'called_numbers': called_numbers,
+            'countdown': 15,  # will be updated by timer
             'balance': user['balance'] / 100,
             'active_games': active_games,
             'total_stake': total_stake / 100
         })
 
-        # Start countdown timer for this game
-        asyncio.create_task(self.update_countdown(game_id))
-
         # Notify others
         await self.broadcast(game_id, {
             'type': 'player_joined',
-            'players': self.get_players(game_id),
-            'taken_cards': list(self.taken_cards[game_id])
+            'players': player_list,
+            'taken_cards': list(taken_cards)
         })
 
-    async def update_countdown(self, game_id: int):
-        """Update countdown timer every second"""
-        try:
-            while game_id in self.active_games:
-                await asyncio.sleep(1)
-
-                if game_id in self.countdown_timers:
-                    if self.countdown_timers[game_id] > 0:
-                        self.countdown_timers[game_id] -= 1
-
-                    await self.broadcast(game_id, {
-                        'type': 'countdown',
-                        'time': self.countdown_timers[game_id]
-                    })
-
-                    # Reset countdown when it reaches 0 and game is active
-                    if self.countdown_timers[game_id] <= 0 and self.game_started[game_id]:
-                        self.countdown_timers[game_id] = 15
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            logger.error(f"Countdown error: {e}")
+    async def run_countdown(self, game_id: int):
+        """Run countdown timer for a game (15 seconds)"""
+        count = 15
+        while True:
+            await asyncio.sleep(1)
+            count -= 1
+            if count < 0:
+                count = 15
+            await self.broadcast(game_id, {'type': 'countdown', 'time': count})
+            # If game ended, break
+            game = db.get_game(game_id)
+            if not game or game['status'] == 'completed':
+                break
 
     def disconnect(self, game_id: int, websocket: WebSocket, user_id: int):
-        if game_id in self.game_connections:
-            if websocket in self.game_connections[game_id]:
-                self.game_connections[game_id].remove(websocket)
-            logger.info(f"User {user_id} disconnected from game {game_id}")
+        if game_id in self.active_connections:
+            if websocket in self.active_connections[game_id]:
+                self.active_connections[game_id].remove(websocket)
+            if not self.active_connections[game_id]:
+                del self.active_connections[game_id]
+                # Stop timer if no connections
+                if game_id in self.countdown_timers:
+                    self.countdown_timers[game_id].cancel()
+                    del self.countdown_timers[game_id]
+        logger.info(f"User {user_id} disconnected from game {game_id}")
 
     async def broadcast(self, game_id: int, message: dict):
-        if game_id in self.game_connections:
-            for conn in self.game_connections[game_id][:]:
+        if game_id in self.active_connections:
+            for conn in self.active_connections[game_id][:]:
                 try:
                     await conn.send_json(message)
                 except:
-                    if conn in self.game_connections[game_id]:
-                        self.game_connections[game_id].remove(conn)
-
-    def get_players(self, game_id: int):
-        if game_id not in self.active_games:
-            return []
-        players = []
-        for uid, data in self.active_games[game_id]['players'].items():
-            players.append({
-                'id': uid,
-                'name': data['name'],
-                'card_ids': data['card_ids'],
-                'card_count': len(data['card_ids']),
-                'ready': data['ready'],
-                'total_spent': data['total_spent'],
-                'winner': data['winner'],
-                'cards_won': data['cards_won']
-            })
-        return players
+                    if conn in self.active_connections[game_id]:
+                        self.active_connections[game_id].remove(conn)
 
     async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]):
         """Select multiple cards at once"""
-        if game_id not in self.active_games:
+        game = db.get_game(game_id)
+        if not game:
             return False, "Game not found", 0
+        if game['status'] != 'waiting':
+            return False, "Game already started or ended", 0
 
-        if self.game_started[game_id]:
-            return False, "Game already started", 0
+        user = db.get_user(user_id)
+        if not user:
+            return False, "User not found", 0
 
-        if self.game_winner[game_id]:
-            return False, "This round has ended. Please wait for the next round.", 0
-
-        if user_id not in self.active_games[game_id]['players']:
-            return False, "Player not found", 0
-
-        player = self.active_games[game_id]['players'][user_id]
-
-        # Check if player already has cards
-        if len(player['card_ids']) + len(card_ids) > MAX_CARDS_PER_PLAYER:
+        # Check if player already has cards in this game
+        players = db.get_game_players(game_id)
+        player = next((p for p in players if p['user_id'] == user_id), None)
+        if player and len(player['card_ids']) + len(card_ids) > MAX_CARDS_PER_PLAYER:
             return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0
 
-        # Check if cards are available
-        new_cards = []
-        for card_id in card_ids:
-            if card_id in self.taken_cards[game_id]:
-                return False, f"Card {card_id} already taken", 0
-
-            card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-            if not card_data:
-                return False, f"Card {card_id} not found", 0
-
-            new_cards.append(card_data)
+        # Check if cards are available (not taken by others)
+        taken_cards = set()
+        for p in players:
+            if p['user_id'] != user_id:
+                taken_cards.update(p['card_ids'])
+        for cid in card_ids:
+            if cid in taken_cards:
+                return False, f"Card {cid} already taken", 0
 
         # Calculate total cost
         total_cost = len(card_ids) * CARD_PRICE
 
-        # Check if user has enough balance
-        if player['balance'] < total_cost:
+        # Check balance
+        if user['balance'] < total_cost:
             return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost
 
-        # Mark cards as taken
-        for card_id in card_ids:
-            self.taken_cards[game_id].add(card_id)
+        # Prepare marked numbers for new cards
+        if player:
+            existing_card_ids = player['card_ids']
+            marked = player['marked_numbers']
+        else:
+            existing_card_ids = []
+            marked = {}
 
-        # Add cards to player
-        for card_data in new_cards:
-            player['cards'].append(card_data['card'])
-            player['card_ids'].append(card_data['id'])
-            player['marked'][card_data['id']] = []
+        for cid in card_ids:
+            marked[str(cid)] = []
 
-        player['total_spent'] += total_cost
-        player['balance'] -= total_cost
-        self.active_games[game_id]['total_cards_sold'] += len(card_ids)
+        all_card_ids = existing_card_ids + card_ids
 
-        # Update prize pool
-        self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * CARD_PRICE
+        # Save to DB (upsert)
+        db.add_player_to_game(game_id, user_id, all_card_ids, marked)
+
+        # Update prize pool in game (sum of all cards)
+        total_cards = sum(len(p['card_ids']) for p in db.get_game_players(game_id))
+        prize_pool = total_cards * CARD_PRICE
+        db.update_game_state(game_id, prize_pool=prize_pool)
 
         logger.info(f"User {user_id} selected {len(card_ids)} cards in game {game_id}")
 
@@ -318,22 +236,22 @@ class GameManager:
 
     async def finalize_selection(self, game_id: int, user_id: int):
         """Finalize card selection and deduct balance"""
-        if game_id not in self.active_games:
+        game = db.get_game(game_id)
+        if not game:
             return False, "Game not found"
+        if game['status'] != 'waiting':
+            return False, "Game already started"
 
-        if user_id not in self.active_games[game_id]['players']:
-            return False, "Player not found"
-
-        player = self.active_games[game_id]['players'][user_id]
-
-        if len(player['card_ids']) == 0:
+        players = db.get_game_players(game_id)
+        player = next((p for p in players if p['user_id'] == user_id), None)
+        if not player:
             return False, "No cards selected"
 
         if player['ready']:
             return False, "Already ready"
 
         # Deduct balance from database
-        total_cost = player['total_spent']
+        total_cost = len(player['card_ids']) * CARD_PRICE
         result = db.update_balance(
             user_id=user_id,
             amount=-total_cost,
@@ -348,56 +266,60 @@ class GameManager:
         db.add_active_game(user_id, game_id, player['card_ids'], total_cost)
 
         # Mark player as ready
-        player['ready'] = True
+        db.set_player_ready(game_id, user_id, True)
 
-        # Update player's balance in game state
-        player['balance'] = result['new_balance']
+        # Update prize pool
+        total_cards = sum(len(p['card_ids']) for p in db.get_game_players(game_id))
+        prize_pool = total_cards * CARD_PRICE
+        db.update_game_state(game_id, prize_pool=prize_pool)
 
+        # Broadcast player ready
         await self.broadcast(game_id, {
             'type': 'player_ready',
-            'players': self.get_players(game_id),
+            'players': self._get_player_list(game_id),
             'user_id': user_id,
             'card_count': len(player['card_ids'])
         })
 
         return True, "Ready to play"
 
+    def _get_player_list(self, game_id):
+        players = db.get_game_players(game_id)
+        return [{
+            'id': p['user_id'],
+            'name': p['first_name'] or f"Player{p['user_id']}",
+            'card_count': len(p['card_ids']),
+            'ready': p['ready']
+        } for p in players]
+
     async def start_game(self, game_id: int, user_id: int):
         """Start the game (admin only)"""
         if str(user_id) != ADMIN_USER_ID:
             return False, "Not authorized"
 
-        if game_id not in self.active_games:
+        game = db.get_game(game_id)
+        if not game:
             return False, "Game not found"
-
-        if self.game_started[game_id]:
-            return False, "Game already started"
-
-        if self.game_winner[game_id]:
-            return False, "This round has already ended. Start a new round instead."
+        if game['status'] != 'waiting':
+            return False, "Game already started or ended"
 
         # Check if any players are ready
-        ready_count = sum(1 for p in self.active_games[game_id]['players'].values() if p['ready'])
+        players = db.get_game_players(game_id)
+        ready_count = sum(1 for p in players if p['ready'])
         if ready_count < 1:
             return False, "No players ready"
 
         # Start the game
-        self.game_started[game_id] = True
-        self.game_winner[game_id] = None
-        self.active_games[game_id]['called_numbers'] = []
-        self.countdown_timers[game_id] = 15
+        db.update_game_state(game_id, status='active', called_numbers='[]')
 
         # Start number generation task
-        if self.number_tasks[game_id]:
+        if game_id in self.number_tasks:
             self.number_tasks[game_id].cancel()
-
-        self.number_tasks[game_id] = asyncio.create_task(
-            self.generate_numbers(game_id)
-        )
+        self.number_tasks[game_id] = asyncio.create_task(self.generate_numbers(game_id))
 
         await self.broadcast(game_id, {
             'type': 'game_started',
-            'round': self.round_number[game_id]
+            'round': game['round_number']
         })
         logger.info(f"Game {game_id} started by admin")
 
@@ -406,38 +328,35 @@ class GameManager:
     async def generate_numbers(self, game_id: int):
         """Generate numbers every 2 seconds"""
         try:
-            while game_id in self.active_games and self.game_started[game_id]:
+            while True:
                 await asyncio.sleep(2)
 
-                # Check if game still active
-                if not self.game_started[game_id] or self.game_winner[game_id]:
+                game = db.get_game(game_id)
+                if not game or game['status'] != 'active':
                     break
 
-                available = [n for n in range(1, 76)
-                            if n not in self.active_games[game_id]['called_numbers']]
+                called = json.loads(game['called_numbers'])
+                available = [n for n in range(1, 76) if n not in called]
 
-                if available:
-                    number = random.choice(available)
-                    self.active_games[game_id]['called_numbers'].append(number)
-
-                    # Check for winners
-                    await self.check_winners(game_id, number)
-
-                    await self.broadcast(game_id, {
-                        'type': 'number_called',
-                        'number': number,
-                        'called': self.active_games[game_id]['called_numbers'],
-                        'left': len(available) - 1
-                    })
-                else:
-                    # No more numbers - game over, do NOT reset
-                    self.game_started[game_id] = False
-                    await self.broadcast(game_id, {
-                        'type': 'game_over',
-                        'message': 'All numbers called. No winner this round.'
-                    })
-                    logger.info(f"Game {game_id} ended: all numbers called")
+                if not available:
+                    # No more numbers – game over
+                    await self.broadcast(game_id, {'type': 'game_over', 'message': 'All numbers called'})
+                    db.update_game_state(game_id, status='completed', completed_at=datetime.now())
                     break
+
+                number = random.choice(available)
+                called.append(number)
+                db.update_game_state(game_id, called_numbers=json.dumps(called))
+
+                # Check for winners
+                await self.check_winners(game_id, number)
+
+                await self.broadcast(game_id, {
+                    'type': 'number_called',
+                    'number': number,
+                    'called': called,
+                    'left': len(available) - 1
+                })
 
         except asyncio.CancelledError:
             logger.info(f"Number generation stopped for game {game_id}")
@@ -446,155 +365,159 @@ class GameManager:
 
     async def check_winners(self, game_id: int, last_number: int):
         """Check if anyone won after a number is called"""
-        if game_id not in self.active_games:
+        game = db.get_game(game_id)
+        if not game or game['status'] != 'active' or game['winner_user_id']:
             return
 
-        if self.game_winner[game_id]:
-            return
+        players = db.get_game_players(game_id)
+        called = set(json.loads(game['called_numbers']))
 
-        called = set(self.active_games[game_id]['called_numbers'])
-
-        for user_id, player in self.active_games[game_id]['players'].items():
-            if player['winner'] or not player['ready']:
+        for player in players:
+            if not player['ready']:
                 continue
-
-            for card_idx, card in enumerate(player['cards']):
-                card_id = player['card_ids'][card_idx]
-                marked = set(player['marked'].get(card_id, []))
-
+            card_ids = player['card_ids']
+            marked_dict = player['marked_numbers']
+            for card_id in card_ids:
+                marked = set(marked_dict.get(str(card_id), []))
+                # Get card from JSON
+                card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+                if not card_data:
+                    continue
+                card = card_data['card']
                 # Add FREE space
                 if card[2][2] == 'FREE':
                     marked.add('FREE')
-
-                # Check for bingo
-                if self.check_card_bingo(card, marked):
-                    await self.declare_winner(game_id, user_id, card_id, last_number)
+                if self._check_card_bingo(card, marked):
+                    await self.declare_winner(game_id, player['user_id'], card_id, last_number)
                     return
 
-    def check_card_bingo(self, card, marked):
+    def _check_card_bingo(self, card, marked):
         """Check if a single card has bingo"""
-        # Check rows
+        # rows
         for row in range(5):
-            bingo = True
-            for col in range(5):
-                val = card[col][row]
-                if val != 'FREE' and val not in marked:
-                    bingo = False
-                    break
-            if bingo:
+            if all(card[col][row] == 'FREE' or card[col][row] in marked for col in range(5)):
                 return True
-
-        # Check columns
+        # columns
         for col in range(5):
-            bingo = True
-            for row in range(5):
-                val = card[col][row]
-                if val != 'FREE' and val not in marked:
-                    bingo = False
-                    break
-            if bingo:
+            if all(card[col][row] == 'FREE' or card[col][row] in marked for row in range(5)):
                 return True
-
-        # Check diagonals
-        diag1 = True
-        diag2 = True
-        for i in range(5):
-            val1 = card[i][i]
-            val2 = card[4-i][i]
-
-            if val1 != 'FREE' and val1 not in marked:
-                diag1 = False
-            if val2 != 'FREE' and val2 not in marked:
-                diag2 = False
-
-        return diag1 or diag2
+        # diagonals
+        if all(card[i][i] == 'FREE' or card[i][i] in marked for i in range(5)):
+            return True
+        if all(card[i][4-i] == 'FREE' or card[i][4-i] in marked for i in range(5)):
+            return True
+        return False
 
     async def declare_winner(self, game_id: int, user_id: int, card_id: int, winning_number: int):
         """Declare winner and stop the game"""
-        if game_id not in self.active_games:
+        game = db.get_game(game_id)
+        if not game or game['winner_user_id']:
             return
 
-        if self.game_winner[game_id]:
+        player = next((p for p in db.get_game_players(game_id) if p['user_id'] == user_id), None)
+        if not player:
             return
 
-        player = self.active_games[game_id]['players'][user_id]
-        player['winner'] = True
-        player['cards_won'] += 1
-
-        self.game_winner[game_id] = {
-            'user_id': user_id,
-            'name': player['name'],
-            'card_id': card_id,
-            'winning_number': winning_number,
-            'round': self.round_number[game_id]
-        }
-
-        self.game_started[game_id] = False
-
-        # Calculate prize (90% of pool, 10% house)
-        prize_pool = self.active_games[game_id]['prize_pool']
+        # Calculate prize (90% of pool)
+        prize_pool = game['prize_pool']
         winner_prize = int(prize_pool * 0.9)
         house_fee = prize_pool - winner_prize
+
+        # Update game state
+        db.update_game_state(
+            game_id,
+            status='completed',
+            winner_user_id=user_id,
+            winner_card_id=card_id,
+            winning_number=winning_number,
+            completed_at=datetime.now()
+        )
 
         # Add prize to winner's balance
         db.update_balance(
             user_id=user_id,
             amount=winner_prize,
             transaction_type='game_win',
-            description=f'Won round {self.round_number[game_id]} in game #{game_id} with card #{card_id}'
+            description=f'Won round {game["round_number"]} in game #{game_id} with card #{card_id}'
         )
-
-        # Update player's balance in game state
-        player['balance'] += winner_prize
 
         # Broadcast winner
         await self.broadcast(game_id, {
             'type': 'game_won',
-            'winner': self.game_winner[game_id],
+            'winner': {
+                'user_id': user_id,
+                'name': player.get('first_name') or f"Player{user_id}",
+                'card_id': card_id,
+                'winning_number': winning_number,
+                'round': game['round_number']
+            },
             'prize': winner_prize / 100,
             'house_fee': house_fee / 100
         })
 
-        # End the game in the database
-        db.end_game(game_id, winner=f"{player['name']} (user {user_id})")
-        logger.info(f"Game {game_id} winner: {player['name']} with card #{card_id}, prize: {winner_prize/100} ETB (recorded in DB)")
+        logger.info(f"Game {game_id} winner: {player.get('first_name')} with card #{card_id}, prize: {winner_prize/100} ETB")
 
         # Cancel number generation
-        if self.number_tasks[game_id]:
+        if game_id in self.number_tasks:
             self.number_tasks[game_id].cancel()
-            self.number_tasks[game_id] = None
+            del self.number_tasks[game_id]
 
-    def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
+    async def start_new_round(self, old_game_id: int):
+        """Create a new game (next round) and notify players"""
+        old_game = db.get_game(old_game_id)
+        if not old_game:
+            return None
+
+        # Create new game with incremented round number
+        new_round = old_game['round_number'] + 1
+        new_game_id = db.create_game(round_number=new_round)
+
+        # Get players from old game
+        players = db.get_game_players(old_game_id)
+
+        # Notify each player via Telegram (you'll need to implement this)
+        # For simplicity, we'll just log
+        logger.info(f"New round {new_round} created with game ID {new_game_id}")
+
+        return new_game_id
+
+    async def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
         """Mark number on a specific card"""
-        if game_id not in self.active_games:
+        game = db.get_game(game_id)
+        if not game or game['status'] != 'active':
             return False
 
-        if not self.game_started[game_id]:
+        # Check if number is called
+        called = set(json.loads(game['called_numbers']))
+        if number not in called:
             return False
 
-        if self.game_winner[game_id]:
+        # Get player
+        players = db.get_game_players(game_id)
+        player = next((p for p in players if p['user_id'] == user_id), None)
+        if not player:
             return False
 
-        if user_id not in self.active_games[game_id]['players']:
+        marked_dict = player['marked_numbers']
+        marked_list = marked_dict.get(str(card_id), [])
+        if number in marked_list:
             return False
 
-        player = self.active_games[game_id]['players'][user_id]
+        marked_list.append(number)
+        marked_dict[str(card_id)] = marked_list
 
-        if card_id not in player['marked']:
-            return False
+        # Update DB
+        db.update_player_marked(game_id, user_id, card_id, marked_list)
 
-        if number in player['marked'][card_id]:
-            return False
-
-        player['marked'][card_id].append(number)
         return True
 
     async def get_user_stats(self, user_id: int):
         """Get user statistics"""
-        user = db.get_or_create_user(user_id)
+        user = db.get_user(user_id)
+        if not user:
+            return {}
         active_games = db.get_active_games_count(user_id)
         total_stake = db.get_total_stake(user_id)
-
         return {
             'balance': user['balance'] / 100,
             'active_games': active_games,
@@ -603,6 +526,7 @@ class GameManager:
             'games_won': user['games_won']
         }
 
+# Global game manager instance
 game_manager = GameManager()
 
 @app.get("/")
@@ -613,17 +537,12 @@ async def root():
         "price_per_card": CARD_PRICE / 100,
         "max_cards_per_player": MAX_CARDS_PER_PLAYER,
         "welcome_bonus": WELCOME_BONUS / 100,
-        "endpoints": ["/game", "/health", "/api/cards", "/api/user/{user_id}", "/api/current-game"]
+        "endpoints": ["/game", "/health", "/api/cards", "/api/user/{user_id}"]
     }
 
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
-
-@app.get("/api/current-game")
-async def current_game():
-    """Return the current (latest) game ID"""
-    return {"game_id": game_manager.get_current_game_id()}
 
 @app.get("/api/cards")
 async def get_cards():
@@ -664,6 +583,10 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
     active_games = db.get_active_games_count(user_id)
     total_stake = db.get_total_stake(user_id)
 
+    # Get current round for this game
+    game = db.get_game(game_id)
+    current_round = game['round_number'] if game else 1
+
     return templates.TemplateResponse("bingo.html", {
         "request": request,
         "user_id": user_id,
@@ -675,7 +598,8 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "welcome_bonus": WELCOME_BONUS / 100,
         "initial_balance": user['balance'] / 100,
         "initial_active_games": active_games,
-        "initial_stake": total_stake / 100
+        "initial_stake": total_stake / 100,
+        "initial_round": current_round
     })
 
 @app.websocket("/ws/{game_id}/{user_id}")
@@ -734,30 +658,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'message': message
                 })
 
-            elif data['type'] == 'new_round':
-                # Admin only: create a new game and redirect all players
-                if str(user_id) != ADMIN_USER_ID:
-                    await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
-                    continue
-
-                # End the current game in DB
-                db.end_game(game_id, winner="Game ended for new round")
-
-                # Create a new game
-                new_game_id = game_manager.create_new_game()
-                redirect_url = f"{BASE_URL}/game?user_id={{user_id}}&game_id={new_game_id}&admin_id={ADMIN_USER_ID}"
-                await game_manager.broadcast(game_id, {
-                    'type': 'redirect',
-                    'url': redirect_url
-                })
-                # Also redirect the admin (this connection)
-                await websocket.send_json({
-                    'type': 'redirect',
-                    'url': redirect_url.replace('{user_id}', str(user_id))
-                })
-
             elif data['type'] == 'mark_number':
-                success = game_manager.mark_number(
+                success = await game_manager.mark_number(
                     game_id, user_id, data['card_id'], data['number']
                 )
                 if success:
@@ -777,6 +679,19 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             elif data['type'] == 'ping':
                 await websocket.send_json({'type': 'pong'})
 
+            elif data['type'] == 'start_next_round':
+                if str(user_id) == ADMIN_USER_ID:
+                    new_game_id = await game_manager.start_new_round(game_id)
+                    if new_game_id:
+                        await websocket.send_json({
+                            'type': 'redirect',
+                            'url': f"/game?user_id={ADMIN_USER_ID}&game_id={new_game_id}"
+                        })
+                    else:
+                        await websocket.send_json({'type': 'error', 'message': 'Could not create new round'})
+                else:
+                    await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
+
     except WebSocketDisconnect:
         game_manager.disconnect(game_id, websocket, user_id)
         logger.info(f"User {user_id} disconnected")
@@ -785,7 +700,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
 
 @app.post("/api/join-game")
 async def join_game(request: Request):
-    """Deduct card costs when player finalizes selection"""
+    """Deduct card costs when player finalizes selection (already handled via WebSocket)"""
+    # This endpoint might be deprecated, but keep for backward compatibility
     data = await request.json()
     user_id = data.get('user_id')
     game_id = data.get('game_id')
@@ -824,19 +740,27 @@ async def join_game(request: Request):
 
 @app.get("/api/game-state/{game_id}")
 async def get_game_state(game_id: int):
-    if game_id in game_manager.active_games:
-        game = game_manager.active_games[game_id]
-        return {
-            'players': game_manager.get_players(game_id),
-            'started': game_manager.game_started.get(game_id, False),
-            'winner': game_manager.game_winner.get(game_id),
-            'round': game_manager.round_number.get(game_id, 1),
-            'called_numbers': game['called_numbers'],
-            'prize_pool': game['prize_pool'] / 100,
-            'total_cards': game['total_cards_sold'],
-            'countdown': game_manager.countdown_timers.get(game_id, 15)
-        }
-    return {'error': 'Game not found'}
+    game = db.get_game(game_id)
+    if not game:
+        return {'error': 'Game not found'}
+    players = db.get_game_players(game_id)
+    player_list = [{
+        'id': p['user_id'],
+        'name': p['first_name'] or f"Player{p['user_id']}",
+        'card_count': len(p['card_ids']),
+        'ready': p['ready']
+    } for p in players]
+
+    return {
+        'players': player_list,
+        'started': game['status'] == 'active',
+        'winner': game['winner_user_id'],
+        'round': game['round_number'],
+        'called_numbers': json.loads(game['called_numbers']) if game['called_numbers'] else [],
+        'prize_pool': game['prize_pool'] / 100 if game['prize_pool'] else 0,
+        'total_cards': sum(len(p['card_ids']) for p in players),
+        'countdown': 15  # not stored, but broadcast via timer
+    }
 
 if __name__ == "__main__":
     import uvicorn
