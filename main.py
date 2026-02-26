@@ -87,11 +87,11 @@ def generate_patterns():
     """Return a list of 100 pattern dicts with name and positions."""
     patterns = []
 
-    # 1. Standard (any row, column, or diagonal) – we'll treat as special case ID 1
+    # 1. Standard (any row, column, or diagonal)
     patterns.append({
         "name": "Standard",
         "description": "Any row, column, or diagonal",
-        "positions": "standard"  # special marker for code
+        "positions": "standard"
     })
 
     # 2. Four Corners
@@ -235,10 +235,7 @@ def generate_patterns():
         "positions": u_shape
     })
 
-    # 18. Staggered (checkerboard) – we'll add more variations later
-
-    # Generate remaining patterns programmatically (e.g., all rows, columns, and some combinations)
-    # For simplicity, we'll duplicate some and rename to reach 100.
+    # Generate remaining patterns programmatically
     base = patterns.copy()
     while len(patterns) < 100:
         for p in base:
@@ -260,9 +257,7 @@ def init_patterns():
     patterns = generate_patterns()
     for p in patterns:
         positions = p["positions"]
-        # Special handling for "standard" and "blackout"
         if isinstance(positions, str):
-            # store as JSON string with special marker
             positions_json = json.dumps({"type": positions})
         else:
             positions_json = json.dumps(positions)
@@ -330,10 +325,6 @@ def reset_round(game_id: int):
 def check_bingo(card_data, called_numbers_set, pattern_data):
     """
     Return True if the card meets the pattern requirements.
-    pattern_data can be:
-      - list of [row, col] positions that must be marked
-      - dict with {"type": "standard"} for any row/col/diag
-      - dict with {"type": "blackout"} for all cells
     """
     if isinstance(pattern_data, dict):
         if pattern_data.get("type") == "standard":
@@ -353,7 +344,6 @@ def check_bingo(card_data, called_numbers_set, pattern_data):
                 return True
             return False
         elif pattern_data.get("type") == "blackout":
-            # All cells must be marked
             for row in range(5):
                 for col in range(5):
                     val = card_data[col][row]
@@ -508,6 +498,22 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                         await ws.send_json({"type": "pattern_changed", "pattern_id": pattern_id, "pattern_name": pattern_name})
                     except:
                         pass
+
+            # ==================== NEW: START GAME HANDLER ====================
+            elif msg_type == "start_game":
+                if user_id != ADMIN_ID:
+                    await websocket.send_json({"type": "error", "message": "Not authorized"})
+                    continue
+                cursor.execute("UPDATE games SET started = 1 WHERE id = ?", (game_id,))
+                conn.commit()
+                # Broadcast to all
+                for ws in connections.get(game_id, []):
+                    try:
+                        await ws.send_json({"type": "game_started"})
+                    except:
+                        pass
+                await websocket.send_json({"type": "start_game", "success": True})
+                logger.info(f"Game {game_id} started by admin {user_id}")
 
             elif msg_type == "winner":
                 # Admin can manually trigger winner (for testing)
