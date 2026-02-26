@@ -32,7 +32,7 @@ cursor = conn.cursor()
 
 PRICE_PER_CARD = 10
 HOUSE_COMMISSION_PERCENT = 20
-ADMIN_ID = int(os.getenv('ADMIN_ID', '123456789'))  # 🔥 Your Telegram admin ID
+ADMIN_ID = int(os.getenv('ADMIN_ID', '123456789'))  # 🔥 Set your Telegram admin ID
 
 # ==========================
 # CREATE TABLES (with pattern support)
@@ -235,7 +235,7 @@ def generate_patterns():
         "positions": u_shape
     })
 
-    # Generate remaining patterns programmatically
+    # Generate remaining patterns to reach 100
     base = patterns.copy()
     while len(patterns) < 100:
         for p in base:
@@ -439,6 +439,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type")
+            logger.info(f"Received {msg_type} from user {user_id} in game {game_id}")
 
             if msg_type == "select_cards":
                 card_ids = data["card_ids"]
@@ -499,21 +500,30 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     except:
                         pass
 
-            # ==================== NEW: START GAME HANDLER ====================
             elif msg_type == "start_game":
+                # Admin only
                 if user_id != ADMIN_ID:
-                    await websocket.send_json({"type": "error", "message": "Not authorized"})
+                    await websocket.send_json({"type": "error", "message": "You are not authorized to start the game"})
                     continue
-                cursor.execute("UPDATE games SET started = 1 WHERE id = ?", (game_id,))
-                conn.commit()
-                # Broadcast to all
-                for ws in connections.get(game_id, []):
-                    try:
-                        await ws.send_json({"type": "game_started"})
-                    except:
-                        pass
-                await websocket.send_json({"type": "start_game", "success": True})
-                logger.info(f"Game {game_id} started by admin {user_id}")
+
+                try:
+                    cursor.execute("UPDATE games SET started = 1 WHERE id = ?", (game_id,))
+                    conn.commit()
+                    logger.info(f"Game {game_id} started by admin {user_id}")
+
+                    # Broadcast to all players
+                    for ws in connections.get(game_id, []):
+                        try:
+                            await ws.send_json({"type": "game_started"})
+                        except:
+                            pass
+
+                    # Confirm to admin
+                    await websocket.send_json({"type": "start_game", "success": True})
+
+                except Exception as e:
+                    logger.error(f"Failed to start game {game_id}: {e}")
+                    await websocket.send_json({"type": "error", "message": "Database error, could not start game"})
 
             elif msg_type == "winner":
                 # Admin can manually trigger winner (for testing)
@@ -543,8 +553,11 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             elif msg_type == "ping":
                 await websocket.send_json({"type": "pong"})
 
+            else:
+                logger.warning(f"Unknown message type: {msg_type}")
+
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error for user {user_id} in game {game_id}: {e}")
     finally:
         if websocket in connections.get(game_id, []):
             connections[game_id].remove(websocket)
