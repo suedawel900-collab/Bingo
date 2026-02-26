@@ -67,37 +67,7 @@ class Database:
                 )
             ''')
             
-            # Games table – each round is a separate game
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS games (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    round_number INTEGER DEFAULT 1,
-                    status TEXT DEFAULT 'waiting',   -- waiting, active, completed
-                    called_numbers TEXT DEFAULT '[]',
-                    winner_user_id INTEGER,
-                    winner_card_id INTEGER,
-                    winning_number INTEGER,
-                    prize_pool INTEGER DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    completed_at TIMESTAMP
-                )
-            ''')
-            
-            # Game players – cards selected per player per game
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS game_players (
-                    game_id INTEGER,
-                    user_id INTEGER,
-                    card_ids TEXT,          -- JSON array
-                    marked_numbers TEXT,    -- JSON dict card_id -> list
-                    ready BOOLEAN DEFAULT 0,
-                    FOREIGN KEY(game_id) REFERENCES games(id),
-                    FOREIGN KEY(user_id) REFERENCES users(user_id),
-                    PRIMARY KEY (game_id, user_id)
-                )
-            ''')
-            
-            # Active games tracking (for user dashboard, maybe redundant now)
+            # Active games tracking
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS active_games (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,8 +155,6 @@ class Database:
             # Create indexes
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_games_status ON games(status)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_game_players_game_id ON game_players(game_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_active_games_user_id ON active_games(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_payment_requests_user_id ON payment_requests(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_user_id ON withdrawal_requests(user_id)')
@@ -234,116 +202,6 @@ class Database:
             
             conn.commit()
             logger.info("✅ Default payment methods inserted")
-    
-    # ==================== GAME METHODS ====================
-    
-    def create_game(self, round_number=1):
-        """Create a new game record and return its ID."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO games (round_number, status, called_numbers)
-                VALUES (?, ?, ?)
-            ''', (round_number, 'waiting', '[]'))
-            conn.commit()
-            return cursor.lastrowid
-    
-    def get_game(self, game_id):
-        """Get game by ID."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM games WHERE id = ?', (game_id,))
-            row = cursor.fetchone()
-            return dict(row) if row else None
-    
-    def get_active_game(self):
-        """Get the latest waiting or active game."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT * FROM games
-                WHERE status IN ('waiting', 'active')
-                ORDER BY created_at DESC LIMIT 1
-            ''')
-            row = cursor.fetchone()
-            return dict(row) if row else None
-    
-    def update_game_state(self, game_id, **kwargs):
-        """Update game fields (called_numbers, status, winner, etc.)."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            fields = []
-            values = []
-            for key, val in kwargs.items():
-                if key in ('called_numbers', 'status', 'winner_user_id', 'winner_card_id', 'winning_number', 'prize_pool', 'completed_at'):
-                    # Convert lists/dicts to JSON if needed
-                    if isinstance(val, (list, dict)):
-                        val = json.dumps(val)
-                    fields.append(f"{key} = ?")
-                    values.append(val)
-            if not fields:
-                return
-            values.append(game_id)
-            cursor.execute(f'UPDATE games SET {", ".join(fields)} WHERE id = ?', values)
-            conn.commit()
-            return cursor.rowcount > 0
-    
-    def add_player_to_game(self, game_id, user_id, card_ids, marked_numbers=None):
-        """Add or update player in a game."""
-        if marked_numbers is None:
-            marked_numbers = {}
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT OR REPLACE INTO game_players (game_id, user_id, card_ids, marked_numbers)
-                VALUES (?, ?, ?, ?)
-            ''', (game_id, user_id, json.dumps(card_ids), json.dumps(marked_numbers)))
-            conn.commit()
-    
-    def get_game_players(self, game_id):
-        """Get all players in a game with their card data."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT gp.*, u.first_name, u.username
-                FROM game_players gp
-                JOIN users u ON gp.user_id = u.user_id
-                WHERE gp.game_id = ?
-            ''', (game_id,))
-            rows = cursor.fetchall()
-            players = []
-            for row in rows:
-                player = dict(row)
-                player['card_ids'] = json.loads(player['card_ids'])
-                player['marked_numbers'] = json.loads(player['marked_numbers'])
-                players.append(player)
-            return players
-    
-    def set_player_ready(self, game_id, user_id, ready=True):
-        """Set player ready status."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE game_players SET ready = ? WHERE game_id = ? AND user_id = ?
-            ''', (1 if ready else 0, game_id, user_id))
-            conn.commit()
-            return cursor.rowcount > 0
-    
-    def update_player_marked(self, game_id, user_id, card_id, marked_list):
-        """Update marked numbers for a specific card."""
-        # First get current marked dict
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT marked_numbers FROM game_players WHERE game_id = ? AND user_id = ?', (game_id, user_id))
-            row = cursor.fetchone()
-            if not row:
-                return False
-            marked = json.loads(row[0])
-            marked[str(card_id)] = marked_list
-            cursor.execute('UPDATE game_players SET marked_numbers = ? WHERE game_id = ? AND user_id = ?',
-                           (json.dumps(marked), game_id, user_id))
-            conn.commit()
-            return True
     
     # ==================== USER METHODS ====================
     
@@ -540,6 +398,32 @@ class Database:
             ''', (user_id, game_id))
             conn.commit()
             return cursor.rowcount > 0
+    
+    # ==================== NEW METHODS FOR WINNER PAYOUT ====================
+    
+    def get_total_cards_for_game(self, game_id):
+        """Sum of card counts for all active games in this game_id"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT COALESCE(SUM(json_array_length(card_ids)), 0) as total_cards
+                FROM active_games
+                WHERE game_id = ? AND status = 'active'
+            ''', (game_id,))
+            row = cursor.fetchone()
+            return row['total_cards'] if row else 0
+    
+    def complete_all_games_for_round(self, game_id):
+        """Mark all active games for this game as completed"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE active_games
+                SET status = 'completed'
+                WHERE game_id = ? AND status = 'active'
+            ''', (game_id,))
+            conn.commit()
+            return cursor.rowcount
     
     # ==================== PAYMENT METHODS ====================
     
@@ -772,7 +656,20 @@ class Database:
             
             return cursor.rowcount > 0
     
-    # ==================== TRANSACTIONS ====================
+    # ==================== GAME METHODS ====================
+    
+    def get_active_game(self):
+        """Get active game"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM games 
+                WHERE status IN ('waiting', 'active')
+                ORDER BY created_at DESC
+                LIMIT 1
+            ''')
+            row = cursor.fetchone()
+            return dict(row) if row else None
     
     def get_user_transactions(self, user_id, limit=10, offset=0, status=None):
         """Get user transactions"""
