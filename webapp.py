@@ -475,10 +475,14 @@ class GameManager:
         # Get players from old game
         players = db.get_game_players(old_game_id)
 
-        # Notify each player via Telegram (you'll need to implement this)
-        # For simplicity, we'll just log
-        logger.info(f"New round {new_round} created with game ID {new_game_id}")
+        # Broadcast reset message to all connected clients
+        await self.broadcast(old_game_id, {
+            'type': 'game_reset',
+            'round': new_round,
+            'players': []  # Players will need to reselect cards
+        })
 
+        logger.info(f"New round {new_round} created with game ID {new_game_id}")
         return new_game_id
 
     async def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
