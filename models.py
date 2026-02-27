@@ -3,10 +3,11 @@ import os
 import sqlite3
 import json
 import threading
+import random  # 👈 IMPORTANT: Add this import!
+import uuid
 from datetime import datetime
 from contextlib import contextmanager
 import logging
-import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class Database:
         self.db_path = 'bingo.db'
         self._create_tables()
         self._insert_default_payment_methods()
-        self._insert_bingo_patterns()
+        self._insert_bingo_patterns()  # This will now work with random imported
         logger.info(f"✅ Database initialized at {self.db_path}")
     
     @contextmanager
@@ -152,7 +153,7 @@ class Database:
                 )
             ''')
             
-            # Bingo patterns table
+            # Bingo patterns table - FIXED: Ensure this table is created
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS patterns (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -232,12 +233,14 @@ class Database:
             logger.info("✅ Ethiopian payment methods inserted")
     
     def _insert_bingo_patterns(self):
-        """Insert 100 bingo patterns"""
+        """Insert 100 bingo patterns - FIXED with random import"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
+            # Check if patterns already exist
             cursor.execute('SELECT COUNT(*) as count FROM patterns')
             if cursor.fetchone()['count'] > 0:
+                logger.info(f"✅ Patterns already exist, skipping insertion")
                 return
             
             patterns = [
@@ -264,7 +267,7 @@ class Database:
                 {"name": "Smiley Face", "description": "Mark a smiley face pattern", "positions": json.dumps([[1,1], [1,3], [3,0], [3,1], [3,2], [3,3], [3,4], [4,2]])}
             ]
             
-            # Add 80 more patterns
+            # Add 80 more random patterns
             for i in range(20, 100):
                 pattern_type = random.choice(["row", "column", "diagonal", "cross", "letter", "shape"])
                 if pattern_type == "row":
@@ -299,6 +302,7 @@ class Database:
                     "positions": positions
                 })
             
+            # Insert all patterns
             for p in patterns:
                 cursor.execute('''
                     INSERT INTO patterns (name, description, positions)
@@ -311,7 +315,7 @@ class Database:
     # ==================== PAYMENT METHOD METHODS ====================
     
     def get_payment_methods(self, type=None, active_only=True):
-        """Get payment methods - FIXED METHOD"""
+        """Get payment methods"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -613,5 +617,8 @@ class Database:
             
             cursor.execute('SELECT COUNT(*) as count FROM payment_requests WHERE status = "pending"')
             stats['pending_payments'] = cursor.fetchone()['count']
+            
+            cursor.execute('SELECT COUNT(*) as count FROM patterns')
+            stats['total_patterns'] = cursor.fetchone()['count']
             
             return stats
