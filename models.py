@@ -3,7 +3,7 @@ import os
 import sqlite3
 import json
 import threading
-import random  # 👈 IMPORTANT: Add this import!
+import random
 import uuid
 from datetime import datetime
 from contextlib import contextmanager
@@ -28,7 +28,7 @@ class Database:
         self.db_path = 'bingo.db'
         self._create_tables()
         self._insert_default_payment_methods()
-        self._insert_bingo_patterns()  # This will now work with random imported
+        self._insert_bingo_patterns()
         logger.info(f"✅ Database initialized at {self.db_path}")
     
     @contextmanager
@@ -65,6 +65,33 @@ class Database:
                     welcome_bonus_amount INTEGER DEFAULT 1000,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Games table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS games (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    round INTEGER DEFAULT 1,
+                    started INTEGER DEFAULT 0,
+                    called_numbers TEXT DEFAULT '[]',
+                    pattern_id INTEGER DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # User Cards table - THIS WAS MISSING!
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_cards (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    game_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    card_id INTEGER NOT NULL,
+                    card_data TEXT NOT NULL,
+                    marked_numbers TEXT DEFAULT '[]',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (game_id) REFERENCES games(id),
+                    FOREIGN KEY (user_id) REFERENCES users(user_id)
                 )
             ''')
             
@@ -153,7 +180,7 @@ class Database:
                 )
             ''')
             
-            # Bingo patterns table - FIXED: Ensure this table is created
+            # Bingo patterns table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS patterns (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -170,6 +197,15 @@ class Database:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_active_games_user_id ON active_games(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_payment_requests_user_id ON payment_requests(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_withdrawal_requests_user_id ON withdrawal_requests(user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_cards_game ON user_cards(game_id, user_id)')
+            
+            # Insert default game if none exists
+            cursor.execute('SELECT COUNT(*) as count FROM games')
+            if cursor.fetchone()['count'] == 0:
+                cursor.execute('''
+                    INSERT INTO games (id, round, started, called_numbers, pattern_id)
+                    VALUES (1, 1, 0, '[]', 1)
+                ''')
             
             conn.commit()
             logger.info("✅ Database tables created/verified")
@@ -233,7 +269,7 @@ class Database:
             logger.info("✅ Ethiopian payment methods inserted")
     
     def _insert_bingo_patterns(self):
-        """Insert 100 bingo patterns - FIXED with random import"""
+        """Insert 100 bingo patterns"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -353,7 +389,6 @@ class Database:
     
     def get_primary_account(self, method_id):
         """Get primary account for payment method"""
-        # For now, return None - accounts not implemented
         return None
     
     # ==================== PAYMENT REQUEST METHODS ====================
@@ -621,4 +656,55 @@ class Database:
             cursor.execute('SELECT COUNT(*) as count FROM patterns')
             stats['total_patterns'] = cursor.fetchone()['count']
             
+            cursor.execute('SELECT COUNT(*) as count FROM games')
+            stats['total_games'] = cursor.fetchone()['count']
+            
             return stats
+    
+    # ==================== GAME METHODS ====================
+    
+    def save_user_card(self, game_id, user_id, card_id, card_data):
+        """Save a user's card"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO user_cards (game_id, user_id, card_id, card_data, marked_numbers)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (game_id, user_id, card_id, json.dumps(card_data), json.dumps([])))
+            conn.commit()
+            return cursor.lastrowid
+    
+    def get_user_cards(self, game_id, user_id):
+        """Get all cards for a user in a game"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT card_id, card_data, marked_numbers 
+                FROM user_cards 
+                WHERE game_id = ? AND user_id = ?
+                ORDER BY card_id
+            ''', (game_id, user_id))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    def update_marked_numbers(self, game_id, user_id, card_id, marked_numbers):
+        """Update marked numbers for a card"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE user_cards 
+                SET marked_numbers = ?
+                WHERE game_id = ? AND user_id = ? AND card_id = ?
+            ''', (json.dumps(marked_numbers), game_id, user_id, card_id))
+            conn.commit()
+            return cursor.rowcount > 0
+    
+    def get_taken_cards(self, game_id):
+        """Get all taken card IDs for a game"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT card_id FROM user_cards WHERE game_id = ?
+            ''', (game_id,))
+            rows = cursor.fetchall()
+            return [row['card_id'] for row in rows]
