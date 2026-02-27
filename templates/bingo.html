@@ -15,7 +15,7 @@
             padding: 10px;
         }
         .game-container {
-            max-width: 700px;
+            max-width: 750px;
             width: 100%;
             background: white;
             border-radius: 20px;
@@ -29,17 +29,17 @@
             text-align: center;
             position: relative;
         }
-        .header h1 { font-size: 28px; margin-bottom: 5px; }
-        .header p { font-size: 12px; opacity: 0.9; }
+        .header h1 { font-size: 32px; margin-bottom: 5px; }
+        .header p { font-size: 14px; opacity: 0.9; }
         
         /* Connection Status */
         .connection-status {
             position: absolute;
             top: 10px;
             right: 10px;
-            padding: 4px 8px;
+            padding: 5px 10px;
             border-radius: 20px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
             background: #4CAF50;
             color: white;
@@ -56,18 +56,18 @@
             align-items: center;
             background: #2c3e50;
             color: white;
-            padding: 10px 15px;
+            padding: 12px 15px;
         }
         .status-item {
             text-align: center;
         }
         .status-label {
-            font-size: 10px;
+            font-size: 11px;
             opacity: 0.7;
         }
         .status-value {
             font-weight: bold;
-            font-size: 16px;
+            font-size: 18px;
         }
         .status-value.green { color: #4CAF50; }
         .status-value.blue { color: #64b5f6; }
@@ -77,7 +77,7 @@
         .pattern-bar {
             background: #ffd700;
             color: #333;
-            padding: 8px 15px;
+            padding: 10px 15px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -86,9 +86,9 @@
         .pattern-name {
             background: #333;
             color: #ffd700;
-            padding: 3px 10px;
+            padding: 4px 12px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 13px;
         }
         
         /* Game Info Bar */
@@ -106,7 +106,7 @@
             gap: 8px;
         }
         .info-value {
-            font-size: 20px;
+            font-size: 22px;
             font-weight: bold;
         }
         .prize-value {
@@ -117,16 +117,16 @@
         .reconnect-bar {
             background: #ff9800;
             color: white;
-            padding: 10px;
+            padding: 12px;
             text-align: center;
-            font-size: 14px;
+            font-size: 15px;
             display: none;
         }
         .reconnect-bar button {
             background: white;
             color: #ff9800;
             border: none;
-            padding: 5px 15px;
+            padding: 6px 18px;
             border-radius: 20px;
             font-weight: bold;
             cursor: pointer;
@@ -143,7 +143,7 @@
         /* Left Column - Card Selection */
         .left-column {
             flex: 1;
-            max-width: 300px;
+            max-width: 320px;
         }
         
         .section-title {
@@ -158,55 +158,65 @@
         .refresh-icon {
             cursor: pointer;
             font-size: 18px;
+            padding: 5px;
+        }
+        .refresh-icon:hover {
+            background: #f0f0f0;
+            border-radius: 50%;
         }
         
         /* Selected Cards List */
         .selected-cards {
             background: #fff3e0;
             border-radius: 10px;
-            padding: 10px;
+            padding: 12px;
             margin-bottom: 15px;
-            max-height: 200px;
+            max-height: 220px;
             overflow-y: auto;
-            border: 1px solid #ffb74d;
+            border: 2px solid #ffb74d;
         }
         .selected-header {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             font-weight: bold;
             color: #e65100;
+            font-size: 15px;
         }
         .selected-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 6px 10px;
+            padding: 8px 12px;
             background: white;
-            border-radius: 6px;
-            margin-bottom: 5px;
-            border-left: 3px solid #ff9800;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            border-left: 4px solid #ff9800;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .selected-number {
             font-weight: bold;
             color: #e65100;
+            font-size: 15px;
         }
         .selected-price {
             color: #4CAF50;
-            font-size: 12px;
+            font-size: 13px;
+            font-weight: bold;
         }
         .remove-btn {
             background: #dc3545;
             color: white;
             border: none;
-            width: 20px;
-            height: 20px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-weight: bold;
         }
         .remove-btn:hover {
             background: #c82333;
@@ -215,9 +225,10 @@
             text-align: right;
             font-weight: bold;
             color: #e65100;
-            margin-top: 8px;
+            margin-top: 10px;
             padding-top: 8px;
-            border-top: 1px solid #ffb74d;
+            border-top: 2px solid #ffb74d;
+            font-size: 16px;
         }
         
         /* Card Grid */
@@ -225,11 +236,11 @@
             display: grid;
             grid-template-columns: repeat(10, 1fr);
             gap: 2px;
-            max-height: 300px;
+            max-height: 320px;
             overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 5px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            padding: 8px;
             background: #f8f9fa;
         }
         .card-btn {
@@ -237,8 +248,8 @@
             background: #667eea;
             color: white;
             border: none;
-            border-radius: 3px;
-            font-size: 9px;
+            border-radius: 4px;
+            font-size: 10px;
             cursor: pointer;
             transition: all 0.2s;
             font-weight: bold;
@@ -265,12 +276,13 @@
         }
         .action-btn {
             flex: 1;
-            padding: 10px;
+            padding: 12px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.2s;
+            font-size: 15px;
         }
         .confirm-btn {
             background: #4CAF50;
@@ -301,11 +313,11 @@
         /* Current Card Display */
         .current-card {
             background: #f8f9fa;
-            border-radius: 10px;
+            border-radius: 12px;
             padding: 15px;
             margin-bottom: 15px;
-            border: 2px solid #667eea;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border: 3px solid #667eea;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
         .card-title {
             font-size: 18px;
@@ -320,7 +332,7 @@
             background: #667eea;
             color: white;
             padding: 5px 15px;
-            border-radius: 20px;
+            border-radius: 25px;
             font-size: 16px;
         }
         .bingo-grid {
@@ -336,7 +348,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.2s;
@@ -359,28 +371,28 @@
         .called-numbers {
             background: #f0f0f0;
             border-radius: 10px;
-            padding: 10px;
+            padding: 12px;
             margin-bottom: 15px;
-            max-height: 80px;
+            max-height: 90px;
             overflow-y: auto;
         }
         .called-title {
-            font-size: 12px;
+            font-size: 13px;
             color: #666;
-            margin-bottom: 5px;
+            margin-bottom: 6px;
             font-weight: bold;
         }
         .called-list {
             display: flex;
             flex-wrap: wrap;
-            gap: 5px;
+            gap: 6px;
         }
         .called-badge {
             background: #4CAF50;
             color: white;
-            padding: 3px 10px;
+            padding: 4px 12px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: bold;
         }
         
@@ -390,90 +402,110 @@
             color: white;
             padding: 15px;
             text-align: center;
-            font-size: 36px;
+            font-size: 40px;
             font-weight: bold;
-            border-radius: 10px;
+            border-radius: 12px;
             margin-bottom: 15px;
-            box-shadow: 0 4px 10px rgba(76,175,80,0.3);
+            box-shadow: 0 4px 15px rgba(76,175,80,0.3);
+        }
+        
+        /* START GAME BUTTON - Highly Visible */
+        .start-game-section {
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            padding: 20px;
+            border-radius: 15px;
+            margin: 15px 0;
+            border: 4px solid gold;
+            box-shadow: 0 8px 20px rgba(255,152,0,0.4);
+            text-align: center;
+        }
+        .start-game-btn {
+            width: 100%;
+            padding: 20px;
+            background: white;
+            color: #ff9800;
+            border: none;
+            border-radius: 50px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            animation: pulse 1.5s infinite;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            border: 2px solid gold;
+        }
+        .start-game-btn.ready {
+            background: #4CAF50;
+            color: white;
+            animation: none;
+        }
+        .start-game-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        .start-game-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
         }
         
         /* Admin Controls */
         .admin-controls {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 15px;
-            border-radius: 10px;
+            border-radius: 12px;
             margin-top: 15px;
-            border: 3px solid gold;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            border: 2px solid gold;
         }
-        .start-btn {
-            width: 100%;
-            padding: 15px;
-            background: #ff9800;
+        .admin-title {
             color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 20px;
             font-weight: bold;
-            cursor: pointer;
-            animation: pulse 1.5s infinite;
-            margin-bottom: 15px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            margin-bottom: 10px;
+            font-size: 16px;
+            text-align: center;
         }
-        .start-btn.ready {
-            background: #4CAF50;
-            animation: none;
-        }
-        .start-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            animation: none;
-        }
-        
         .admin-input {
             display: flex;
             gap: 10px;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
         .admin-input input {
             flex: 1;
             padding: 12px;
             border: none;
-            border-radius: 6px;
-            font-size: 16px;
+            border-radius: 8px;
+            font-size: 15px;
         }
         .admin-input button {
             padding: 12px 20px;
             background: #4CAF50;
             color: white;
             border: none;
-            border-radius: 6px;
-            font-size: 16px;
+            border-radius: 8px;
+            font-size: 15px;
             font-weight: bold;
             cursor: pointer;
         }
         .admin-input button:hover {
             background: #45a049;
         }
-        
         .pattern-select {
             width: 100%;
             padding: 12px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             margin-bottom: 10px;
-            font-size: 14px;
+            font-size: 15px;
         }
-        
         .set-pattern-btn {
             width: 100%;
             padding: 12px;
             background: #2196F3;
             color: white;
             border: none;
-            border-radius: 6px;
-            font-size: 16px;
+            border-radius: 8px;
+            font-size: 15px;
             font-weight: bold;
             cursor: pointer;
         }
@@ -483,20 +515,20 @@
         
         .bingo-btn {
             width: 100%;
-            padding: 15px;
+            padding: 18px;
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: white;
             border: none;
-            border-radius: 30px;
-            font-size: 24px;
+            border-radius: 40px;
+            font-size: 26px;
             font-weight: bold;
             cursor: pointer;
             margin-top: 15px;
             transition: all 0.2s;
         }
         .bingo-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(245,87,108,0.4);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(245,87,108,0.4);
         }
         .bingo-btn:disabled {
             opacity: 0.5;
@@ -505,19 +537,19 @@
         
         .players-list {
             background: #f8f9fa;
-            padding: 10px;
+            padding: 12px;
             border-radius: 10px;
             margin-top: 15px;
-            max-height: 80px;
+            max-height: 90px;
             overflow-y: auto;
         }
         .player-badge {
             display: inline-block;
-            padding: 4px 10px;
+            padding: 5px 12px;
             background: white;
             border-radius: 20px;
-            margin: 3px;
-            font-size: 12px;
+            margin: 4px;
+            font-size: 13px;
             border: 1px solid #ddd;
             font-weight: bold;
         }
@@ -537,20 +569,21 @@
             color: #333;
             padding: 15px;
             text-align: center;
-            font-size: 18px;
+            font-size: 20px;
             font-weight: bold;
-            border-radius: 10px;
+            border-radius: 12px;
             margin-bottom: 15px;
             animation: pulse 1s infinite;
         }
         
         .message {
             text-align: center;
-            padding: 10px;
+            padding: 12px;
             margin: 10px;
             border-radius: 8px;
             display: none;
             font-weight: bold;
+            font-size: 15px;
         }
         .message.success { 
             background: #d4edda; 
@@ -573,7 +606,7 @@
         
         @keyframes pulse {
             0% { transform: scale(1); }
-            50% { transform: scale(1.02); }
+            50% { transform: scale(1.03); }
             100% { transform: scale(1); }
         }
     </style>
@@ -585,7 +618,7 @@
             <h1>🎯 BINGO</h1>
             <p>Game #<span id="game-id">{{ game_id }}</span> | Player: <span id="player-id">{{ user_id }}</span></p>
             <div id="connection-status" class="connection-status">✅ Connected</div>
-            <div id="status" class="status-value">⏳ WAITING</div>
+            <div id="status" class="status-value" style="margin-top: 5px;">⏳ WAITING</div>
         </div>
         
         <!-- Status Bar -->
@@ -686,15 +719,21 @@
                 
                 <!-- Auto-mark Toggle -->
                 <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
-                    <label style="display: flex; align-items: center; gap: 5px;">
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
                         <input type="checkbox" id="autoDaub" onchange="toggleAutoDaub()"> 
                         <span>🤖 Auto-mark numbers</span>
                     </label>
                 </div>
                 
-                <!-- ADMIN CONTROLS - START GAME BUTTON -->
-                <div id="admin-controls" class="admin-controls" style="display: none;">
-                    <button class="start-btn" id="start-game-btn" onclick="startGame()">🚀 START GAME</button>
+                <!-- START GAME BUTTON - Highly Visible -->
+                <div class="start-game-section">
+                    <button class="start-game-btn" id="start-game-btn" onclick="startGame()">🚀 START GAME</button>
+                    <p style="color: white; margin-top: 8px; font-size: 14px;">Click to begin the game!</p>
+                </div>
+                
+                <!-- Admin Controls (Additional) -->
+                <div id="admin-controls" class="admin-controls">
+                    <div class="admin-title">👑 Admin Controls</div>
                     <div class="admin-input">
                         <input type="number" id="call-number" min="1" max="75" placeholder="Enter number (1-75)">
                         <button onclick="callNumber()">Call</button>
@@ -753,18 +792,18 @@
         let patterns = [];
         let isProcessing = false;
         
-        // Force show admin controls for admin user
-        if (userId == ADMIN_USER_ID) {
-            document.getElementById('admin-controls').style.display = 'block';
-            document.getElementById('status').textContent = '👑 ADMIN';
-        }
-        
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             loadCards();
             loadPatterns();
             connectWebSocket();
             fetchBalance();
+            
+            // Show status for admin
+            if (userId == ADMIN_USER_ID) {
+                document.getElementById('status').textContent = '👑 ADMIN';
+                showMessage('Welcome Admin! Click START GAME when ready.', 'info');
+            }
         });
         
         // Fetch balance
@@ -908,7 +947,7 @@
                             updateWallet();
                         }
                         
-                        showMessage('✅ Ready to play! Waiting for admin...', 'success');
+                        showMessage('✅ Ready to play! Click START GAME.', 'success');
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
                         isProcessing = false;
@@ -921,16 +960,14 @@
                     calculatePrizePool();
                     
                     // Update start button for admin
-                    if (isAdmin) {
-                        const readyCount = players.filter(p => p.ready).length;
-                        const startBtn = document.getElementById('start-game-btn');
-                        if (readyCount > 0) {
-                            startBtn.classList.add('ready');
-                            startBtn.disabled = false;
-                        } else {
-                            startBtn.classList.remove('ready');
-                            startBtn.disabled = true;
-                        }
+                    const readyCount = players.filter(p => p.ready).length;
+                    const startBtn = document.getElementById('start-game-btn');
+                    if (readyCount > 0) {
+                        startBtn.classList.add('ready');
+                        startBtn.disabled = false;
+                    } else {
+                        startBtn.classList.remove('ready');
+                        startBtn.disabled = true;
                     }
                 }
                 else if (data.type === 'game_started') {
@@ -1251,6 +1288,16 @@
         function updateReadyCount() {
             const ready = players.filter(p => p.ready).length;
             document.getElementById('ready-count').textContent = ready;
+            
+            // Update start button
+            const startBtn = document.getElementById('start-game-btn');
+            if (ready > 0) {
+                startBtn.classList.add('ready');
+                startBtn.disabled = false;
+            } else {
+                startBtn.classList.remove('ready');
+                startBtn.disabled = true;
+            }
         }
         
         function autoMarkNumber(number) {
@@ -1287,17 +1334,21 @@
         
         // Admin functions
         function startGame() {
-            if (!isAdmin) return;
             const readyCount = players.filter(p => p.ready).length;
             if (readyCount === 0) {
                 showMessage('❌ No players ready!', 'error');
                 return;
             }
-            ws.send(JSON.stringify({type: 'start_game'}));
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({type: 'start_game'}));
+                showMessage('🚀 Starting game...', 'info');
+            } else {
+                showMessage('❌ Not connected to server', 'error');
+            }
         }
         
         function callNumber() {
-            if (!isAdmin) return;
             const number = parseInt(document.getElementById('call-number').value);
             if (number >= 1 && number <= 75) {
                 ws.send(JSON.stringify({ type: 'call_number', number }));
@@ -1308,7 +1359,6 @@
         }
         
         function setPattern() {
-            if (!isAdmin) return;
             const patternId = document.getElementById('pattern-select').value;
             if (patternId) {
                 ws.send(JSON.stringify({
