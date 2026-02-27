@@ -5,7 +5,7 @@ import asyncio
 import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
-from typing import Dict, Set, List, Any  # 👈 ADD THIS LINE
+from typing import Dict, Set, List, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -20,13 +20,21 @@ from models import Database
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration
+# Configuration - FIXED: Added https:// to BASE_URL
 BOT_TOKEN = os.getenv('BOT_TOKEN', '8578474198:AAGcqcyTihBMxV-gtqukkbU_SBk1EszG-7w')
 ADMIN_USER_ID = os.getenv('ADMIN_USER_ID', '8741250511')
-BASE_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'https://your-app.railway.app')
+RAILWAY_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'bingo-production-a078.up.railway.app')
+# Ensure URL has https://
+if not RAILWAY_URL.startswith('http'):
+    BASE_URL = f"https://{RAILWAY_URL}"
+else:
+    BASE_URL = RAILWAY_URL
+
 CARD_PRICE = 1000  # 10 ETB in cents
 MAX_CARDS_PER_PLAYER = 20
 WELCOME_BONUS = 1000  # 10 ETB welcome bonus
+
+logger.info(f"✅ Using BASE_URL: {BASE_URL}")
 
 # Initialize database
 db = Database()
@@ -586,13 +594,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def play_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle play button"""
+    """Handle play button - FIXED URL with https://"""
     query = update.callback_query
     await query.answer()
     
     user = update.effective_user
     game_id = 1  # Default game
     
+    # Ensure URL has https://
     webapp_url = f"{BASE_URL}/game?user_id={user.id}&game_id={game_id}"
     
     keyboard = [[
