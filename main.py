@@ -84,9 +84,73 @@ conn.commit()
 # ==========================
 
 def generate_patterns():
-    # ... (same as before) ...
-    # (keep your existing generate_patterns function)
-    pass
+    patterns = []
+    
+    # Basic patterns (1-20)
+    basic_patterns = [
+        {"name": "Full House", "description": "Mark all numbers on your card", "positions": "full_house"},
+        {"name": "Four Corners", "description": "Mark the four corner squares", "positions": [[0,0], [0,4], [4,0], [4,4]]},
+        {"name": "X Pattern", "description": "Mark both diagonals", "positions": [[0,0], [1,1], [2,2], [3,3], [4,4], [0,4], [1,3], [3,1], [4,0]]},
+        {"name": "Plus Sign", "description": "Mark middle row and middle column", "positions": [[2,0], [2,1], [2,2], [2,3], [2,4], [0,2], [1,2], [3,2], [4,2]]},
+        {"name": "Top Row", "description": "Mark the entire top row", "positions": [[0,0], [0,1], [0,2], [0,3], [0,4]]},
+        {"name": "Middle Row", "description": "Mark the entire middle row", "positions": [[2,0], [2,1], [2,2], [2,3], [2,4]]},
+        {"name": "Bottom Row", "description": "Mark the entire bottom row", "positions": [[4,0], [4,1], [4,2], [4,3], [4,4]]},
+        {"name": "First Column", "description": "Mark the entire first column", "positions": [[0,0], [1,0], [2,0], [3,0], [4,0]]},
+        {"name": "Middle Column", "description": "Mark the entire middle column", "positions": [[0,2], [1,2], [2,2], [3,2], [4,2]]},
+        {"name": "Last Column", "description": "Mark the entire last column", "positions": [[0,4], [1,4], [2,4], [3,4], [4,4]]},
+        {"name": "Small Diamond", "description": "Mark a diamond shape in the center", "positions": [[1,2], [2,1], [2,2], [2,3], [3,2]]},
+        {"name": "Big Diamond", "description": "Mark a large diamond shape", "positions": [[0,2], [1,1], [1,3], [2,0], [2,4], [3,1], [3,3], [4,2]]},
+        {"name": "Letter L", "description": "Mark L shape (top row and last column)", "positions": [[0,0], [0,1], [0,2], [0,3], [0,4], [1,4], [2,4], [3,4], [4,4]]},
+        {"name": "Letter T", "description": "Mark T shape", "positions": [[0,0], [0,1], [0,2], [0,3], [0,4], [1,2], [2,2], [3,2], [4,2]]},
+        {"name": "Letter U", "description": "Mark U shape", "positions": [[0,0], [0,4], [1,0], [1,4], [2,0], [2,4], [3,0], [3,4], [4,0], [4,1], [4,2], [4,3], [4,4]]},
+        {"name": "Frame", "description": "Mark the outer border", "positions": [[0,0], [0,1], [0,2], [0,3], [0,4], [1,0], [1,4], [2,0], [2,4], [3,0], [3,4], [4,0], [4,1], [4,2], [4,3], [4,4]]},
+        {"name": "Checkerboard", "description": "Mark alternating squares", "positions": [[0,0], [0,2], [0,4], [1,1], [1,3], [2,0], [2,2], [2,4], [3,1], [3,3], [4,0], [4,2], [4,4]]},
+        {"name": "Zigzag", "description": "Mark a zigzag pattern", "positions": [[0,0], [0,1], [1,1], [1,2], [2,2], [2,3], [3,3], [3,4], [4,4]]},
+        {"name": "Spiral", "description": "Mark a spiral pattern", "positions": [[0,0], [0,1], [0,2], [0,3], [0,4], [1,4], [2,4], [3,4], [4,4], [4,3], [4,2], [4,1], [4,0], [3,0], [2,0], [1,0], [1,1], [1,2], [1,3], [2,3], [3,3], [3,2], [3,1], [2,1], [2,2]]},
+        {"name": "Smiley Face", "description": "Mark a smiley face pattern", "positions": [[1,1], [1,3], [3,0], [3,1], [3,2], [3,3], [3,4], [4,2]]}
+    ]
+    
+    # Generate variations (21-100)
+    patterns.extend(basic_patterns)
+    
+    # Add variations of rows, columns, and diagonals
+    for i in range(20, 100):
+        pattern_type = random.choice(["row", "column", "diagonal", "cross", "letter", "shape"])
+        if pattern_type == "row":
+            row = random.randint(0, 4)
+            name = f"Row {row + 1} Variant {i}"
+            description = f"Mark row {row + 1} with a twist"
+            positions = [[row, col] for col in range(5)]
+        elif pattern_type == "column":
+            col = random.randint(0, 4)
+            name = f"Column {col + 1} Variant {i}"
+            description = f"Mark column {col + 1} with a twist"
+            positions = [[row, col] for row in range(5)]
+        elif pattern_type == "diagonal":
+            name = f"Diagonal Variant {i}"
+            description = "Mark a diagonal pattern"
+            positions = [[j, j] for j in range(5)] + [[j, 4-j] for j in range(5)]
+        elif pattern_type == "cross":
+            name = f"Cross Variant {i}"
+            description = "Mark a cross pattern"
+            positions = [[2, j] for j in range(5)] + [[j, 2] for j in range(5)]
+        else:
+            # Random shape
+            name = f"Random Shape {i}"
+            description = "Mark a random pattern"
+            positions = []
+            for _ in range(random.randint(5, 15)):
+                positions.append([random.randint(0, 4), random.randint(0, 4)])
+            # Remove duplicates
+            positions = [list(x) for x in set(tuple(pos) for pos in positions)]
+        
+        patterns.append({
+            "name": name,
+            "description": description,
+            "positions": positions
+        })
+    
+    return patterns[:100]  # Ensure exactly 100 patterns
 
 def init_patterns():
     cursor.execute("SELECT COUNT(*) FROM patterns")
@@ -158,8 +222,54 @@ def reset_round(game_id: int):
     logger.info(f"🔄 Round reset for game {game_id}")
 
 def check_bingo(card_data, called_numbers_set, pattern_data):
-    # ... (same as before) ...
-    pass
+    """
+    Check if the card has achieved bingo based on the pattern
+    """
+    try:
+        # Parse card data
+        if isinstance(card_data, str):
+            card = json.loads(card_data)
+        else:
+            card = card_data
+            
+        # Parse pattern positions
+        if isinstance(pattern_data, str):
+            pattern = json.loads(pattern_data)
+        else:
+            pattern = pattern_data
+            
+        # Handle special pattern types
+        if isinstance(pattern, dict) and "type" in pattern:
+            pattern_type = pattern["type"]
+            
+            if pattern_type == "full_house":
+                # All numbers on card must be called
+                all_numbers = set()
+                for row in card:
+                    for num in row:
+                        if num != "FREE":  # Skip FREE space
+                            all_numbers.add(str(num))
+                return all_numbers.issubset(called_numbers_set)
+                
+            else:
+                # Default to using positions from pattern
+                positions = pattern.get("positions", [])
+        else:
+            # Direct positions array
+            positions = pattern
+            
+        # Check each required position
+        for pos in positions:
+            row, col = pos
+            num = card[row][col]
+            if num != "FREE" and str(num) not in called_numbers_set:
+                return False
+                
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error checking bingo: {e}")
+        return False
 
 # ==========================
 # API ENDPOINTS
@@ -223,6 +333,29 @@ async def list_patterns():
 
 connections = {}
 
+def generate_bingo_card():
+    """Generate a random 5x5 bingo card"""
+    card = []
+    for i in range(5):
+        row = []
+        for j in range(5):
+            # BINGO columns: B(1-15), I(16-30), N(31-45), G(46-60), O(61-75)
+            if j == 0:  # B column
+                num = random.randint(1, 15)
+            elif j == 1:  # I column
+                num = random.randint(16, 30)
+            elif j == 2:  # N column
+                num = random.randint(31, 45)
+            elif j == 3:  # G column
+                num = random.randint(46, 60)
+            else:  # O column
+                num = random.randint(61, 75)
+            row.append(num)
+        card.append(row)
+    # Set middle as FREE
+    card[2][2] = "FREE"
+    return card
+
 @app.websocket("/ws/{game_id}/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
     await websocket.accept()
@@ -254,17 +387,155 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
 
             # ---------- SELECT CARDS ----------
             if msg_type == "select_cards":
-                # ... (your existing code) ...
+                count = data.get("count", 1)
+                logger.info(f"User {user_id} selecting {count} cards")
+                
+                # Check if user has enough balance
+                cursor.execute("SELECT balance FROM users WHERE id = ?", (user_id,))
+                user_balance = cursor.fetchone()
+                if not user_balance or user_balance[0] < count * PRICE_PER_CARD:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Insufficient balance. Need {count * PRICE_PER_CARD} ETB"
+                    })
+                    continue
+                
+                # Check if game has started
+                state = get_game_state(game_id)
+                if state and state["started"]:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Game already started. Cannot buy cards now."
+                    })
+                    continue
+                
+                # Generate cards
+                cards = []
+                for _ in range(count):
+                    card_id = random.randint(100000, 999999)
+                    card_data = generate_bingo_card()
+                    cards.append({
+                        "id": card_id,
+                        "data": card_data
+                    })
+                    
+                    # Save to database
+                    cursor.execute("""
+                        INSERT INTO user_cards (game_id, user_id, card_id, card_data, marked_numbers)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (game_id, user_id, card_id, json.dumps(card_data), "[]"))
+                
+                # Deduct balance
+                new_balance = user_balance[0] - (count * PRICE_PER_CARD)
+                cursor.execute("UPDATE users SET balance = ? WHERE id = ?", (new_balance, user_id))
+                conn.commit()
+                
+                # Send response
+                await websocket.send_json({
+                    "type": "cards_selected",
+                    "cards": cards,
+                    "new_balance": new_balance
+                })
+                
+                # Broadcast to admin that new cards were purchased
+                for ws in connections.get(game_id, []):
+                    try:
+                        await ws.send_json({
+                            "type": "cards_purchased",
+                            "user_id": user_id,
+                            "count": count
+                        })
+                    except:
+                        pass
 
             # ---------- CALL NUMBER ----------
             elif msg_type == "call_number":
-                # ... (existing) ...
+                # Only admin can call numbers
+                if user_id != ADMIN_ID:
+                    logger.warning(f"Non-admin {user_id} attempted to call number in game {game_id}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Only admin can call numbers"
+                    })
+                    continue
+                
+                number = data.get("number")
+                if not number:
+                    continue
+                
+                # Get current game state
+                state = get_game_state(game_id)
+                if not state or not state["started"]:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Game not started"
+                    })
+                    continue
+                
+                # Check if number already called
+                called_numbers = state["called_numbers"]
+                if number in called_numbers:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Number {number} already called"
+                    })
+                    continue
+                
+                # Add number to called numbers
+                called_numbers.append(number)
+                cursor.execute("UPDATE games SET called_numbers = ? WHERE id = ?",
+                              (json.dumps(called_numbers), game_id))
+                conn.commit()
+                
+                # Broadcast to all clients
+                for ws in connections.get(game_id, []):
+                    try:
+                        await ws.send_json({
+                            "type": "number_called",
+                            "number": number,
+                            "called_numbers": called_numbers
+                        })
+                    except:
+                        pass
+                
+                # Check for winners
+                await check_for_winner(game_id)
 
             # ---------- SET PATTERN ----------
             elif msg_type == "set_pattern":
-                # ... (existing) ...
+                # Only admin can set pattern
+                if user_id != ADMIN_ID:
+                    logger.warning(f"Non-admin {user_id} attempted to set pattern in game {game_id}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Only admin can set pattern"
+                    })
+                    continue
+                
+                pattern_id = data.get("pattern_id")
+                if not pattern_id:
+                    continue
+                
+                # Update game pattern
+                cursor.execute("UPDATE games SET pattern_id = ? WHERE id = ?", (pattern_id, game_id))
+                conn.commit()
+                
+                # Get pattern info
+                cursor.execute("SELECT name, description FROM patterns WHERE id = ?", (pattern_id,))
+                pattern = cursor.fetchone()
+                
+                # Broadcast to all clients
+                for ws in connections.get(game_id, []):
+                    try:
+                        await ws.send_json({
+                            "type": "pattern_updated",
+                            "pattern_id": pattern_id,
+                            "pattern_name": pattern[0] if pattern else "Unknown"
+                        })
+                    except:
+                        pass
 
-            # ---------- START GAME (FIXED) ----------
+            # ---------- START GAME ----------
             elif msg_type == "start_game":
                 # Check admin
                 if user_id != ADMIN_ID:
@@ -297,7 +568,78 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
 
             # ---------- WINNER (manual) ----------
             elif msg_type == "winner":
-                # ... (existing) ...
+                # Only admin can declare winner
+                if user_id != ADMIN_ID:
+                    logger.warning(f"Non-admin {user_id} attempted to declare winner in game {game_id}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Only admin can declare winner"
+                    })
+                    continue
+                
+                winner_id = data.get("winner_id")
+                card_id = data.get("card_id")
+                
+                if not winner_id or not card_id:
+                    continue
+                
+                # Process win
+                await handle_win(game_id, winner_id, card_id)
+
+            # ---------- MARK NUMBER (for players) ----------
+            elif msg_type == "mark_number":
+                card_id = data.get("card_id")
+                number = data.get("number")
+                
+                if not card_id or not number:
+                    continue
+                
+                # Get user's card
+                cursor.execute("""
+                    SELECT marked_numbers FROM user_cards 
+                    WHERE game_id = ? AND user_id = ? AND card_id = ?
+                """, (game_id, user_id, card_id))
+                result = cursor.fetchone()
+                
+                if result:
+                    marked = json.loads(result[0])
+                    if number not in marked:
+                        marked.append(number)
+                        cursor.execute("""
+                            UPDATE user_cards SET marked_numbers = ? 
+                            WHERE game_id = ? AND user_id = ? AND card_id = ?
+                        """, (json.dumps(marked), game_id, user_id, card_id))
+                        conn.commit()
+                        
+                        await websocket.send_json({
+                            "type": "number_marked",
+                            "card_id": card_id,
+                            "number": number,
+                            "marked_numbers": marked
+                        })
+
+            # ---------- RESET GAME ----------
+            elif msg_type == "reset_game":
+                # Only admin can reset
+                if user_id != ADMIN_ID:
+                    logger.warning(f"Non-admin {user_id} attempted to reset game {game_id}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Only admin can reset game"
+                    })
+                    continue
+                
+                reset_round(game_id)
+                
+                # Broadcast to all clients
+                for ws in connections.get(game_id, []):
+                    try:
+                        await ws.send_json({
+                            "type": "game_reset",
+                            "message": "Game has been reset for next round"
+                        })
+                    except:
+                        pass
 
             # ---------- PING ----------
             elif msg_type == "ping":
@@ -314,10 +656,68 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
         logger.info(f"WebSocket disconnected: game={game_id}, user={user_id}")
 
 async def check_for_winner(game_id: int):
-    # ... (existing) ...
+    """Check if any player has achieved bingo"""
+    try:
+        # Get game info
+        cursor.execute("SELECT called_numbers, pattern_id FROM games WHERE id = ?", (game_id,))
+        game = cursor.fetchone()
+        if not game:
+            return
+        
+        called_numbers = json.loads(game[0])
+        called_numbers_set = set(str(num) for num in called_numbers)
+        pattern_id = game[1]
+        
+        # Get pattern
+        cursor.execute("SELECT positions FROM patterns WHERE id = ?", (pattern_id,))
+        pattern = cursor.fetchone()
+        if not pattern:
+            return
+        
+        pattern_data = json.loads(pattern[0])
+        
+        # Check all user cards
+        cursor.execute("SELECT user_id, card_id, card_data FROM user_cards WHERE game_id = ?", (game_id,))
+        cards = cursor.fetchall()
+        
+        for user_id, card_id, card_data in cards:
+            if check_bingo(card_data, called_numbers_set, pattern_data):
+                # Found a winner!
+                logger.info(f"BINGO! User {user_id} with card {card_id} in game {game_id}")
+                await handle_win(game_id, user_id, card_id)
+                break  # Only first winner matters
+                
+    except Exception as e:
+        logger.error(f"Error checking for winner: {e}")
 
 async def handle_win(game_id: int, winner_id: int, card_id: int):
-    # ... (existing) ...
+    """Handle a winner"""
+    try:
+        # Pay winner
+        prize = pay_winner(game_id, winner_id)
+        
+        # Get winner info
+        cursor.execute("SELECT wins FROM users WHERE id = ?", (winner_id,))
+        wins = cursor.fetchone()
+        total_wins = wins[0] if wins else 1
+        
+        # Broadcast win to all clients
+        for ws in connections.get(game_id, []):
+            try:
+                await ws.send_json({
+                    "type": "bingo",
+                    "winner_id": winner_id,
+                    "card_id": card_id,
+                    "prize": prize,
+                    "message": f"Player {winner_id} wins {prize} ETB!"
+                })
+            except:
+                pass
+        
+        # Reset after a delay (can be called manually by admin)
+        
+    except Exception as e:
+        logger.error(f"Error handling win: {e}")
 
 if __name__ == "__main__":
     import uvicorn
