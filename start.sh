@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Start webapp in background
+# Start webapp on main port
 python -m uvicorn webapp:app --host 0.0.0.0 --port ${PORT:-8080} &
 WEBAPP_PID=$!
 
-# Start bot in foreground
+# Start bot
 python bot.py &
 BOT_PID=$!
 
