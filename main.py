@@ -129,7 +129,9 @@ class GameManager:
         
         player_name = user['first_name'] if user and user.get('first_name') else f"Player{user_id}"
         
+        # Check if player already exists in this game
         if user_id not in self.active_games[game_id]['players']:
+            # New player
             self.active_games[game_id]['players'][user_id] = {
                 'name': player_name,
                 'cards': [],
@@ -141,10 +143,44 @@ class GameManager:
                 'cards_won': 0,
                 'balance': user['balance']
             }
+        else:
+            # Reconnecting player - restore their state from database
+            logger.info(f"🔄 Reconnecting player {user_id} - restoring game state")
+            
+            # Get their cards from database
+            with db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT card_id, card_data, marked_numbers 
+                    FROM user_cards 
+                    WHERE game_id = ? AND user_id = ?
+                """, (game_id, user_id))
+                
+                cards = cursor.fetchall()
+                player = self.active_games[game_id]['players'][user_id]
+                
+                # Restore cards
+                for card in cards:
+                    card_id = card[0]
+                    card_data = json.loads(card[1])
+                    marked_numbers = json.loads(card[2])
+                    
+                    player['cards'].append(card_data)
+                    player['card_ids'].append(card_id)
+                    player['marked'][card_id] = marked_numbers
+                    
+                    # Add to taken cards if not already there
+                    self.taken_cards[game_id].add(card_id)
+                
+                # Restore ready status
+                if len(player['card_ids']) > 0:
+                    player['ready'] = True
+                    logger.info(f"✅ Restored {len(player['card_ids'])} cards for user {user_id}")
         
         active_games = db.get_active_games_count(user_id)
         total_stake = db.get_total_stake(user_id)
         
+        # Send complete game state to reconnecting client
         await websocket.send_json({
             'type': 'connected',
             'taken_cards': list(self.taken_cards[game_id]),
@@ -159,12 +195,32 @@ class GameManager:
             'total_stake': total_stake / 100
         })
         
+        # Send all their cards
+        player = self.active_games[game_id]['players'][user_id]
+        for card_id in player['card_ids']:
+            card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+            if card_data:
+                await websocket.send_json({
+                    'type': 'your_card',
+                    'card': card_data['card'],
+                    'card_id': card_id,
+                    'marked': player['marked'].get(card_id, [])
+                })
+        
+        # If game is active, send current state
+        if self.game_started[game_id]:
+            await websocket.send_json({
+                'type': 'game_active',
+                'called_numbers': self.active_games[game_id]['called_numbers'],
+                'last_number': self.active_games[game_id]['called_numbers'][-1] if self.active_games[game_id]['called_numbers'] else None
+            })
+        
         asyncio.create_task(self.update_countdown(game_id))
         
         await self.broadcast(game_id, {
-            'type': 'player_joined',
+            'type': 'player_reconnected',
             'players': self.get_players(game_id),
-            'taken_cards': list(self.taken_cards[game_id])
+            'user_id': user_id
         })
     
     async def update_countdown(self, game_id: int):
@@ -578,22 +634,26 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_name=user.last_name
     )
     
+    # Get user balance
+    user_data = db.get_user(user.id)
+    balance = user_data['balance'] / 100 if user_data else 0
+    
     keyboard = [
         [InlineKeyboardButton("🎮 Play Bingo", callback_data="play")],
-        [InlineKeyboardButton("💰 Balance", callback_data="balance"),
-         InlineKeyboardButton("💳 Deposit", callback_data="deposit")],
-        [InlineKeyboardButton("📊 History", callback_data="history")],
-        [InlineKeyboardButton("❓ Help", callback_data="help")]
+        [
+            InlineKeyboardButton("💰 Balance", callback_data="balance"),
+            InlineKeyboardButton("💳 Deposit", callback_data="deposit")
+        ],
+        [
+            InlineKeyboardButton("📊 History", callback_data="history"),
+            InlineKeyboardButton("❓ Help", callback_data="help")
+        ]
     ]
     
     if str(user.id) == ADMIN_USER_ID:
         keyboard.append([InlineKeyboardButton("👑 Admin Panel", callback_data="admin")])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # Get user balance
-    user_data = db.get_user(user.id)
-    balance = user_data['balance'] / 100 if user_data else 0
     
     await update.message.reply_text(
         f"🎯 Welcome to Bingo Bot, {user.first_name}!\n\n"
@@ -829,7 +889,7 @@ async def payment_method_selected(update: Update, context: ContextTypes.DEFAULT_
         f"Please enter your phone number (09xxxxxxxx):",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ ተመለስ / Cancel", callback_data="deposit")
+            InlineKeyboardButton("◀️ ተመለስ / Cancel", callback_data="main_menu")
         ]])
     )
     return AMOUNT
@@ -1068,7 +1128,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     stats = db.get_system_stats()
-    pending_payments = len(db.get_pending_payment_requests(limit=1))
+    pending_payments = len(db.get_pending_payment_requests(limit=100))
     
     await query.edit_message_text(
         f"👑 **Admin Panel**\n\n"
@@ -1330,10 +1390,14 @@ async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     keyboard = [
         [InlineKeyboardButton("🎮 Play Bingo", callback_data="play")],
-        [InlineKeyboardButton("💰 Balance", callback_data="balance"),
-         InlineKeyboardButton("💳 Deposit", callback_data="deposit")],
-        [InlineKeyboardButton("📊 History", callback_data="history")],
-        [InlineKeyboardButton("❓ Help", callback_data="help")]
+        [
+            InlineKeyboardButton("💰 Balance", callback_data="balance"),
+            InlineKeyboardButton("💳 Deposit", callback_data="deposit")
+        ],
+        [
+            InlineKeyboardButton("📊 History", callback_data="history"),
+            InlineKeyboardButton("❓ Help", callback_data="help")
+        ]
     ]
     
     if str(user.id) == ADMIN_USER_ID:
@@ -1370,11 +1434,14 @@ async def setup_bot():
         allow_reentry=True
     )
     
-    # Add handlers
+    # Add handlers with CORRECT callback patterns
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(payment_conv)
+    
+    # Main menu handlers - FIXED PATTERNS
     application.add_handler(CallbackQueryHandler(play_callback, pattern="^play$"))
     application.add_handler(CallbackQueryHandler(balance_callback, pattern="^balance$"))
+    application.add_handler(CallbackQueryHandler(deposit_command, pattern="^deposit$"))
     application.add_handler(CallbackQueryHandler(history_callback, pattern="^history$"))
     application.add_handler(CallbackQueryHandler(help_callback, pattern="^help$"))
     application.add_handler(CallbackQueryHandler(admin_callback, pattern="^admin$"))
@@ -1383,6 +1450,8 @@ async def setup_bot():
     application.add_handler(CallbackQueryHandler(approve_payment_callback, pattern="^approve_pay_"))
     application.add_handler(CallbackQueryHandler(reject_payment_callback, pattern="^reject_pay_"))
     application.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"))
+    
+    # Message handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reference))
     
     # Initialize and start
@@ -1469,6 +1538,15 @@ async def get_user(user_id: int):
         "games_won": user['games_won']
     }
 
+@app.get("/api/patterns")
+async def list_patterns():
+    """Return list of all bingo patterns"""
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, description FROM patterns ORDER BY id")
+        rows = cursor.fetchall()
+        return [{"id": r[0], "name": r[1], "description": r[2]} for r in rows]
+
 @app.get("/game", response_class=HTMLResponse)
 async def game_page(request: Request, user_id: int, game_id: int = 1):
     user = db.get_or_create_user(user_id)
@@ -1543,6 +1621,29 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'message': message
                 })
             
+            elif data['type'] == 'set_pattern':
+                if user_id != int(ADMIN_USER_ID):
+                    await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
+                    continue
+                    
+                pattern_id = data.get('pattern_id')
+                if pattern_id:
+                    with db.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE games SET pattern_id = ? WHERE id = ?", (pattern_id, game_id))
+                        conn.commit()
+                        
+                        # Get pattern name
+                        cursor.execute("SELECT name FROM patterns WHERE id = ?", (pattern_id,))
+                        pattern = cursor.fetchone()
+                        pattern_name = pattern[0] if pattern else "Unknown"
+                        
+                        await game_manager.broadcast(game_id, {
+                            'type': 'pattern_updated',
+                            'pattern_id': pattern_id,
+                            'pattern_name': pattern_name
+                        })
+            
             elif data['type'] == 'mark_number':
                 success = game_manager.mark_number(
                     game_id, user_id, data['card_id'], data['number']
@@ -1560,6 +1661,39 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'type': 'stats_update',
                     **stats
                 })
+            
+            elif data['type'] == 'claim_bingo':
+                # Handle bingo claim
+                card_id = data.get('card_id')
+                if card_id:
+                    # Check if bingo is valid
+                    player = game_manager.active_games[game_id]['players'].get(user_id)
+                    if player:
+                        card_index = player['card_ids'].index(card_id) if card_id in player['card_ids'] else -1
+                        if card_index >= 0:
+                            card = player['cards'][card_index]
+                            marked_set = set(player['marked'].get(card_id, []))
+                            
+                            # Add FREE space
+                            if card[2][2] == 'FREE':
+                                marked_set.add('FREE')
+                            
+                            # Get current pattern
+                            with db.get_connection() as conn:
+                                cursor = conn.cursor()
+                                cursor.execute("SELECT pattern_id FROM games WHERE id = ?", (game_id,))
+                                pattern_id = cursor.fetchone()[0]
+                                cursor.execute("SELECT positions FROM patterns WHERE id = ?", (pattern_id,))
+                                pattern_data = cursor.fetchone()[0]
+                            
+                            # Check bingo using pattern
+                            if game_manager.check_card_bingo(card, marked_set):
+                                await game_manager.declare_winner(game_id, user_id, card_id, called[-1] if called else 0)
+                            else:
+                                await websocket.send_json({
+                                    'type': 'error',
+                                    'message': 'Not a valid bingo pattern'
+                                })
             
             elif data['type'] == 'ping':
                 await websocket.send_json({'type': 'pong'})
