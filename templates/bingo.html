@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Bingo Game - 1000 Cards</title>
+    <title>Bingo Game - 10,000 Cards</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -15,7 +15,7 @@
             padding: 10px;
         }
         .game-container {
-            max-width: 600px;
+            max-width: 650px;
             width: 100%;
             background: white;
             border-radius: 20px;
@@ -30,6 +30,26 @@
         }
         .header h1 { font-size: 28px; margin-bottom: 5px; }
         .header p { font-size: 12px; opacity: 0.9; }
+        
+        /* Pattern Display */
+        .pattern-display {
+            background: #ffd700;
+            color: #333;
+            padding: 8px 15px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .pattern-name {
+            background: #333;
+            color: #ffd700;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
         
         /* Wallet Bar */
         .wallet-bar {
@@ -138,75 +158,108 @@
         .selection h2 { text-align: center; margin-bottom: 10px; font-size: 20px; }
         .selection p { text-align: center; color: #666; margin-bottom: 10px; font-size: 14px; }
         
-        .info-panel {
-            background: #e3f2fd;
-            padding: 10px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-            display: flex;
-            justify-content: space-around;
-        }
-        
-        /* Selected Cards Panel */
-        .selected-cards-panel {
+        /* Vertical Selected Cards List */
+        .selected-cards-vertical {
             background: #fff3e0;
             padding: 12px;
             border-radius: 10px;
             margin-bottom: 15px;
-            max-height: 120px;
+            max-height: 200px;
             overflow-y: auto;
+            border: 2px solid #ffb74d;
         }
         .selected-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
+            position: sticky;
+            top: 0;
+            background: #fff3e0;
+            padding: 5px 0;
+            border-bottom: 1px solid #ffb74d;
         }
-        .selected-title { font-size: 13px; color: #e65100; font-weight: bold; }
-        .selected-badges { display: flex; flex-wrap: wrap; gap: 5px; }
-        .card-badge {
+        .selected-title { font-size: 14px; color: #e65100; font-weight: bold; }
+        .selected-count {
             background: #ff9800;
             color: white;
-            padding: 3px 6px;
+            padding: 2px 8px;
             border-radius: 15px;
-            font-size: 10px;
-            font-weight: bold;
-            display: inline-flex;
+            font-size: 12px;
+        }
+        .selected-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .selected-item {
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 3px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #ff9800;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .selected-item-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .selected-number {
+            font-weight: bold;
+            color: #e65100;
+            font-size: 14px;
+        }
+        .selected-price {
+            color: #4CAF50;
+            font-size: 12px;
+            font-weight: bold;
         }
         .remove-card {
-            background: none;
-            border: none;
+            background: #dc3545;
             color: white;
-            font-weight: bold;
+            border: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
-            font-size: 12px;
-            padding: 0 2px;
-        }
-        .total-cost {
             font-size: 14px;
+            font-weight: bold;
+        }
+        .remove-card:hover {
+            transform: scale(1.1);
+        }
+        .total-cost-vertical {
+            font-size: 16px;
             font-weight: bold;
             color: #e65100;
             text-align: right;
-            border-top: 1px solid #ffb74d;
-            padding-top: 8px;
-            margin-top: 8px;
+            border-top: 2px solid #ffb74d;
+            padding-top: 10px;
+            margin-top: 10px;
+            position: sticky;
+            bottom: 0;
+            background: #fff3e0;
         }
         
-        /* Card Grid */
+        /* Card Grid - 100x100 for 10,000 cards */
         .card-grid-container {
-            max-height: 200px;
+            max-height: 250px;
             overflow-y: auto;
             border: 2px solid #ddd;
             border-radius: 10px;
             margin-bottom: 15px;
-            padding: 8px;
+            padding: 10px;
             background: #f8f9fa;
         }
         .card-grid {
             display: grid;
-            grid-template-columns: repeat(10, 1fr);
+            grid-template-columns: repeat(25, 1fr);
             gap: 2px;
         }
         .card-btn {
@@ -215,7 +268,7 @@
             color: white;
             border: none;
             border-radius: 3px;
-            font-size: 9px;
+            font-size: 8px;
             cursor: pointer;
             transition: all 0.2s;
             font-weight: bold;
@@ -553,6 +606,12 @@
             <div id="status" class="status waiting">⏳ WAITING FOR ADMIN</div>
         </div>
         
+        <!-- Pattern Display -->
+        <div class="pattern-display" id="pattern-display">
+            <span>🎯 Current Pattern:</span>
+            <span class="pattern-name" id="pattern-name">Full House</span>
+        </div>
+        
         <!-- Wallet Bar -->
         <div class="wallet-bar">
             <div class="wallet-item">
@@ -609,18 +668,19 @@
         <!-- Card Selection Screen -->
         <div id="selection" class="selection">
             <h2>Choose Your Cards</h2>
-            <p>{{ price_per_card }} ETB per card | Max {{ max_cards }} cards</p>
+            <p>{{ price_per_card }} ETB per card | Max {{ max_cards }} cards | 10,000 Cards Available</p>
             
-            <!-- Selected Cards -->
-            <div id="selected-panel" class="selected-cards-panel" style="display: none;">
+            <!-- Vertical Selected Cards List -->
+            <div id="selected-panel" class="selected-cards-vertical" style="display: none;">
                 <div class="selected-header">
-                    <span class="selected-title">Your Cards:</span>
+                    <span class="selected-title">📋 Your Selected Cards</span>
+                    <span class="selected-count" id="selected-count">0/{{ max_cards }}</span>
                 </div>
-                <div id="selected-badges" class="selected-badges"></div>
-                <div id="total-cost" class="total-cost">Total: 0 ETB</div>
+                <div id="selected-list" class="selected-list"></div>
+                <div id="total-cost" class="total-cost-vertical">Total: 0 ETB</div>
             </div>
             
-            <!-- Card Grid -->
+            <!-- Card Grid - 10,000 cards (100x100) -->
             <div class="card-grid-container">
                 <div id="card-grid" class="card-grid"></div>
             </div>
@@ -628,7 +688,7 @@
             <!-- Action Buttons -->
             <div class="action-buttons">
                 <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()" style="display: none;">
-                    Clear
+                    Clear All
                 </button>
                 <button class="action-btn confirm-btn" id="confirm-btn" onclick="finalizeSelection()" disabled>
                     Confirm (0 ETB)
@@ -697,6 +757,12 @@
                     <input type="number" id="call-number" min="1" max="75" placeholder="Number" style="flex:1; padding:8px; border-radius:5px; border:1px solid #ccc;">
                     <button onclick="callNumber()" style="background:#4CAF50; color:white; border:none; border-radius:5px; padding:8px 15px; cursor:pointer;">Call</button>
                 </div>
+                <div style="margin-top: 10px;">
+                    <select id="pattern-select" style="width:100%; padding:8px; border-radius:5px; border:1px solid #ccc;">
+                        <option value="1">Full House</option>
+                    </select>
+                    <button onclick="setPattern()" style="margin-top:5px; width:100%; padding:8px; background:#667eea; color:white; border:none; border-radius:5px; cursor:pointer;">Set Pattern</button>
+                </div>
             </div>
             
             <!-- Players List -->
@@ -724,6 +790,7 @@
         const TOTAL_NUMBERS = 75;
         const ROUND_TIME = 120;
         const CARD_PRICE = pricePerCard * 100;
+        const TOTAL_CARDS = 10000; // 10,000 cards
         
         // State
         let ws = null;
@@ -745,6 +812,8 @@
         const maxReconnectAttempts = 5;
         let isReady = false;
         let hasCards = false;
+        let patterns = [];
+        let currentPattern = { id: 1, name: 'Full House' };
         
         // Auto-daub flag
         let autoDaubEnabled = false;
@@ -752,6 +821,7 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             loadCards();
+            loadPatterns();
             connectWebSocket();
             fetchBalance();
         });
@@ -760,6 +830,41 @@
             document.getElementById('admin-controls').style.display = 'block';
             document.getElementById('status').className = 'status admin';
             document.getElementById('status').textContent = '👑 ADMIN';
+        }
+        
+        // Load patterns from server
+        async function loadPatterns() {
+            try {
+                const response = await fetch('/api/patterns');
+                patterns = await response.json();
+                
+                const select = document.getElementById('pattern-select');
+                select.innerHTML = '';
+                patterns.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.id;
+                    option.textContent = p.name;
+                    select.appendChild(option);
+                });
+                
+                console.log(`✅ Loaded ${patterns.length} patterns`);
+            } catch (e) {
+                console.error('Error loading patterns:', e);
+            }
+        }
+        
+        // Set pattern (admin only)
+        function setPattern() {
+            if (!isAdmin) return;
+            const patternId = parseInt(document.getElementById('pattern-select').value);
+            const pattern = patterns.find(p => p.id === patternId);
+            if (pattern) {
+                ws.send(JSON.stringify({
+                    type: 'set_pattern',
+                    pattern_id: patternId
+                }));
+                showMessage(`🎯 Pattern set to: ${pattern.name}`, 'success');
+            }
         }
         
         // Fetch user balance
@@ -831,6 +936,11 @@
                     gameStarted = data.game_started || false;
                     called = data.called_numbers || [];
                     
+                    if (data.pattern_name) {
+                        currentPattern.name = data.pattern_name;
+                        document.getElementById('pattern-name').textContent = data.pattern_name;
+                    }
+                    
                     document.getElementById('active-game-display').textContent = `Round ${currentRound}`;
                     calculatePrizePool();
                     updateCalledNumbersList();
@@ -876,6 +986,14 @@
                     updatePlayersList();
                     updateCardGrid();
                     updateReadyCount();
+                }
+                else if (data.type === 'pattern_updated') {
+                    currentPattern = {
+                        id: data.pattern_id,
+                        name: data.pattern_name
+                    };
+                    document.getElementById('pattern-name').textContent = data.pattern_name;
+                    showMessage(`🎯 Pattern changed to: ${data.pattern_name}`, 'info');
                 }
                 else if (data.type === 'card_taken') {
                     takenCards = new Set(data.taken_cards || []);
@@ -1165,27 +1283,30 @@
             document.getElementById('numbers-left').textContent = `${TOTAL_NUMBERS - called.length} numbers left`;
         }
         
-        // Load available cards
+        // Load available cards (1-10000)
         async function loadCards() {
             const grid = document.getElementById('card-grid');
-            grid.innerHTML = '<div class="loading">Loading 1000 cards</div>';
+            grid.innerHTML = '<div class="loading">Loading 10,000 cards...</div>';
             
             try {
                 grid.innerHTML = '';
                 
-                for (let i = 1; i <= 100; i++) {
+                // Create 10,000 cards (100x100 grid)
+                for (let i = 1; i <= TOTAL_CARDS; i++) {
                     const btn = document.createElement('button');
                     btn.className = 'card-btn';
                     btn.textContent = i;
                     btn.onclick = () => toggleCardSelection(i);
                     grid.appendChild(btn);
                     
-                    if (i % 100 === 0) {
+                    // Allow UI to update every 1000 cards
+                    if (i % 1000 === 0) {
                         await new Promise(resolve => setTimeout(resolve, 0));
                     }
                 }
                 
                 updateCardGrid();
+                console.log(`✅ Loaded ${TOTAL_CARDS} cards`);
             } catch (error) {
                 console.error('Error loading cards:', error);
                 grid.innerHTML = '<div class="error">Error loading cards</div>';
@@ -1226,24 +1347,33 @@
             updateCardGrid();
         }
         
-        // Update selected cards display
+        // Update selected cards display (vertical list)
         function updateSelectedDisplay() {
             const panel = document.getElementById('selected-panel');
-            const badges = document.getElementById('selected-badges');
+            const selectedList = document.getElementById('selected-list');
             const totalCost = document.getElementById('total-cost');
             const confirmBtn = document.getElementById('confirm-btn');
             const clearBtn = document.getElementById('clear-btn');
+            const selectedCount = document.getElementById('selected-count');
             
             if (selectedCards.length > 0) {
                 panel.style.display = 'block';
                 clearBtn.style.display = 'block';
                 
-                badges.innerHTML = '';
+                selectedCount.textContent = `${selectedCards.length}/${maxCards}`;
+                
+                selectedList.innerHTML = '';
                 selectedCards.forEach(id => {
-                    const badge = document.createElement('span');
-                    badge.className = 'card-badge';
-                    badge.innerHTML = `#${id} <button class="remove-card" onclick="removeCard(${id})">✕</button>`;
-                    badges.appendChild(badge);
+                    const item = document.createElement('div');
+                    item.className = 'selected-item';
+                    item.innerHTML = `
+                        <div class="selected-item-info">
+                            <span class="selected-number">#${id}</span>
+                            <span class="selected-price">${pricePerCard} ETB</span>
+                        </div>
+                        <button class="remove-card" onclick="removeCard(${id})">✕</button>
+                    `;
+                    selectedList.appendChild(item);
                 });
                 
                 const cost = selectedCards.length * pricePerCard;
