@@ -7,6 +7,10 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+import asyncio
+import httpx
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,6 +37,10 @@ cursor = conn.cursor()
 PRICE_PER_CARD = 10
 HOUSE_COMMISSION_PERCENT = 20
 ADMIN_ID = int(os.getenv('ADMIN_ID', '123456789'))  # 🔥 Set your Telegram admin ID
+BOT_TOKEN = "8578474198:AAGcqcyTihBMxV-gtqukkbU_SBk1EszG-7w"
+PUBLIC_URL = os.getenv('PUBLIC_URL', 'https://your-domain.com')  # Set your public URL
+
+bot_app = None
 
 # ==========================
 # CREATE TABLES (with pattern support)
@@ -169,6 +177,239 @@ def init_patterns():
         logger.info(f"✅ Inserted {len(patterns)} patterns.")
 
 init_patterns()
+
+# ==========================
+# TELEGRAM BOT HANDLERS
+# ==========================
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send a message when /start is issued."""
+    user = update.effective_user
+    welcome_message = (
+        f"👋 Welcome to Bingo Game Bot, {user.first_name}!\n\n"
+        "🎮 This bot allows you to play Bingo with friends.\n\n"
+        "Commands:\n"
+        "/play - Start playing Bingo\n"
+        "/balance - Check your balance\n"
+        "/help - Show this help message"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("🎮 Play Bingo", callback_data="play")],
+        [InlineKeyboardButton("💰 Check Balance", callback_data="balance")],
+        [InlineKeyboardButton("❓ Help", callback_data="help")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send a message when /help is issued."""
+    help_text = (
+        "📖 *Bingo Game Help*\n\n"
+        "*How to Play:*\n"
+        "1. Use /play to start a game\n"
+        "2. Buy cards using the buttons\n"
+        "3. Wait for numbers to be called\n"
+        "4. Mark numbers on your card\n"
+        "5. Shout BINGO when you win!\n\n"
+        "*Commands:*\n"
+        "/start - Start the bot\n"
+        "/play - Play Bingo\n"
+        "/balance - Check your balance\n"
+        "/help - Show this help"
+    )
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start playing Bingo"""
+    user_id = update.effective_user.id
+    
+    # Create inline keyboard for game options
+    keyboard = [
+        [InlineKeyboardButton("🎫 Buy 1 Card (10 ETB)", callback_data="buy_1")],
+        [InlineKeyboardButton("🎫 Buy 3 Cards (30 ETB)", callback_data="buy_3")],
+        [InlineKeyboardButton("🎫 Buy 5 Cards (50 ETB)", callback_data="buy_5")],
+        [InlineKeyboardButton("🎮 Open Web Game", url=f"{PUBLIC_URL}/game?user_id={user_id}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "🎮 *Bingo Game*\n\n"
+        "Choose an option:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Check user balance"""
+    user_id = update.effective_user.id
+    
+    # Get balance from database
+    cursor.execute("SELECT balance, wins FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    
+    if user:
+        balance_amount, wins = user
+        await update.message.reply_text(
+            f"💰 *Your Balance*\n\n"
+            f"Balance: {balance_amount} ETB\n"
+            f"Wins: {wins}\n"
+            f"Card Price: 10 ETB",
+            parse_mode='Markdown'
+        )
+    else:
+        # Create new user
+        cursor.execute("INSERT INTO users (id, balance) VALUES (?, ?)", (user_id, 10.0))
+        conn.commit()
+        await update.message.reply_text(
+            "💰 *Your Balance*\n\n"
+            f"Balance: 10.0 ETB\n"
+            f"Wins: 0\n"
+            f"Card Price: 10 ETB",
+            parse_mode='Markdown'
+        )
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle button presses"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    data = query.data
+    
+    if data == "play":
+        # Create inline keyboard for game options
+        keyboard = [
+            [InlineKeyboardButton("🎫 Buy 1 Card (10 ETB)", callback_data="buy_1")],
+            [InlineKeyboardButton("🎫 Buy 3 Cards (30 ETB)", callback_data="buy_3")],
+            [InlineKeyboardButton("🎫 Buy 5 Cards (50 ETB)", callback_data="buy_5")],
+            [InlineKeyboardButton("🎮 Open Web Game", url=f"{PUBLIC_URL}/game?user_id={user_id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "🎮 *Bingo Game*\n\n"
+            "Choose an option:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    elif data == "balance":
+        # Get balance from database
+        cursor.execute("SELECT balance, wins FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        
+        if user:
+            balance_amount, wins = user
+            await query.edit_message_text(
+                f"💰 *Your Balance*\n\n"
+                f"Balance: {balance_amount} ETB\n"
+                f"Wins: {wins}\n"
+                f"Card Price: 10 ETB",
+                parse_mode='Markdown'
+            )
+        else:
+            # Create new user
+            cursor.execute("INSERT INTO users (id, balance) VALUES (?, ?)", (user_id, 10.0))
+            conn.commit()
+            await query.edit_message_text(
+                "💰 *Your Balance*\n\n"
+                f"Balance: 10.0 ETB\n"
+                f"Wins: 0\n"
+                f"Card Price: 10 ETB",
+                parse_mode='Markdown'
+            )
+    elif data == "help":
+        help_text = (
+            "📖 *Bingo Game Help*\n\n"
+            "*How to Play:*\n"
+            "1. Use /play to start a game\n"
+            "2. Buy cards using the buttons\n"
+            "3. Wait for numbers to be called\n"
+            "4. Mark numbers on your card\n"
+            "5. Shout BINGO when you win!\n\n"
+            "*Commands:*\n"
+            "/start - Start the bot\n"
+            "/play - Play Bingo\n"
+            "/balance - Check your balance\n"
+            "/help - Show this help"
+        )
+        await query.edit_message_text(help_text, parse_mode='Markdown')
+    elif data.startswith("buy_"):
+        count = int(data.split("_")[1])
+        
+        # Check if user has enough balance
+        cursor.execute("SELECT balance FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            cursor.execute("INSERT INTO users (id, balance) VALUES (?, ?)", (user_id, 10.0))
+            conn.commit()
+            current_balance = 10.0
+        else:
+            current_balance = user[0]
+        
+        total_cost = count * 10
+        
+        if current_balance < total_cost:
+            await query.edit_message_text(
+                f"❌ Insufficient balance!\n\n"
+                f"Your balance: {current_balance} ETB\n"
+                f"Need: {total_cost} ETB\n\n"
+                f"Use /balance to check your balance."
+            )
+            return
+        
+        # Deduct balance
+        new_balance = current_balance - total_cost
+        cursor.execute("UPDATE users SET balance = ? WHERE id = ?", (new_balance, user_id))
+        conn.commit()
+        
+        # Generate game link
+        game_url = f"{PUBLIC_URL}/game?user_id={user_id}"
+        
+        await query.edit_message_text(
+            f"✅ *{count} Card(s) Purchased!*\n\n"
+            f"Total cost: {total_cost} ETB\n"
+            f"Remaining balance: {new_balance} ETB\n\n"
+            f"Click below to start playing:",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🎮 Open Game", url=game_url)
+            ]]),
+            parse_mode='Markdown'
+        )
+
+async def setup_bot():
+    """Initialize and start the Telegram bot"""
+    global bot_app
+    
+    # Create application
+    bot_app = Application.builder().token(BOT_TOKEN).build()
+    
+    # Add handlers
+    bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(CommandHandler("help", help_command))
+    bot_app.add_handler(CommandHandler("play", play))
+    bot_app.add_handler(CommandHandler("balance", balance))
+    bot_app.add_handler(CallbackQueryHandler(button_callback))
+    
+    # Start the bot
+    await bot_app.initialize()
+    await bot_app.start()
+    await bot_app.updater.start_polling()
+    
+    logger.info("🤖 Telegram bot started successfully")
+    
+    return bot_app
+
+async def shutdown_bot():
+    """Shutdown the Telegram bot gracefully"""
+    global bot_app
+    if bot_app:
+        logger.info("🛑 Stopping bot...")
+        await bot_app.updater.stop()
+        await bot_app.stop()
+        await bot_app.shutdown()
 
 # ==========================
 # HELPER FUNCTIONS
@@ -719,7 +960,23 @@ async def handle_win(game_id: int, winner_id: int, card_id: int):
     except Exception as e:
         logger.error(f"Error handling win: {e}")
 
+@app.on_event("startup")
+async def startup_event():
+    """Start the Telegram bot when FastAPI starts"""
+    global bot_app
+    try:
+        bot_app = await setup_bot()
+    except Exception as e:
+        logger.error(f"Failed to start Telegram bot: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop the Telegram bot when FastAPI shuts down"""
+    await shutdown_bot()
+
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8080))
+    
+    # Run the server
     uvicorn.run(app, host="0.0.0.0", port=port)
