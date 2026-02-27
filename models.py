@@ -27,6 +27,7 @@ class Database:
         self.db_path = 'bingo.db'
         self._create_tables()
         self._insert_default_payment_methods()
+        self._insert_bingo_patterns()
         logger.info(f"✅ Database initialized at {self.db_path}")
     
     @contextmanager
@@ -104,7 +105,7 @@ class Database:
                     type TEXT NOT NULL,
                     provider TEXT,
                     min_amount INTEGER DEFAULT 1000,
-                    max_amount INTEGER DEFAULT 500000,
+                    max_amount INTEGER DEFAULT 50000,
                     is_active BOOLEAN DEFAULT TRUE,
                     instructions TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -151,6 +152,17 @@ class Database:
                 )
             ''')
             
+            # Bingo patterns table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS patterns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    positions TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
             # Create indexes
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id)')
@@ -162,7 +174,7 @@ class Database:
             logger.info("✅ Database tables created/verified")
     
     def _insert_default_payment_methods(self):
-        """Insert default payment methods"""
+        """Insert Ethiopian payment methods"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
@@ -170,24 +182,43 @@ class Database:
             if cursor.fetchone()['count'] > 0:
                 return
             
+            # Ethiopian Mobile Money Payment Methods
             default_methods = [
-                ('TELBIRR', 'ቴሌቢር (Telbirr)', 'mobile_money', 'Ethio Telecom', 1000, 500000, 1,
-                 '🔵 **ቴሌቢር ክፍያ / Telbirr Payment**\n\n'
-                 '1. Dial *127# to access Telbirr menu\n'
-                 '2. Select "Send Money"\n'
-                 '3. Enter number **0953933030**\n'
-                 '4. Enter amount\n'
-                 '5. Enter your PIN\n'
-                 '6. Save the reference number'),
+                ('TELBIRR', 'ቴሌቢር (Telbirr)', 'mobile_money', 'Ethio Telecom', 1000, 50000, 1,
+                 '''🔵 **ቴሌቢር ክፍያ መመሪያ / Telbirr Payment Instructions**
+
+1. ወደ ቴሌቢር ሜኑ ለመግባት *127# ይደውሉ
+2. "ገንዘብ ላክ" የሚለውን ይምረጡ
+3. ቁጥር **0953933030** ያስገቡ
+4. መጠኑን ያስገቡ (ከ10 እስከ 500 ብር)
+5. ፒንዎን ያስገቡ
+6. ከተጠናቀቀ በኋላ የደረሰኝ ቁጥር (reference) ያስቀምጡ
+
+📱 **English:**
+1. Dial *127# to access Telbirr menu
+2. Select "Send Money"
+3. Enter number **0953933030**
+4. Enter amount (10-500 ETB)
+5. Enter your PIN
+6. Save the reference number'''),
                 
-                ('CBEBIRR', 'ሲቢኢ ቢር (CBE Birr)', 'mobile_money', 'CBE', 1000, 500000, 1,
-                 '💚 **ሲቢኢ ቢር ክፍያ / CBE Birr Payment**\n\n'
-                 '1. Dial *847# to access CBE Birr menu\n'
-                 '2. Select "Send Money"\n'
-                 '3. Enter number **0953933030**\n'
-                 '4. Enter amount\n'
-                 '5. Enter your PIN\n'
-                 '6. Save the transaction ID')
+                ('CBEBIRR', 'ሲቢኢ ቢር (CBE Birr)', 'mobile_money', 'CBE', 1000, 50000, 1,
+                 '''💚 **ሲቢኢ ቢር ክፍያ መመሪያ / CBE Birr Payment Instructions**
+
+1. ወደ ሲቢኢ ቢር ሜኑ ለመግባት *847# ይደውሉ
+2. "ገንዘብ ላክ" የሚለውን ይምረጡ
+3. ቁጥር **0953933030** ያስገቡ
+4. መጠኑን ያስገቡ (ከ10 እስከ 500 ብር)
+5. ፒንዎን ያስገቡ
+6. ከተጠናቀቀ በኋላ የግብይት መለያ ቁጥር (transaction ID) ያስቀምጡ
+
+📱 **English:**
+1. Dial *847# to access CBE Birr menu
+2. Select "Send Money"
+3. Enter number **0953933030**
+4. Enter amount (10-500 ETB)
+5. Enter your PIN
+6. Save the transaction ID''')
             ]
             
             for method in default_methods:
@@ -198,9 +229,222 @@ class Database:
                 ''', method)
             
             conn.commit()
-            logger.info("✅ Default payment methods inserted")
+            logger.info("✅ Ethiopian payment methods inserted")
     
-    # User methods
+    def _insert_bingo_patterns(self):
+        """Insert 100 bingo patterns"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT COUNT(*) as count FROM patterns')
+            if cursor.fetchone()['count'] > 0:
+                return
+            
+            patterns = [
+                # Basic patterns (1-20)
+                {"name": "Full House", "description": "Mark all numbers on your card", "positions": json.dumps({"type": "full_house"})},
+                {"name": "Four Corners", "description": "Mark the four corner squares", "positions": json.dumps([[0,0], [0,4], [4,0], [4,4]])},
+                {"name": "X Pattern", "description": "Mark both diagonals", "positions": json.dumps([[0,0], [1,1], [2,2], [3,3], [4,4], [0,4], [1,3], [3,1], [4,0]])},
+                {"name": "Plus Sign", "description": "Mark middle row and middle column", "positions": json.dumps([[2,0], [2,1], [2,2], [2,3], [2,4], [0,2], [1,2], [3,2], [4,2]])},
+                {"name": "Top Row", "description": "Mark the entire top row", "positions": json.dumps([[0,0], [0,1], [0,2], [0,3], [0,4]])},
+                {"name": "Middle Row", "description": "Mark the entire middle row", "positions": json.dumps([[2,0], [2,1], [2,2], [2,3], [2,4]])},
+                {"name": "Bottom Row", "description": "Mark the entire bottom row", "positions": json.dumps([[4,0], [4,1], [4,2], [4,3], [4,4]])},
+                {"name": "First Column", "description": "Mark the entire first column", "positions": json.dumps([[0,0], [1,0], [2,0], [3,0], [4,0]])},
+                {"name": "Middle Column", "description": "Mark the entire middle column", "positions": json.dumps([[0,2], [1,2], [2,2], [3,2], [4,2]])},
+                {"name": "Last Column", "description": "Mark the entire last column", "positions": json.dumps([[0,4], [1,4], [2,4], [3,4], [4,4]])},
+                {"name": "Small Diamond", "description": "Mark a diamond shape in the center", "positions": json.dumps([[1,2], [2,1], [2,2], [2,3], [3,2]])},
+                {"name": "Big Diamond", "description": "Mark a large diamond shape", "positions": json.dumps([[0,2], [1,1], [1,3], [2,0], [2,4], [3,1], [3,3], [4,2]])},
+                {"name": "Letter L", "description": "Mark L shape", "positions": json.dumps([[0,0], [0,1], [0,2], [0,3], [0,4], [1,4], [2,4], [3,4], [4,4]])},
+                {"name": "Letter T", "description": "Mark T shape", "positions": json.dumps([[0,0], [0,1], [0,2], [0,3], [0,4], [1,2], [2,2], [3,2], [4,2]])},
+                {"name": "Letter U", "description": "Mark U shape", "positions": json.dumps([[0,0], [0,4], [1,0], [1,4], [2,0], [2,4], [3,0], [3,4], [4,0], [4,1], [4,2], [4,3], [4,4]])},
+                {"name": "Frame", "description": "Mark the outer border", "positions": json.dumps([[0,0], [0,1], [0,2], [0,3], [0,4], [1,0], [1,4], [2,0], [2,4], [3,0], [3,4], [4,0], [4,1], [4,2], [4,3], [4,4]])},
+                {"name": "Checkerboard", "description": "Mark alternating squares", "positions": json.dumps([[0,0], [0,2], [0,4], [1,1], [1,3], [2,0], [2,2], [2,4], [3,1], [3,3], [4,0], [4,2], [4,4]])},
+                {"name": "Zigzag", "description": "Mark a zigzag pattern", "positions": json.dumps([[0,0], [0,1], [1,1], [1,2], [2,2], [2,3], [3,3], [3,4], [4,4]])},
+                {"name": "Spiral", "description": "Mark a spiral pattern", "positions": json.dumps([[0,0], [0,1], [0,2], [0,3], [0,4], [1,4], [2,4], [3,4], [4,4], [4,3], [4,2], [4,1], [4,0], [3,0], [2,0], [1,0], [1,1], [1,2], [1,3], [2,3], [3,3], [3,2], [3,1], [2,1], [2,2]])},
+                {"name": "Smiley Face", "description": "Mark a smiley face pattern", "positions": json.dumps([[1,1], [1,3], [3,0], [3,1], [3,2], [3,3], [3,4], [4,2]])}
+            ]
+            
+            # Add 80 more patterns
+            for i in range(20, 100):
+                pattern_type = random.choice(["row", "column", "diagonal", "cross", "letter", "shape"])
+                if pattern_type == "row":
+                    row = random.randint(0, 4)
+                    name = f"Row {row + 1} Variant {i}"
+                    description = f"Mark row {row + 1} with a twist"
+                    positions = json.dumps([[row, col] for col in range(5)])
+                elif pattern_type == "column":
+                    col = random.randint(0, 4)
+                    name = f"Column {col + 1} Variant {i}"
+                    description = f"Mark column {col + 1} with a twist"
+                    positions = json.dumps([[row, col] for row in range(5)])
+                elif pattern_type == "diagonal":
+                    name = f"Diagonal Variant {i}"
+                    description = "Mark a diagonal pattern"
+                    positions = json.dumps([[j, j] for j in range(5)] + [[j, 4-j] for j in range(5)])
+                elif pattern_type == "cross":
+                    name = f"Cross Variant {i}"
+                    description = "Mark a cross pattern"
+                    positions = json.dumps([[2, j] for j in range(5)] + [[j, 2] for j in range(5)])
+                else:
+                    name = f"Random Shape {i}"
+                    description = "Mark a random pattern"
+                    pos_set = set()
+                    for _ in range(random.randint(5, 15)):
+                        pos_set.add((random.randint(0, 4), random.randint(0, 4)))
+                    positions = json.dumps([list(p) for p in pos_set])
+                
+                patterns.append({
+                    "name": name,
+                    "description": description,
+                    "positions": positions
+                })
+            
+            for p in patterns:
+                cursor.execute('''
+                    INSERT INTO patterns (name, description, positions)
+                    VALUES (?, ?, ?)
+                ''', (p["name"], p["description"], p["positions"]))
+            
+            conn.commit()
+            logger.info(f"✅ Inserted {len(patterns)} bingo patterns")
+    
+    # ==================== PAYMENT METHOD METHODS ====================
+    
+    def get_payment_methods(self, type=None, active_only=True):
+        """Get payment methods - FIXED METHOD"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            query = "SELECT * FROM payment_methods WHERE 1=1"
+            params = []
+            
+            if active_only:
+                query += " AND is_active = 1"
+            
+            if type:
+                query += " AND type = ?"
+                params.append(type)
+            
+            query += " ORDER BY method_name"
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    def get_payment_method(self, method_id):
+        """Get payment method by ID"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM payment_methods WHERE id = ?', (method_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    
+    def get_payment_method_by_code(self, method_code):
+        """Get payment method by code"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM payment_methods WHERE method_code = ?', (method_code,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    
+    def get_primary_account(self, method_id):
+        """Get primary account for payment method"""
+        # For now, return None - accounts not implemented
+        return None
+    
+    # ==================== PAYMENT REQUEST METHODS ====================
+    
+    def create_payment_request(self, user_id, method_id, amount, sender_phone=None):
+        """Create payment request"""
+        request_id = f"PAY-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
+        
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO payment_requests 
+                (request_id, user_id, method_id, amount, sender_phone)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (request_id, user_id, method_id, amount, sender_phone))
+            conn.commit()
+            return request_id
+    
+    def get_payment_request(self, request_id):
+        """Get payment request by ID"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT pr.*, pm.method_name 
+                FROM payment_requests pr
+                LEFT JOIN payment_methods pm ON pr.method_id = pm.id
+                WHERE pr.request_id = ?
+            ''', (request_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    
+    def get_user_payment_requests(self, user_id, limit=10):
+        """Get user payment requests"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM payment_requests 
+                WHERE user_id = ? 
+                ORDER BY created_at DESC 
+                LIMIT ?
+            ''', (user_id, limit))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    def get_pending_payment_requests(self, limit=20):
+        """Get pending payment requests"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT pr.*, u.username, u.first_name, u.last_name, pm.method_name
+                FROM payment_requests pr
+                JOIN users u ON pr.user_id = u.user_id
+                LEFT JOIN payment_methods pm ON pr.method_id = pm.id
+                WHERE pr.status = 'pending'
+                ORDER BY pr.created_at ASC
+                LIMIT ?
+            ''', (limit,))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    def update_payment_request_status(self, request_id, status, admin_notes=None):
+        """Update payment request status"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if status == 'completed':
+                cursor.execute('''
+                    UPDATE payment_requests 
+                    SET status = ?, admin_notes = ?, completed_at = CURRENT_TIMESTAMP
+                    WHERE request_id = ?
+                ''', (status, admin_notes, request_id))
+            else:
+                cursor.execute('''
+                    UPDATE payment_requests 
+                    SET status = ?, admin_notes = ?
+                    WHERE request_id = ?
+                ''', (status, admin_notes, request_id))
+            
+            conn.commit()
+            return cursor.rowcount > 0
+    
+    def add_payment_proof(self, request_id, proof_type, proof_data, file_path=None):
+        """Add payment proof"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE payment_requests 
+                SET transaction_reference = ?
+                WHERE request_id = ?
+            ''', (proof_data, request_id))
+            conn.commit()
+            return cursor.rowcount > 0
+    
+    # ==================== USER METHODS ====================
+    
     def get_or_create_user(self, user_id, username=None, first_name=None, last_name=None, phone_number=None):
         """Get existing user or create new one"""
         with self.get_connection() as conn:
@@ -366,5 +610,8 @@ class Database:
             
             cursor.execute('SELECT COUNT(*) as count FROM active_games WHERE status = "active"')
             stats['active_games'] = cursor.fetchone()['count']
+            
+            cursor.execute('SELECT COUNT(*) as count FROM payment_requests WHERE status = "pending"')
+            stats['pending_payments'] = cursor.fetchone()['count']
             
             return stats
