@@ -445,12 +445,13 @@
             font-weight: bold;
         }
         
-        /* Current Card */
+        /* Current Card Display */
         .current-card-container {
             margin-bottom: 15px;
             background: #f8f9fa;
             border-radius: 10px;
             padding: 15px;
+            border: 2px solid #667eea;
         }
         .card-title { 
             font-size: 16px; 
@@ -464,14 +465,14 @@
         .card-title span {
             background: #667eea;
             color: white;
-            padding: 3px 10px;
+            padding: 5px 15px;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 16px;
         }
         .bingo-card {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: 6px;
+            gap: 8px;
         }
         .card-cell {
             aspect-ratio: 1;
@@ -481,7 +482,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.2s;
@@ -500,57 +501,90 @@
             border-color: #ffd700;
         }
         
-        /* Card Selector Dropdown */
-        .card-selector {
-            margin-bottom: 15px;
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #667eea;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            background: white;
-            cursor: pointer;
-        }
-        .card-selector option {
-            padding: 10px;
+        /* Admin Controls - Make this stand out */
+        .admin-controls {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            border: 3px solid gold;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
         }
         
-        .bingo-btn {
-            width: 100%;
-            padding: 15px;
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-            border: none;
-            border-radius: 30px;
-            font-size: 24px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-bottom: 15px;
-            transition: all 0.2s;
-        }
-        .bingo-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
-        }
-        .bingo-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .admin-controls { margin-bottom: 15px; }
         .start-btn {
             width: 100%;
-            padding: 15px;
+            padding: 18px;
             background: #ff9800;
             color: white;
             border: none;
-            border-radius: 8px;
-            font-size: 20px;
+            border-radius: 10px;
+            font-size: 24px;
             font-weight: bold;
             cursor: pointer;
             animation: pulse 1.5s infinite;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 0 4px 15px rgba(255,152,0,0.4);
         }
-        .start-btn.ready { background: #4CAF50; animation: none; }
-        .start-btn:disabled { opacity: 0.5; cursor: not-allowed; animation: none; }
+        
+        .start-btn.ready { 
+            background: #4CAF50; 
+            animation: none;
+            box-shadow: 0 4px 15px rgba(76,175,80,0.4);
+        }
+        
+        .start-btn:disabled { 
+            opacity: 0.5; 
+            cursor: not-allowed; 
+            animation: none;
+        }
+        
+        .admin-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .admin-input-group input {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        .admin-input-group button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .pattern-select {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .pattern-btn {
+            width: 100%;
+            padding: 12px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
         
         @keyframes pulse {
             0% { transform: scale(1); }
@@ -765,38 +799,35 @@
                 <input type="checkbox" id="autoDaub" onchange="toggleAutoDaub()">
             </div>
             
-            <!-- Card Selector Dropdown -->
-            <select id="card-selector" class="card-selector" onchange="switchCard(this.value)">
-                <option value="">Select a card to view</option>
-            </select>
-            
-            <!-- Current Card Display -->
+            <!-- Current Card Display - This will show card #28 -->
             <div class="current-card-container">
                 <div class="card-title">
-                    Currently Viewing: <span id="current-card-id">#0</span>
+                    🎴 Your Card: <span id="current-card-id">#0</span>
                 </div>
-                <div id="card-display" class="bingo-card"></div>
+                <div id="card-display" class="bingo-card">
+                    <div class="loading">Loading your card...</div>
+                </div>
+            </div>
+            
+            <!-- ADMIN CONTROLS - START GAME BUTTON HERE -->
+            <div id="admin-controls" class="admin-controls" style="display: none;">
+                <button class="start-btn" id="start-game-btn" onclick="startGame()">🚀 START GAME</button>
+                <div class="admin-input-group">
+                    <input type="number" id="call-number" min="1" max="75" placeholder="Enter number (1-75)">
+                    <button onclick="callNumber()">Call</button>
+                </div>
+                <div>
+                    <select id="pattern-select" class="pattern-select">
+                        <option value="1">Full House</option>
+                    </select>
+                    <button class="pattern-btn" onclick="setPattern()">Set Pattern</button>
+                </div>
             </div>
             
             <!-- Bingo Button -->
             <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>
                 🎯 BINGO!
             </button>
-            
-            <!-- Admin Controls -->
-            <div id="admin-controls" class="admin-controls" style="display: none;">
-                <button class="start-btn" id="start-game-btn" onclick="startGame()">🚀 START GAME</button>
-                <div style="margin-top: 10px; display: flex; gap: 5px;">
-                    <input type="number" id="call-number" min="1" max="75" placeholder="Number" style="flex:1; padding:8px; border-radius:5px; border:1px solid #ccc;">
-                    <button onclick="callNumber()" style="background:#4CAF50; color:white; border:none; border-radius:5px; padding:8px 15px; cursor:pointer;">Call</button>
-                </div>
-                <div style="margin-top: 10px;">
-                    <select id="pattern-select" style="width:100%; padding:8px; border-radius:5px; border:1px solid #ccc;">
-                        <option value="1">Full House</option>
-                    </select>
-                    <button onclick="setPattern()" style="margin-top:5px; width:100%; padding:8px; background:#667eea; color:white; border:none; border-radius:5px; cursor:pointer;">Set Pattern</button>
-                </div>
-            </div>
             
             <!-- Players List -->
             <div class="players-list">
@@ -819,11 +850,14 @@
         const maxCards = {{ max_cards }};
         const isAdmin = (userId == adminId);
         
+        // ADMIN USER ID - Force show controls for your ID
+        const ADMIN_USER_ID = 8741250511;
+        
         // Game settings
         const TOTAL_NUMBERS = 75;
         const ROUND_TIME = 120;
         const CARD_PRICE = pricePerCard * 100;
-        const TOTAL_CARDS = 10000; // 10,000 cards
+        const TOTAL_CARDS = 10000;
         
         // State
         let ws = null;
@@ -847,24 +881,27 @@
         let hasCards = false;
         let patterns = [];
         let currentPattern = { id: 1, name: 'Full House' };
-        let isProcessing = false; // Prevent double submission
+        let isProcessing = false;
         
         // Auto-daub flag
         let autoDaubEnabled = false;
         
+        // Force show admin controls for your user ID
+        if (userId == ADMIN_USER_ID) {
+            console.log("👑 Admin detected - showing admin controls");
+            document.getElementById('admin-controls').style.display = 'block';
+            document.getElementById('status').className = 'status admin';
+            document.getElementById('status').textContent = '👑 ADMIN';
+        }
+        
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            console.log("🎮 Game initializing...");
             loadCards();
             loadPatterns();
             connectWebSocket();
             fetchBalance();
         });
-        
-        if (isAdmin) {
-            document.getElementById('admin-controls').style.display = 'block';
-            document.getElementById('status').className = 'status admin';
-            document.getElementById('status').textContent = '👑 ADMIN';
-        }
         
         // Load patterns from server
         async function loadPatterns() {
@@ -1010,6 +1047,9 @@
                             document.getElementById('selection').style.pointerEvents = 'none';
                             document.getElementById('confirm-btn').disabled = true;
                             document.getElementById('confirm-btn').textContent = '✓ READY';
+                            
+                            // Show game screen
+                            document.getElementById('game').style.display = 'block';
                         }
                         
                         // Show game screen if game is active
@@ -1052,30 +1092,22 @@
                     if (data.success) {
                         showMessage(`✅ ${data.message}`, 'success');
                         
-                        // Store the selected cards that were successfully processed
                         if (data.card_ids && data.card_ids.length > 0) {
                             selectedCards = data.card_ids;
                             updateSelectedDisplay();
                         }
                         
-                        // Now send finalize after a short delay
+                        // Send finalize after short delay
                         setTimeout(() => {
                             if (ws && ws.readyState === WebSocket.OPEN) {
                                 showMessage('⏳ Confirming selection...', 'info');
                                 ws.send(JSON.stringify({ 
                                     type: 'finalize'
                                 }));
-                            } else {
-                                showMessage('❌ Connection lost during confirmation', 'error');
-                                document.getElementById('confirm-btn').disabled = false;
-                                document.getElementById('confirm-btn').classList.remove('processing');
-                                document.getElementById('confirm-btn').textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
-                                isProcessing = false;
                             }
                         }, 1000);
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
-                        // Re-enable confirm button
                         document.getElementById('confirm-btn').disabled = false;
                         document.getElementById('confirm-btn').classList.remove('processing');
                         document.getElementById('confirm-btn').textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
@@ -1091,12 +1123,14 @@
                     }
                     hasCards = true;
                     updateSelectedDisplay();
-                    updateCardSelector();
                     
-                    // If we have cards and game is active, show game screen
-                    if (Object.keys(myCards).length > 0 && gameStarted) {
-                        showGameScreen();
-                    }
+                    // Show the card immediately
+                    currentCardId = data.card_id;
+                    document.getElementById('current-card-id').textContent = `#${currentCardId}`;
+                    renderCurrentCard();
+                    
+                    // Show game screen
+                    document.getElementById('game').style.display = 'block';
                 }
                 else if (data.type === 'finalized') {
                     if (data.success) {
@@ -1109,24 +1143,20 @@
                         document.getElementById('status').className = 'status ready';
                         document.getElementById('status').textContent = '✅ READY';
                         
-                        // Update balance after deduction
                         if (data.new_balance) {
                             balance = data.new_balance;
                             updateWallet();
                         }
                         
-                        // Disable card selection
                         document.getElementById('selection').style.opacity = '0.7';
                         document.getElementById('selection').style.pointerEvents = 'none';
                         
-                        // Clear selection panel since we're ready
-                        document.getElementById('selected-panel').style.display = 'none';
-                        document.getElementById('clear-btn').style.display = 'none';
+                        // Show game screen
+                        document.getElementById('game').style.display = 'block';
                         
                         showMessage('✅ Cards confirmed! You are now ready to play.', 'success');
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
-                        // Re-enable confirm button
                         document.getElementById('confirm-btn').disabled = false;
                         document.getElementById('confirm-btn').classList.remove('processing');
                         document.getElementById('confirm-btn').textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
@@ -1149,9 +1179,7 @@
                     document.getElementById('timer-container').style.display = 'block';
                     document.getElementById('last-number').textContent = '🎲 Game Started!';
                     
-                    // Show game screen fully
                     showGameScreen();
-                    
                     showMessage('🚀 Game started!', 'success');
                 }
                 else if (data.type === 'player_ready') {
@@ -1160,7 +1188,6 @@
                     updatePlayersList();
                     updateReadyCount();
                     
-                    // Check if we are ready
                     const playerData = players.find(p => p.id == userId);
                     if (playerData && playerData.ready) {
                         isReady = true;
@@ -1180,24 +1207,6 @@
                             startBtn.disabled = true;
                         }
                     }
-                }
-                else if (data.type === 'game_active') {
-                    // Update called numbers on reconnect
-                    if (data.called_numbers) {
-                        called = data.called_numbers;
-                        updateCalledNumbersList();
-                        document.getElementById('numbers-left').textContent = 
-                            `${TOTAL_NUMBERS - called.length} numbers left`;
-                    }
-                    if (data.last_number) {
-                        document.getElementById('last-number').textContent = `🎲 ${data.last_number}`;
-                    }
-                }
-                else if (data.type === 'player_reconnected') {
-                    players = data.players || [];
-                    updatePlayersList();
-                    updateReadyCount();
-                    showMessage(`👋 Reconnected to game`, 'info');
                 }
                 else if (data.type === 'number_called') {
                     called = data.called || [];
@@ -1265,7 +1274,6 @@
                 }
                 else if (data.type === 'error') {
                     showMessage(`❌ ${data.message}`, 'error');
-                    // Re-enable confirm button if it was disabled
                     if (isProcessing) {
                         document.getElementById('confirm-btn').disabled = false;
                         document.getElementById('confirm-btn').classList.remove('processing');
@@ -1287,7 +1295,6 @@
                 statusDiv.className = 'connection-status error';
                 statusDiv.textContent = '❌ Disconnected from server';
                 
-                // Re-enable confirm button if it was disabled
                 if (isProcessing) {
                     document.getElementById('confirm-btn').disabled = false;
                     document.getElementById('confirm-btn').classList.remove('processing');
@@ -1393,7 +1400,7 @@
             document.getElementById('numbers-left').textContent = `${TOTAL_NUMBERS - called.length} numbers left`;
         }
         
-        // Load available cards (1-10000)
+        // Load available cards
         async function loadCards() {
             const grid = document.getElementById('card-grid');
             grid.innerHTML = '<div class="loading">Loading 10,000 cards...</div>';
@@ -1401,7 +1408,6 @@
             try {
                 grid.innerHTML = '';
                 
-                // Create 10,000 cards
                 for (let i = 1; i <= TOTAL_CARDS; i++) {
                     const btn = document.createElement('button');
                     btn.className = 'card-btn';
@@ -1409,7 +1415,6 @@
                     btn.onclick = () => toggleCardSelection(i);
                     grid.appendChild(btn);
                     
-                    // Allow UI to update every 1000 cards
                     if (i % 1000 === 0) {
                         await new Promise(resolve => setTimeout(resolve, 0));
                     }
@@ -1457,7 +1462,7 @@
             updateCardGrid();
         }
         
-        // Update selected cards display - VERTICAL SCROLL LIST
+        // Update selected cards display
         function updateSelectedDisplay() {
             const panel = document.getElementById('selected-panel');
             const selectedList = document.getElementById('selected-list');
@@ -1526,7 +1531,6 @@
             updateSelectedDisplay();
         }
         
-        // FIXED: Confirm button handler with proper flow
         function finalizeSelection() {
             if (selectedCards.length === 0) {
                 showMessage('❌ Select at least one card', 'error');
@@ -1549,7 +1553,6 @@
                 return;
             }
             
-            // Disable button to prevent double-click
             isProcessing = true;
             const confirmBtn = document.getElementById('confirm-btn');
             confirmBtn.disabled = true;
@@ -1558,13 +1561,11 @@
             
             showMessage('⏳ Sending card selection to server...', 'info');
             
-            // First send select_cards
             ws.send(JSON.stringify({
                 type: 'select_cards',
                 card_ids: selectedCards
             }));
             
-            // Set a timeout in case server doesn't respond
             setTimeout(() => {
                 if (isProcessing) {
                     showMessage('⚠️ Server is taking too long to respond. Please check connection.', 'error');
@@ -1573,24 +1574,7 @@
                     confirmBtn.textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
                     isProcessing = false;
                 }
-            }, 10000); // 10 second timeout
-        }
-        
-        // Update card selector dropdown
-        function updateCardSelector() {
-            const selector = document.getElementById('card-selector');
-            selector.innerHTML = '<option value="">Select a card to view</option>';
-            
-            const cardIds = Object.keys(myCards).sort((a, b) => parseInt(a) - parseInt(b));
-            cardIds.forEach(id => {
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = `Card #${id}`;
-                if (currentCardId == id) {
-                    option.selected = true;
-                }
-                selector.appendChild(option);
-            });
+            }, 10000);
         }
         
         // Show game screen
@@ -1599,32 +1583,20 @@
             document.getElementById('selection').style.pointerEvents = hasCards ? 'none' : 'auto';
             document.getElementById('game').style.display = 'block';
             
-            updateCardSelector();
-            
-            // Select first card if none selected
-            const cardIds = Object.keys(myCards).sort((a, b) => parseInt(a) - parseInt(b));
-            if (cardIds.length > 0 && !currentCardId) {
-                switchCard(cardIds[0]);
-            }
-            
             document.getElementById('game-players').textContent = players.filter(p => p.card_count > 0).length;
-        }
-        
-        // Switch displayed card
-        function switchCard(cardId) {
-            if (!cardId) return;
-            
-            currentCardId = parseInt(cardId);
-            document.getElementById('current-card-id').textContent = `#${currentCardId}`;
-            renderCurrentCard();
         }
         
         // Render current card
         function renderCurrentCard() {
-            if (!currentCardId || !myCards[currentCardId]) return;
+            if (!currentCardId || !myCards[currentCardId]) {
+                console.log("No card to render");
+                return;
+            }
             
             const card = myCards[currentCardId];
             const markedNumbers = marked[currentCardId] || [];
+            
+            console.log(`🎴 Rendering card #${currentCardId}`, card);
             
             const cardDiv = document.getElementById('card-display');
             cardDiv.innerHTML = '';
