@@ -91,11 +91,25 @@
             color: white;
             padding: 12px 15px;
             display: flex;
-            justify-content: space-around;
+            justify-content: space-between;
         }
         .info-item { text-align: center; }
         .info-value { font-size: 22px; font-weight: bold; }
         .prize-value { color: #ffd700; }
+        
+        /* House Fee Display */
+        .house-fee-bar {
+            background: #9C27B0;
+            color: white;
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+        .house-fee {
+            color: gold;
+            font-weight: bold;
+        }
         
         /* Reconnect Bar */
         .reconnect-bar {
@@ -123,7 +137,7 @@
             gap: 15px;
         }
         
-        /* TOP SECTION: Selected Cards (Horizontal Scroll) */
+        /* TOP SECTION: Selected Cards (HORIZONTAL SCROLL) */
         .selected-section {
             background: #fff3e0;
             border-radius: 12px;
@@ -193,6 +207,9 @@
             align-items: center;
             justify-content: center;
         }
+        .selected-card-remove:hover {
+            background: #c82333;
+        }
         .total-cost {
             text-align: right;
             font-weight: bold;
@@ -239,6 +256,7 @@
             font-size: 8px;
             cursor: pointer;
             font-weight: bold;
+            transition: all 0.2s;
         }
         .card-btn.selected {
             background: #4CAF50;
@@ -248,6 +266,9 @@
             background: #dc3545;
             opacity: 0.5;
             cursor: not-allowed;
+        }
+        .card-btn:hover:not(.taken) {
+            transform: translateY(-1px);
         }
         
         /* Action Buttons */
@@ -264,10 +285,15 @@
             font-weight: bold;
             cursor: pointer;
             font-size: 14px;
+            transition: all 0.2s;
         }
         .confirm-btn {
             background: #4CAF50;
             color: white;
+        }
+        .confirm-btn:hover:not(:disabled) {
+            background: #45a049;
+            transform: translateY(-2px);
         }
         .confirm-btn:disabled {
             opacity: 0.5;
@@ -276,6 +302,14 @@
         .clear-btn {
             background: #dc3545;
             color: white;
+        }
+        .clear-btn:hover:not(:disabled) {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+        .clear-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         
         /* BOTTOM SECTION: Game Area (Two Columns) */
@@ -329,9 +363,10 @@
             font-weight: bold;
             border-radius: 8px;
             margin-bottom: 10px;
+            box-shadow: 0 2px 8px rgba(76,175,80,0.3);
         }
         
-        /* Current Card - 5x5 Grid */
+        /* Current Card - HORIZONTAL 5x5 Grid */
         .current-card-section {
             background: #f8f9fa;
             border-radius: 10px;
@@ -342,45 +377,58 @@
             font-size: 16px;
             font-weight: bold;
             margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         .card-title span {
             background: #667eea;
             color: white;
             padding: 3px 10px;
             border-radius: 20px;
-            margin-left: 5px;
             font-size: 14px;
         }
         
-        /* 5x5 Grid */
+        /* HORIZONTAL 5x5 Grid - FIXED */
         .bingo-grid {
             display: grid !important;
             grid-template-columns: repeat(5, 1fr) !important;
-            gap: 5px;
+            gap: 6px;
+            background: white;
+            padding: 8px;
+            border-radius: 8px;
         }
+        
         .bingo-cell {
             aspect-ratio: 1;
             background: white;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            font-size: 15px;
             font-weight: bold;
             cursor: pointer;
+            transition: all 0.2s;
+        }
+        .bingo-cell:hover {
+            transform: scale(1.03);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         .bingo-cell.marked {
             background: #4CAF50;
+            border-color: #4CAF50;
             color: white;
         }
         .bingo-cell.free {
             background: #ffd700;
+            border-color: #ffd700;
         }
         
         /* Right Game Column - Controls */
         .game-right {
-            width: 200px;
+            width: 220px;
         }
         
         /* Balance Display */
@@ -396,6 +444,29 @@
         .balance-amount {
             font-size: 20px;
             color: #4CAF50;
+        }
+        
+        /* Prize Pool Display */
+        .prize-display {
+            background: #fff3e0;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            text-align: center;
+            border: 1px solid #ff9800;
+        }
+        .prize-label {
+            font-size: 12px;
+            color: #e65100;
+        }
+        .prize-amount {
+            font-size: 22px;
+            font-weight: bold;
+            color: #e65100;
+        }
+        .house-fee-amount {
+            font-size: 12px;
+            color: #9C27B0;
         }
         
         /* Auto-mark */
@@ -417,6 +488,11 @@
             cursor: pointer;
             animation: pulse 1.5s infinite;
             margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+        .start-game-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(255,152,0,0.4);
         }
         .start-game-btn.ready {
             background: #4CAF50;
@@ -426,6 +502,26 @@
             opacity: 0.5;
             cursor: not-allowed;
             animation: none;
+        }
+        
+        /* Next Round Button */
+        .next-round-btn {
+            width: 100%;
+            padding: 12px;
+            background: #9C27B0;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+            display: none;
+        }
+        .next-round-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(156,39,176,0.4);
         }
         
         /* Admin Controls */
@@ -463,6 +559,9 @@
             cursor: pointer;
             font-size: 13px;
         }
+        .admin-input button:hover {
+            background: #45a049;
+        }
         .pattern-select {
             width: 100%;
             padding: 8px;
@@ -481,20 +580,8 @@
             cursor: pointer;
             font-size: 13px;
         }
-        
-        /* New Round Button */
-        .next-round-btn {
-            width: 100%;
-            padding: 12px;
-            background: #9C27B0;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-bottom: 10px;
-            display: none;
+        .set-pattern-btn:hover {
+            background: #0b7dda;
         }
         
         /* BINGO Button */
@@ -509,6 +596,11 @@
             font-weight: bold;
             cursor: pointer;
             margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+        .bingo-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(245,87,108,0.4);
         }
         .bingo-btn:disabled {
             opacity: 0.5;
@@ -520,7 +612,7 @@
             background: #f8f9fa;
             padding: 8px;
             border-radius: 6px;
-            max-height: 70px;
+            max-height: 80px;
             overflow-y: auto;
             font-size: 12px;
         }
@@ -563,10 +655,11 @@
             border-radius: 5px;
             display: none;
             font-size: 13px;
+            font-weight: bold;
         }
-        .message.success { background: #d4edda; color: #155724; display: block; }
-        .message.error { background: #f8d7da; color: #721c24; display: block; }
-        .message.info { background: #d1ecf1; color: #0c5460; display: block; }
+        .message.success { background: #d4edda; color: #155724; display: block; border: 1px solid #c3e6cb; }
+        .message.error { background: #f8d7da; color: #721c24; display: block; border: 1px solid #f5c6cb; }
+        .message.info { background: #d1ecf1; color: #0c5460; display: block; border: 1px solid #bee5eb; }
         
         @keyframes pulse {
             0% { transform: scale(1); }
@@ -625,6 +718,12 @@
             </div>
         </div>
         
+        <!-- House Fee Bar -->
+        <div class="house-fee-bar">
+            <span>🏠 House Fee (20%)</span>
+            <span class="house-fee" id="house-fee">0 ETB</span>
+        </div>
+        
         <!-- Reconnect Bar -->
         <div class="reconnect-bar" id="reconnect-bar">
             ⚡ Connection lost. <button onclick="manualReconnect()">Reconnect Now</button>
@@ -632,7 +731,7 @@
         
         <!-- Main Content - Stacked Layout -->
         <div class="main-content">
-            <!-- TOP SECTION: Selected Cards (Horizontal Scroll) -->
+            <!-- TOP SECTION: Selected Cards (HORIZONTAL SCROLL) -->
             <div class="selected-section">
                 <div class="selected-header">
                     <span>📋 Your Cards</span>
@@ -677,7 +776,7 @@
                     <!-- Last Number -->
                     <div class="last-number" id="last-number">🎲 Ready</div>
                     
-                    <!-- Current Card - 5x5 Grid -->
+                    <!-- Current Card - HORIZONTAL 5x5 Grid -->
                     <div class="current-card-section">
                         <div class="card-title">
                             Your Card: <span id="current-card-id">#0</span>
@@ -694,6 +793,13 @@
                         <div class="balance-amount" id="game-balance">{{ initial_balance }} ETB</div>
                     </div>
                     
+                    <!-- Prize Pool Display -->
+                    <div class="prize-display">
+                        <div class="prize-label">💰 Prize Pool</div>
+                        <div class="prize-amount" id="game-prize">0 ETB</div>
+                        <div class="house-fee-amount" id="game-house-fee">House (20%): 0 ETB</div>
+                    </div>
+                    
                     <!-- Auto-mark -->
                     <div class="auto-mark">
                         <label>
@@ -702,9 +808,9 @@
                     </div>
                     
                     <!-- START GAME BUTTON -->
-                    <button class="start-game-btn" id="start-game-btn" onclick="startGame()">🚀 START GAME</button>
+                    <button class="start-game-btn" id="start-game-btn" onclick="startGame()" disabled>🚀 START GAME</button>
                     
-                    <!-- Next Round Button (appears after game ends) -->
+                    <!-- Next Round Button -->
                     <button class="next-round-btn" id="next-round-btn" onclick="startNextRound()" style="display: none;">🔄 START NEXT ROUND</button>
                     
                     <!-- Admin Controls -->
@@ -746,6 +852,7 @@
         // Game settings
         const TOTAL_NUMBERS = 75;
         const TOTAL_CARDS = 1000;
+        const HOUSE_COMMISSION = 0.2; // 20% house fee
         
         // State
         let ws = null;
@@ -770,6 +877,7 @@
         let patterns = [];
         let isProcessing = false;
         let autoDaubEnabled = false;
+        let roundLocked = false; // Cards locked after round ends until next round starts
         
         // Show admin controls if admin
         if (userId == ADMIN_USER_ID || isAdmin) {
@@ -807,6 +915,21 @@
             document.getElementById('active-games').textContent = activeGames;
             document.getElementById('total-stake').textContent = `${totalStake.toFixed(2)} ETB`;
             document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
+        }
+        
+        // Calculate prize pool with 20% house commission
+        function calculatePrizePool() {
+            const totalCards = players.reduce((sum, p) => sum + (p.card_count || 0), 0);
+            const totalPrize = totalCards * pricePerCard;
+            const houseFee = totalPrize * HOUSE_COMMISSION;
+            const winnerPrize = totalPrize - houseFee;
+            
+            document.getElementById('prize-pool').textContent = `${totalPrize.toFixed(2)} ETB`;
+            document.getElementById('game-prize').textContent = `${totalPrize.toFixed(2)} ETB`;
+            document.getElementById('house-fee').textContent = `${houseFee.toFixed(2)} ETB`;
+            document.getElementById('game-house-fee').textContent = `House (20%): ${houseFee.toFixed(2)} ETB`;
+            
+            return { totalPrize, winnerPrize, houseFee };
         }
         
         // Load patterns
@@ -854,6 +977,7 @@
                     players = data.players || [];
                     gameStarted = data.game_started || false;
                     gameEnded = false;
+                    roundLocked = gameStarted; // Lock cards if game started
                     called = data.called_numbers || [];
                     currentRound = data.round || 1;
                     
@@ -862,6 +986,7 @@
                     }
                     
                     document.getElementById('active-game-display').textContent = currentRound;
+                    calculatePrizePool();
                     updateCardGrid();
                     updatePlayersList();
                     updateCalledNumbers();
@@ -893,7 +1018,6 @@
                     
                     // Debug - see what the card data looks like
                     console.log("🎴 Card #" + data.card_id + " received:", data.card);
-                    console.log("Card structure:", JSON.stringify(data.card));
                     
                     renderCurrentCard();
                 }
@@ -936,6 +1060,7 @@
                 }
                 else if (data.type === 'player_ready') {
                     players = data.players || [];
+                    calculatePrizePool();
                     updatePlayersList();
                     updateReadyCount();
                     
@@ -952,6 +1077,7 @@
                 else if (data.type === 'game_started') {
                     gameStarted = true;
                     gameEnded = false;
+                    roundLocked = true; // Lock cards
                     document.getElementById('status').textContent = '🎮 PLAYING';
                     document.getElementById('bingo-btn').disabled = false;
                     document.getElementById('last-number').textContent = '🎲 Game Started!';
@@ -982,6 +1108,7 @@
                 else if (data.type === 'game_won') {
                     gameStarted = false;
                     gameEnded = true;
+                    roundLocked = true; // Keep cards locked after win until next round
                     currentWinner = data.winner;
                     
                     document.getElementById('status').textContent = '🏆 WINNER!';
@@ -997,6 +1124,7 @@
                     }
                     
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
+                    calculatePrizePool();
                     updatePlayersList();
                     fetchBalance();
                     
@@ -1005,20 +1133,28 @@
                     }, 5000);
                 }
                 else if (data.type === 'game_reset') {
-                    // Game has been reset for next round
-                    resetForNewRound();
-                    
-                    // Show selection screen again
-                    document.getElementById('status').textContent = '⏳ WAITING';
-                    document.getElementById('next-round-btn').style.display = 'none';
+                    // Game has been reset for next round - UNLOCK CARDS
+                    gameStarted = false;
+                    gameEnded = false;
+                    roundLocked = false; // Unlock cards for new selection
+                    called = [];
+                    currentWinner = null;
                     
                     // Clear old cards but keep balance
                     selectedCards = [];
                     myCards = {};
                     marked = {};
-                    called = [];
                     isReady = false;
                     hasCards = false;
+                    
+                    document.getElementById('status').textContent = '⏳ WAITING';
+                    document.getElementById('bingo-btn').disabled = true;
+                    document.getElementById('last-number').textContent = '🎲 Ready for next round';
+                    document.getElementById('next-round-btn').style.display = 'none';
+                    
+                    // Update round display
+                    currentRound++;
+                    document.getElementById('active-game-display').textContent = currentRound;
                     
                     updateSelectedDisplay();
                     updateCardGrid();
@@ -1084,9 +1220,15 @@
             updateCardGrid();
         }
         
-        // Toggle card selection
+        // Toggle card selection - CHECK IF ROUND IS LOCKED
         function toggleCardSelection(cardId) {
-            if (gameStarted || isReady || isProcessing || gameEnded) return;
+            // Cannot select cards if game is active, round ended, or cards locked
+            if (gameStarted || isReady || isProcessing || gameEnded || roundLocked) {
+                if (gameEnded || roundLocked) {
+                    showMessage('Cards are locked until next round starts', 'info');
+                }
+                return;
+            }
             
             const index = selectedCards.indexOf(cardId);
             if (index >= 0) {
@@ -1100,6 +1242,11 @@
                 const totalCost = (selectedCards.length + 1) * pricePerCard;
                 if (totalCost > balance) {
                     showMessage('Insufficient balance! Please deposit.', 'error');
+                    return;
+                }
+                // Check if card is taken
+                if (takenCards.has(cardId)) {
+                    showMessage(`Card #${cardId} is already taken`, 'error');
                     return;
                 }
                 selectedCards.push(cardId);
@@ -1136,13 +1283,15 @@
                 totalCost.textContent = `Total: ${cost.toFixed(2)} ETB`;
                 selectedCount.textContent = `${selectedCards.length}/${maxCards}`;
                 
-                if (cost <= balance && !isProcessing && !gameStarted && !gameEnded) {
+                // Can confirm only if not locked and not processing
+                if (cost <= balance && !isProcessing && !gameStarted && !gameEnded && !roundLocked) {
                     confirmBtn.disabled = false;
                     confirmBtn.textContent = `Confirm (${cost.toFixed(2)} ETB)`;
                 } else {
                     confirmBtn.disabled = true;
                 }
                 clearBtn.style.display = 'block';
+                clearBtn.disabled = gameStarted || gameEnded || roundLocked;
             } else {
                 scroll.innerHTML = '';
                 totalCost.textContent = 'Total: 0 ETB';
@@ -1154,7 +1303,7 @@
         }
         
         function removeCard(cardId) {
-            if (isReady || isProcessing || gameStarted || gameEnded) return;
+            if (isReady || isProcessing || gameStarted || gameEnded || roundLocked) return;
             const index = selectedCards.indexOf(cardId);
             if (index >= 0) {
                 selectedCards.splice(index, 1);
@@ -1164,7 +1313,7 @@
         }
         
         function clearSelection() {
-            if (isReady || isProcessing || gameStarted || gameEnded) return;
+            if (isReady || isProcessing || gameStarted || gameEnded || roundLocked) return;
             selectedCards = [];
             updateSelectedDisplay();
             updateCardGrid();
@@ -1216,7 +1365,7 @@
             });
         }
         
-        // Render current card as 5x5 grid - FIXED VERSION
+        // Render current card as HORIZONTAL 5x5 grid
         function renderCurrentCard() {
             if (!currentCardId || !myCards[currentCardId]) {
                 console.log("No card to render");
@@ -1272,7 +1421,7 @@
                 ];
             }
             
-            // Render the 5x5 grid
+            // Render the HORIZONTAL 5x5 grid (rows first)
             for (let row = 0; row < 5; row++) {
                 for (let col = 0; col < 5; col++) {
                     const cell = document.createElement('div');
@@ -1428,52 +1577,19 @@
         function startNextRound() {
             if (!isAdmin) return;
             
-            // Check if user has enough balance for new cards
+            // Check if user has enough balance for new cards (minimum 1 card)
             if (balance < pricePerCard) {
                 showMessage('Insufficient balance for next round. Please deposit.', 'error');
                 return;
             }
             
-            // Clear current selection and prepare for new round
-            selectedCards = [];
-            myCards = {};
-            marked = {};
-            isReady = false;
-            hasCards = false;
-            currentCardId = null;
+            // Unlock cards for new selection
+            roundLocked = false;
             
             // Notify server to reset game
             ws.send(JSON.stringify({type: 'reset_game'}));
             
-            // Update UI
-            document.getElementById('status').textContent = '⏳ WAITING';
-            document.getElementById('next-round-btn').style.display = 'none';
-            document.getElementById('bingo-btn').disabled = true;
-            document.getElementById('last-number').textContent = '🎲 Ready for next round';
-            
-            updateSelectedDisplay();
-            updateCardGrid();
-            updateCalledNumbers();
-            
-            showMessage('Select your cards for the next round!', 'info');
-        }
-        
-        // Reset for new round
-        function resetForNewRound() {
-            gameStarted = false;
-            gameEnded = false;
-            called = [];
-            currentWinner = null;
-            
-            document.getElementById('last-number').textContent = '🎲 Ready for next round';
-            document.getElementById('bingo-btn').disabled = true;
-            document.getElementById('winner-announcement').style.display = 'none';
-            
-            // Update round display
-            currentRound++;
-            document.getElementById('active-game-display').textContent = currentRound;
-            
-            updateCalledNumbers();
+            showMessage('Starting next round... Select your cards!', 'info');
         }
         
         function showMessage(text, type) {
