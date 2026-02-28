@@ -641,30 +641,38 @@
             cursor: not-allowed;
         }
         
-        /* Players List */
+        /* Players List - FIXED: Better styling */
         .players-list {
             background: #f8f9fa;
-            padding: 8px;
-            border-radius: 6px;
-            max-height: 80px;
+            padding: 10px;
+            border-radius: 8px;
+            min-height: 60px;
+            max-height: 100px;
             overflow-y: auto;
             font-size: 12px;
+            border: 1px solid #ddd;
         }
         .player-badge {
             display: inline-block;
-            padding: 3px 8px;
-            background: white;
-            border-radius: 15px;
-            margin: 2px;
-            border: 1px solid #ddd;
+            padding: 4px 10px;
+            background: #e0e0e0;
+            color: #333;
+            border-radius: 20px;
+            margin: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            border: 1px solid #ccc;
         }
         .player-badge.ready {
             background: #4CAF50;
             color: white;
+            border-color: #2e7d32;
         }
         .player-badge.winner {
             background: gold;
             color: #333;
+            border-color: #b8860b;
+            animation: winnerGlow 1s infinite;
         }
         
         /* Winner Announcement */
@@ -701,6 +709,12 @@
             0% { transform: scale(1); }
             50% { transform: scale(1.02); }
             100% { transform: scale(1); }
+        }
+        
+        @keyframes winnerGlow {
+            0% { box-shadow: 0 0 5px gold; }
+            50% { box-shadow: 0 0 15px gold; }
+            100% { box-shadow: 0 0 5px gold; }
         }
     </style>
 </head>
@@ -880,7 +894,7 @@
                     <!-- BINGO Button -->
                     <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 BINGO!</button>
                     
-                    <!-- Players List -->
+                    <!-- Players List - FIXED: Will show all players -->
                     <div class="players-list" id="players-list"></div>
                 </div>
             </div>
@@ -1003,13 +1017,15 @@
                 }
                 
                 const select = document.getElementById('pattern-select');
-                select.innerHTML = '<option value="">Select Pattern</option>';
-                patterns.forEach(p => {
-                    const option = document.createElement('option');
-                    option.value = p.id;
-                    option.textContent = p.name;
-                    select.appendChild(option);
-                });
+                if (select) {
+                    select.innerHTML = '<option value="">Select Pattern</option>';
+                    patterns.forEach(p => {
+                        const option = document.createElement('option');
+                        option.value = p.id;
+                        option.textContent = p.name;
+                        select.appendChild(option);
+                    });
+                }
             } catch (e) {
                 console.error('Error loading patterns:', e);
             }
@@ -1047,8 +1063,21 @@
                     document.getElementById('active-game-display').textContent = currentRound;
                     calculatePrizePool();
                     updateCardGrid();
-                    updatePlayersList();
+                    updatePlayersList(); // This updates the players list
                     updateCalledNumbers();
+                    updateReadyCount(); // This updates the ready count
+                    
+                    const playerData = players.find(p => p.id == userId);
+                    if (playerData && playerData.card_count > 0) {
+                        hasCards = true;
+                        isReady = playerData.ready || false;
+                        
+                        if (isReady) {
+                            document.getElementById('confirm-btn').disabled = true;
+                            document.getElementById('confirm-btn').textContent = '✓ READY';
+                            document.getElementById('status').textContent = '✅ READY';
+                        }
+                    }
                     
                     if (gameStarted) {
                         document.getElementById('status').textContent = '🎮 PLAYING';
@@ -1076,8 +1105,8 @@
                         }
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
-                        isProcessing = false;
                     }
+                    isProcessing = false;
                 }
                 else if (data.type === 'finalized') {
                     if (data.success) {
@@ -1096,18 +1125,24 @@
                 else if (data.type === 'player_ready') {
                     players = data.players || [];
                     calculatePrizePool();
-                    updatePlayersList();
+                    updatePlayersList(); // Update players list when someone becomes ready
+                    updateReadyCount(); // Update ready count
                     
                     const readyCount = players.filter(p => p.ready).length;
                     document.getElementById('ready-count').textContent = readyCount;
                     
+                    // FIXED: Enable start button for admin when players are ready
                     const startBtn = document.getElementById('start-game-btn');
                     if (readyCount > 0 && userId == ADMIN_USER_ID) {
                         startBtn.classList.add('ready');
                         startBtn.disabled = false;
+                        startBtn.style.opacity = '1';
+                        startBtn.style.cursor = 'pointer';
                     } else {
                         startBtn.classList.remove('ready');
                         startBtn.disabled = true;
+                        startBtn.style.opacity = '0.5';
+                        startBtn.style.cursor = 'not-allowed';
                     }
                 }
                 else if (data.type === 'game_started') {
@@ -1169,6 +1204,7 @@
                     updateSelectedDisplay();
                     updateCardGrid();
                     updateCalledNumbers();
+                    updatePlayersList(); // Update players list after reset
                     document.getElementById('current-card-id').textContent = '#0';
                     document.getElementById('card-display').innerHTML = '';
                     
@@ -1202,7 +1238,7 @@
                     
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
                     calculatePrizePool();
-                    updatePlayersList();
+                    updatePlayersList(); // Update players list after win
                     fetchBalance();
                     
                     setTimeout(() => {
@@ -1254,7 +1290,12 @@
         }
         
         function toggleCardSelection(cardId) {
-            if (gameStarted || isReady || isProcessing || gameEnded || roundLocked) return;
+            if (gameStarted || isReady || isProcessing || gameEnded || roundLocked) {
+                if (gameEnded) {
+                    showMessage('Game ended! Click PLAY AGAIN', 'info');
+                }
+                return;
+            }
             
             const index = selectedCards.indexOf(cardId);
             if (index >= 0) {
@@ -1262,6 +1303,11 @@
             } else {
                 if (selectedCards.length >= maxCards) {
                     showMessage(`Maximum ${maxCards} cards`, 'error');
+                    return;
+                }
+                const totalCost = (selectedCards.length + 1) * pricePerCard;
+                if (totalCost > balance) {
+                    showMessage('Insufficient balance!', 'error');
                     return;
                 }
                 if (takenCards.has(cardId)) {
@@ -1428,6 +1474,8 @@
         
         function updateCalledNumbers() {
             const list = document.getElementById('called-numbers-list');
+            if (!list) return;
+            
             list.innerHTML = '';
             
             if (called && called.length > 0) {
@@ -1446,18 +1494,40 @@
             }
         }
         
+        // FIXED: Update players list to show all players with their status
         function updatePlayersList() {
             const list = document.getElementById('players-list');
+            if (!list) return;
+            
             list.innerHTML = '';
-            players.forEach(p => {
+            
+            if (players && players.length > 0) {
+                players.forEach(p => {
+                    const badge = document.createElement('span');
+                    badge.className = 'player-badge';
+                    if (p.ready) badge.classList.add('ready');
+                    if (p.winner) badge.classList.add('winner');
+                    
+                    let displayName = p.name;
+                    if (p.id == userId) displayName += ' (You)';
+                    if (p.card_count) displayName += ` [${p.card_count}]`;
+                    
+                    badge.textContent = displayName;
+                    list.appendChild(badge);
+                });
+            } else {
+                // Show placeholder when no players
                 const badge = document.createElement('span');
                 badge.className = 'player-badge';
-                if (p.ready) badge.classList.add('ready');
-                if (p.winner) badge.classList.add('winner');
-                badge.textContent = `${p.name} (${p.card_count || 0})`;
-                if (p.id == userId) badge.textContent += ' (You)';
+                badge.style.background = '#999';
+                badge.textContent = 'No players yet';
                 list.appendChild(badge);
-            });
+            }
+        }
+        
+        function updateReadyCount() {
+            const ready = players.filter(p => p.ready).length;
+            document.getElementById('ready-count').textContent = ready;
         }
         
         function autoMarkNumber(number) {
@@ -1520,7 +1590,10 @@
             showMessage('Select your cards!', 'success');
         }
         
+        // FIXED: Start game function with better error handling
         function startGame() {
+            console.log('Start game clicked');
+            
             if (userId != ADMIN_USER_ID) {
                 showMessage('Only admin can start the game', 'error');
                 return;
@@ -1528,6 +1601,17 @@
             
             if (gameStarted) {
                 showMessage('Game already started!', 'error');
+                return;
+            }
+            
+            const readyCount = players.filter(p => p.ready).length;
+            if (readyCount === 0) {
+                showMessage('No players ready!', 'error');
+                return;
+            }
+            
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                showMessage('Not connected to server', 'error');
                 return;
             }
             
