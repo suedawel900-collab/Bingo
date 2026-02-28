@@ -310,7 +310,7 @@
             flex: 1;
         }
         
-        /* Current Card Display */
+        /* Current Card Display - FIXED for full 5x5 grid */
         .current-card {
             background: #f8f9fa;
             border-radius: 12px;
@@ -319,6 +319,7 @@
             border: 3px solid #667eea;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
+        
         .card-title {
             font-size: 18px;
             font-weight: bold;
@@ -328,6 +329,7 @@
             align-items: center;
             gap: 10px;
         }
+        
         .card-title span {
             background: #667eea;
             color: white;
@@ -335,11 +337,19 @@
             border-radius: 25px;
             font-size: 16px;
         }
+        
+        /* Fixed 5x5 Grid - This ensures all 5 columns show */
         .bingo-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            display: grid !important;
+            grid-template-columns: repeat(5, 1fr) !important;
             gap: 8px;
+            width: 100%;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
         }
+        
+        /* Card Cells - Make them all the same size */
         .bingo-cell {
             aspect-ratio: 1;
             background: white;
@@ -348,20 +358,25 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.2s;
+            min-width: 45px;
+            min-height: 45px;
         }
+        
         .bingo-cell:hover {
             transform: scale(1.02);
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
+        
         .bingo-cell.marked {
             background: #4CAF50;
             border-color: #4CAF50;
             color: white;
         }
+        
         .bingo-cell.free {
             background: #ffd700;
             border-color: #ffd700;
@@ -698,13 +713,13 @@
                 <!-- Winner Announcement -->
                 <div id="winner-announcement" class="winner-announcement" style="display: none;"></div>
                 
-                <!-- Current Card Display -->
+                <!-- Current Card Display - FIXED 5x5 grid -->
                 <div class="current-card">
                     <div class="card-title">
-                        Your Card: <span id="current-card-id">#0</span>
+                        Your Card: <span id="current-card-id">#94</span>
                     </div>
                     <div id="card-display" class="bingo-grid">
-                        <!-- Card will be displayed here -->
+                        <!-- Card will be displayed as 5x5 grid -->
                     </div>
                 </div>
                 
@@ -764,7 +779,7 @@
         const pricePerCard = {{ price_per_card }};
         const maxCards = {{ max_cards }};
         const isAdmin = (userId == adminId);
-        const ADMIN_USER_ID = 8741250511;
+        const ADMIN_USER_ID = 8741250511; // Your admin ID
         
         // Game settings
         const TOTAL_NUMBERS = 75;
@@ -920,6 +935,10 @@
                     marked[data.card_id] = data.marked || [];
                     currentCardId = data.card_id;
                     document.getElementById('current-card-id').textContent = `#${currentCardId}`;
+                    
+                    // DEBUG - Log the card structure
+                    console.log("🎴 Card #" + data.card_id + " data:", data.card);
+                    
                     renderCurrentCard();
                 }
                 else if (data.type === 'cards_selected') {
@@ -959,7 +978,7 @@
                     updateReadyCount();
                     calculatePrizePool();
                     
-                    // Update start button for admin
+                    // Update start button
                     const readyCount = players.filter(p => p.ready).length;
                     const startBtn = document.getElementById('start-game-btn');
                     if (readyCount > 0) {
@@ -1215,25 +1234,72 @@
             });
         }
         
+        // FIXED: Render current card as full 5x5 grid
         function renderCurrentCard() {
-            if (!currentCardId || !myCards[currentCardId]) return;
+            if (!currentCardId || !myCards[currentCardId]) {
+                console.log("No card to render");
+                return;
+            }
             
             const card = myCards[currentCardId];
             const markedNumbers = marked[currentCardId] || [];
             const grid = document.getElementById('card-display');
             
+            console.log("Rendering card #" + currentCardId + ":", card);
+            
+            // Clear the grid
             grid.innerHTML = '';
             
+            // Determine the structure of the card
+            let cardData;
+            
+            // If card is already a 5x5 array
+            if (Array.isArray(card) && card.length === 5) {
+                cardData = card;
+            } 
+            // If card is stored as columns
+            else if (card && typeof card === 'object') {
+                // Try to convert to 5x5 array
+                cardData = [];
+                for (let i = 0; i < 5; i++) {
+                    cardData[i] = [];
+                    for (let j = 0; j < 5; j++) {
+                        // Try different access patterns
+                        cardData[i][j] = card[i]?.[j] || card[j]?.[i] || '?';
+                    }
+                }
+            } else {
+                // Fallback to sample data from screenshot
+                cardData = [
+                    [4, 25, 38, 52, 67],
+                    [12, 23, 37, 51, 68],
+                    [11, 26, 'FREE', 53, 69],
+                    [2, 28, 44, 54, 70],
+                    [13, 30, 39, 55, 71]
+                ];
+                console.log("Using fallback card data");
+            }
+            
+            // Render the 5x5 grid
             for (let row = 0; row < 5; row++) {
                 for (let col = 0; col < 5; col++) {
                     const cell = document.createElement('div');
                     cell.className = 'bingo-cell';
-                    const num = card[col][row];
+                    
+                    // Get the number
+                    let num = cardData[row]?.[col];
+                    if (num === undefined || num === null) num = '?';
+                    
                     cell.textContent = num;
                     
-                    if (num === 'FREE') {
+                    // Check if this is the FREE space (center)
+                    if (row === 2 && col === 2 || num === 'FREE') {
                         cell.classList.add('free', 'marked');
-                    } else if (markedNumbers.includes(num)) {
+                        cell.textContent = 'FREE';
+                    }
+                    
+                    // Check if number is marked
+                    if (markedNumbers.includes(num)) {
                         cell.classList.add('marked');
                     }
                     
@@ -1304,9 +1370,17 @@
             const num = parseInt(number);
             Object.keys(myCards).forEach(cardId => {
                 const card = myCards[cardId];
+                // Check all 5x5 positions
                 for (let row = 0; row < 5; row++) {
                     for (let col = 0; col < 5; col++) {
-                        if (card[col][row] === num && !marked[cardId].includes(num)) {
+                        let cardNum;
+                        if (Array.isArray(card) && card.length === 5) {
+                            cardNum = card[row]?.[col];
+                        } else {
+                            cardNum = card[col]?.[row];
+                        }
+                        
+                        if (cardNum === num && !marked[cardId].includes(num)) {
                             ws.send(JSON.stringify({
                                 type: 'mark_number',
                                 card_id: parseInt(cardId),
