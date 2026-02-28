@@ -370,7 +370,7 @@
             box-shadow: 0 2px 8px rgba(76,175,80,0.3);
         }
         
-        /* Current Card - HORIZONTAL 5x5 Grid */
+        /* Current Card - HORIZONTAL 5x5 Grid - FIXED ORIENTATION */
         .current-card-section {
             background: #f8f9fa;
             border-radius: 10px;
@@ -393,7 +393,7 @@
             font-size: 14px;
         }
         
-        /* HORIZONTAL 5x5 Grid - Numbers read left to right, top to bottom */
+        /* HORIZONTAL 5x5 Grid - CORRECT BINGO FORMAT (columns B,I,N,G,O) */
         .bingo-grid {
             display: grid !important;
             grid-template-columns: repeat(5, 1fr) !important;
@@ -401,6 +401,23 @@
             background: white;
             padding: 8px;
             border-radius: 8px;
+        }
+        
+        /* Add column headers for BINGO */
+        .bingo-header {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 6px;
+            margin-bottom: 5px;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .bingo-header div {
+            background: #667eea;
+            color: white;
+            padding: 5px;
+            border-radius: 4px;
         }
         
         .bingo-cell {
@@ -479,7 +496,7 @@
             font-size: 13px;
         }
         
-        /* START GAME BUTTON */
+        /* START GAME BUTTON - FIXED VISIBILITY */
         .start-game-btn {
             width: 100%;
             padding: 12px;
@@ -908,6 +925,14 @@
                         <div class="card-title">
                             Your Card: <span id="current-card-id">#0</span>
                         </div>
+                        <!-- BINGO column headers -->
+                        <div class="bingo-header">
+                            <div>B</div>
+                            <div>I</div>
+                            <div>N</div>
+                            <div>G</div>
+                            <div>O</div>
+                        </div>
                         <div id="card-display" class="bingo-grid"></div>
                     </div>
                 </div>
@@ -944,7 +969,7 @@
                         </label>
                     </div>
                     
-                    <!-- START GAME BUTTON -->
+                    <!-- START GAME BUTTON - FIXED: Always visible but only clickable by admin -->
                     <button class="start-game-btn" id="start-game-btn" onclick="startGame()" disabled>🚀 START GAME</button>
                     
                     <!-- Next Round Button -->
@@ -1025,20 +1050,20 @@
         let autoDaubEnabled = false;
         let roundLocked = false;
         
-        // Show admin controls and start button only for admin
+        // Show admin controls only for admin
         if (userId == ADMIN_USER_ID) {
             document.getElementById('admin-controls').style.display = 'block';
-            document.getElementById('start-game-btn').style.display = 'block';
             document.getElementById('status').textContent = '👑 ADMIN';
-        } else {
-            // Hide start button for regular players
-            document.getElementById('start-game-btn').style.display = 'none';
         }
         
         // Show auto-reset option only for admin
         if (isAdmin) {
             document.getElementById('auto-reset-container').style.display = 'block';
         }
+        
+        // FIXED: Start button visibility - always visible but only enabled for admin when ready
+        const startBtn = document.getElementById('start-game-btn');
+        startBtn.style.display = 'block'; // Always show the button
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -1231,7 +1256,8 @@
                     
                     const readyCount = players.filter(p => p.ready).length;
                     const startBtn = document.getElementById('start-game-btn');
-                    if (readyCount > 0 && isAdmin) {
+                    // FIXED: Enable start button only for admin when players are ready
+                    if (readyCount > 0 && userId == ADMIN_USER_ID) {
                         startBtn.classList.add('ready');
                         startBtn.disabled = false;
                     } else {
@@ -1540,6 +1566,7 @@
             });
         }
         
+        // FIXED: Render current card in correct BINGO orientation (columns B,I,N,G,O)
         function renderCurrentCard() {
             if (!currentCardId || !myCards[currentCardId]) {
                 const grid = document.getElementById('card-display');
@@ -1553,27 +1580,36 @@
             
             grid.innerHTML = '';
             
-            // Simple rendering - assume card is 5x5 array
+            // Card should be stored as 5 columns, each with 5 rows
+            // Column 0 = B (1-15), Column 1 = I (16-30), Column 2 = N (31-45), Column 3 = G (46-60), Column 4 = O (61-75)
+            
+            // Render rows (0-4) and columns (0-4)
             for (let row = 0; row < 5; row++) {
                 for (let col = 0; col < 5; col++) {
                     const cell = document.createElement('div');
                     cell.className = 'bingo-cell';
                     
-                    let num = card[row]?.[col];
-                    if (num === undefined) num = '?';
+                    // Get value - card should be in column-major format [col][row]
+                    let num = '?';
+                    if (card && card[col] && card[col][row] !== undefined) {
+                        num = card[col][row];
+                    }
                     
                     cell.textContent = num;
                     
+                    // Check if this is the FREE space (center)
                     if (row === 2 && col === 2 || num === 'FREE') {
                         cell.classList.add('free');
                         cell.textContent = 'FREE';
                     }
                     
-                    if (called.includes(num) && num !== 'FREE') {
+                    // Check if number has been called
+                    if (called.includes(parseInt(num)) && num !== 'FREE') {
                         cell.classList.add('marked');
                     }
                     
-                    if (markedNumbers.includes(num)) {
+                    // Check if player has marked this number
+                    if (markedNumbers.includes(parseInt(num))) {
                         cell.classList.add('marked');
                     }
                     
@@ -1585,7 +1621,8 @@
         
         function markNumber(cardId, num) {
             if (!gameStarted || num === 'FREE') return;
-            if (!called.includes(num)) {
+            const numInt = parseInt(num);
+            if (!called.includes(numInt)) {
                 showMessage(`Number ${num} not called yet`, 'error');
                 return;
             }
@@ -1593,7 +1630,7 @@
             ws.send(JSON.stringify({
                 type: 'mark_number',
                 card_id: cardId,
-                number: num
+                number: numInt
             }));
         }
         
@@ -1631,9 +1668,9 @@
             const num = parseInt(number);
             Object.keys(myCards).forEach(cardId => {
                 const card = myCards[cardId];
-                for (let row = 0; row < 5; row++) {
-                    for (let col = 0; col < 5; col++) {
-                        let cardNum = card[row]?.[col];
+                for (let col = 0; col < 5; col++) {
+                    for (let row = 0; row < 5; row++) {
+                        let cardNum = card[col]?.[row];
                         if (cardNum === num && !marked[cardId].includes(num)) {
                             ws.send(JSON.stringify({
                                 type: 'mark_number',
@@ -1688,7 +1725,7 @@
             showMessage('Select your cards for the next round!', 'success');
         }
         
-        // Start game function - only works for admin
+        // FIXED: Start game function - only works for admin
         function startGame() {
             // Check if user is admin
             if (userId != ADMIN_USER_ID) {
