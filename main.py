@@ -84,7 +84,7 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# Game Manager - Simplified Version
+# Game Manager - Fixed Version
 class GameManager:
     def __init__(self):
         self.active_games = {}
@@ -240,6 +240,7 @@ class GameManager:
             })
         return players
     
+    # FIXED: Balance is deducted immediately when cards are selected
     async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]):
         if game_id not in self.active_games:
             return False, "Game not found", 0
@@ -266,10 +267,11 @@ class GameManager:
         
         total_cost = len(card_ids) * CARD_PRICE
         
+        # Check balance
         if player['balance'] < total_cost:
             return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost
         
-        # Add cards
+        # Add cards and deduct balance immediately
         for card_id in card_ids:
             self.taken_cards[game_id].add(card_id)
             card_data = next(c for c in BINGO_CARDS if c['id'] == card_id)
@@ -278,12 +280,15 @@ class GameManager:
             player['marked'][card_id] = []
         
         player['total_spent'] += total_cost
-        player['balance'] -= total_cost
+        player['balance'] -= total_cost  # Deduct balance immediately
         self.active_games[game_id]['total_cards_sold'] += len(card_ids)
         self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * CARD_PRICE
         
+        logger.info(f"User {user_id} selected {len(card_ids)} cards, cost: {total_cost}, new balance: {player['balance']}")
+        
         return True, f"Selected {len(card_ids)} cards", total_cost
     
+    # FIXED: Finalize selection updates database
     async def finalize_selection(self, game_id: int, user_id: int):
         if game_id not in self.active_games:
             return False, "Game not found"
@@ -300,6 +305,8 @@ class GameManager:
             return False, "Already ready"
         
         total_cost = player['total_spent']
+        
+        # Update database with the already deducted balance
         result = db.update_balance(
             user_id=user_id,
             amount=-total_cost,
@@ -308,11 +315,16 @@ class GameManager:
         )
         
         if not result:
+            # If database update fails, refund the player
+            player['balance'] += total_cost
+            player['total_spent'] = 0
             return False, "Failed to deduct balance"
         
+        # Save to active games
         db.add_active_game(user_id, game_id, player['card_ids'], total_cost)
         player['ready'] = True
-        player['balance'] = result['new_balance']
+        
+        logger.info(f"User {user_id} finalized selection for game {game_id}, cost: {total_cost}")
         
         await self.broadcast(game_id, {
             'type': 'player_ready',
@@ -322,9 +334,11 @@ class GameManager:
         
         return True, "Ready to play"
     
+    # FIXED: Only admin can start the game
     async def start_game(self, game_id: int, user_id: int):
+        # Allow only admin to start
         if str(user_id) != ADMIN_USER_ID:
-            return False, "Not authorized"
+            return False, "Only admin can start the game"
         
         if game_id not in self.active_games:
             return False, "Game not found"
@@ -332,21 +346,27 @@ class GameManager:
         if self.game_started[game_id]:
             return False, "Game already started"
         
-        ready_count = sum(1 for p in self.active_games[game_id]['players'].values() if p['ready'])
-        if ready_count < 1:
+        # Check if there are any ready players
+        ready_players = [p for p in self.active_games[game_id]['players'].values() if p['ready']]
+        if len(ready_players) == 0:
             return False, "No players ready"
         
+        # Start the game
         self.game_started[game_id] = True
         self.game_winner[game_id] = None
         self.active_games[game_id]['called_numbers'] = []
         self.countdown_timers[game_id] = 15
         
-        if self.number_tasks[game_id]:
+        # Cancel any existing number generation task
+        if self.number_tasks.get(game_id):
             self.number_tasks[game_id].cancel()
         
+        # Start new number generation
         self.number_tasks[game_id] = asyncio.create_task(
             self.generate_numbers(game_id)
         )
+        
+        logger.info(f"Game {game_id} started by admin {user_id} with {len(ready_players)} players")
         
         await self.broadcast(game_id, {
             'type': 'game_started',
@@ -661,10 +681,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "**How to Play:**\n"
             "1. Click 'Play Bingo'\n"
             "2. Choose your cards\n"
-            "3. Wait for game to start\n"
+            "3. Wait for admin to start the game\n"
             "4. Mark numbers as called\n"
             "5. Click BINGO when you win!\n\n"
-            f"**Price:** {CARD_PRICE/100} ETB per card"
+            f"**Price:** {CARD_PRICE/100} ETB per card\n\n"
+            "**Note:** Only admin can start the game"
         )
         await query.edit_message_text(
             help_text,
@@ -804,7 +825,7 @@ async def health():
     """Health check for Railway"""
     return {"status": "healthy"}
 
-# ==================== NEW API ENDPOINTS ====================
+# ==================== API ENDPOINTS ====================
 
 @app.get("/api/patterns")
 async def list_patterns():
@@ -904,6 +925,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
     try:
         while True:
             data = await websocket.receive_json()
+            logger.info(f"WebSocket message: {data['type']} from user {user_id}")
             
             if data['type'] == 'select_cards':
                 success, message, cost = await game_manager.select_cards(
@@ -913,7 +935,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'type': 'cards_selected',
                     'success': success,
                     'message': message,
-                    'cost': cost
+                    'cost': cost,
+                    'card_ids': data['card_ids'] if success else []
                 })
                 
                 if success:
