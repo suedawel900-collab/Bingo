@@ -168,6 +168,18 @@ class GameManager:
             'total_stake': total_stake / 100
         })
         
+        # Send player's cards if any
+        player = self.active_games[game_id]['players'][user_id]
+        for card_id in player['card_ids']:
+            card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+            if card_data:
+                await websocket.send_json({
+                    'type': 'your_card',
+                    'card': card_data['card'],
+                    'card_id': card_id,
+                    'marked': player['marked'].get(card_id, [])
+                })
+        
         # Start countdown task
         asyncio.create_task(self.update_countdown(game_id))
         
@@ -720,7 +732,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== BOT SETUP ====================
 
 async def setup_bot():
-    """Initialize bot with webhook mode instead of polling"""
+    """Initialize bot with webhook mode"""
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Add handlers
@@ -780,12 +792,94 @@ async def webhook(request: Request):
 
 @app.get("/")
 async def root():
-    return {"status": "online", "cards": len(BINGO_CARDS)}
+    return {
+        "status": "online", 
+        "cards": len(BINGO_CARDS),
+        "price_per_card": CARD_PRICE / 100,
+        "max_cards_per_player": MAX_CARDS_PER_PLAYER
+    }
 
 @app.get("/health")
 async def health():
     """Health check for Railway"""
     return {"status": "healthy"}
+
+# ==================== NEW API ENDPOINTS ====================
+
+@app.get("/api/patterns")
+async def list_patterns():
+    """Return list of all bingo patterns"""
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, description FROM patterns ORDER BY id")
+        rows = cursor.fetchall()
+        conn.close()
+        
+        patterns = []
+        for row in rows:
+            patterns.append({
+                "id": row[0],
+                "name": row[1],
+                "description": row[2]
+            })
+        
+        # If no patterns in DB, return defaults
+        if not patterns:
+            patterns = [
+                {"id": 1, "name": "Full House", "description": "All numbers on card"},
+                {"id": 2, "name": "Four Corners", "description": "All four corners"},
+                {"id": 3, "name": "X Pattern", "description": "Both diagonals"},
+                {"id": 4, "name": "Blackout", "description": "Entire card filled"}
+            ]
+        
+        return patterns
+    except Exception as e:
+        logger.error(f"Error fetching patterns: {e}")
+        return []
+
+@app.get("/api/user/{user_id}")
+async def get_user_info(user_id: int):
+    """Get user information"""
+    try:
+        user = db.get_user(user_id)
+        if not user:
+            user = db.get_or_create_user(user_id)
+        
+        active_games = db.get_active_games_count(user_id)
+        total_stake = db.get_total_stake(user_id)
+        
+        return {
+            "user_id": user_id,
+            "balance": user['balance'],
+            "balance_etb": user['balance'] / 100,
+            "active_games": active_games,
+            "total_stake": total_stake,
+            "total_stake_etb": total_stake / 100,
+            "games_played": user['games_played'],
+            "games_won": user['games_won'],
+            "phone_number": user.get('phone_number', '')
+        }
+    except Exception as e:
+        logger.error(f"Error getting user {user_id}: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.get("/api/cards")
+async def get_cards_list():
+    """Return list of all cards"""
+    return {
+        "total": len(BINGO_CARDS),
+        "cards": [{"id": c["id"]} for c in BINGO_CARDS],
+        "price_per_card": CARD_PRICE / 100
+    }
+
+@app.get("/api/card/{card_id}")
+async def get_card_by_id(card_id: int):
+    """Get specific card by ID"""
+    card = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+    if card:
+        return card
+    return JSONResponse(content={"error": "Card not found"}, status_code=404)
 
 @app.get("/game", response_class=HTMLResponse)
 async def game_page(request: Request, user_id: int, game_id: int = 1):
@@ -868,7 +962,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 card_id = data.get('card_id')
                 if card_id:
                     player = game_manager.active_games[game_id]['players'].get(user_id)
-                    if player:
+                    if player and card_id in player['card_ids']:
                         card_index = player['card_ids'].index(card_id)
                         card = player['cards'][card_index]
                         marked_set = set(player['marked'].get(card_id, []))
@@ -881,6 +975,9 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                                 'type': 'error',
                                 'message': 'Not a valid bingo'
                             })
+            
+            elif data['type'] == 'ping':
+                await websocket.send_json({'type': 'pong'})
     
     except WebSocketDisconnect:
         game_manager.disconnect(game_id, websocket, user_id)
