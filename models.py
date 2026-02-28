@@ -1,21 +1,77 @@
 import sqlite3
 import json
 import logging
+import threading
 from datetime import datetime
 from typing import Optional, Dict, List, Any
+from queue import Queue
 
 logger = logging.getLogger(__name__)
 
 class Database:
-    def __init__(self, db_path="bingo.db"):
-        self.db_path = db_path
-        self.init_db()
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls, db_path="bingo.db"):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance.db_path = db_path
+                cls._instance.connection_pool = Queue(maxsize=20)
+                cls._instance.local = threading.local()
+                cls._instance.init_pool()
+                cls._instance.init_db()
+            return cls._instance
+    
+    def init_pool(self):
+        """Initialize connection pool"""
+        for _ in range(10):  # Start with 10 connections
+            conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            self.connection_pool.put(conn)
     
     def get_connection(self):
-        return sqlite3.connect(self.db_path)
+        """Get connection from pool"""
+        try:
+            # Try to get from thread local first
+            if hasattr(self.local, 'conn'):
+                return self.local.conn
+            
+            # Get from pool
+            conn = self.connection_pool.get(timeout=5)
+            self.local.conn = conn
+            return conn
+        except Exception as e:
+            logger.error(f"Error getting connection: {e}")
+            # Create new connection as fallback
+            conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            return conn
+    
+    def return_connection(self, conn=None):
+        """Return connection to pool"""
+        if conn is None and hasattr(self.local, 'conn'):
+            conn = self.local.conn
+            delattr(self.local, 'conn')
+        
+        if conn:
+            try:
+                self.connection_pool.put(conn, timeout=1)
+            except:
+                conn.close()
+    
+    def close_all_connections(self):
+        """Close all connections in pool"""
+        while not self.connection_pool.empty():
+            try:
+                conn = self.connection_pool.get_nowait()
+                conn.close()
+            except:
+                pass
     
     def init_db(self):
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             
             # Users table
@@ -168,29 +224,34 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_cards_game ON user_cards(game_id, user_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_active_games_user ON active_games(user_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_active_games_game ON active_games(game_id)")
             
             conn.commit()
-            logger.info("✅ Database initialized")
+            logger.info("✅ Database initialized with connection pooling")
+        finally:
+            self.return_connection(conn)
     
     def get_user(self, user_id: int) -> Optional[Dict]:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
             row = cursor.fetchone()
             if row:
-                columns = [description[0] for description in cursor.description]
-                return dict(zip(columns, row))
+                return dict(row)
             return None
+        finally:
+            self.return_connection(conn)
     
     def get_or_create_user(self, user_id: int, username=None, first_name=None, last_name=None, phone_number=None) -> Dict:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
             row = cursor.fetchone()
             
             if row:
-                columns = [description[0] for description in cursor.description]
-                user = dict(zip(columns, row))
+                user = dict(row)
                 
                 # Update phone if provided
                 if phone_number and not user.get('phone_number'):
@@ -215,16 +276,22 @@ class Database:
                 conn.commit()
                 
                 return self.get_user(user_id)
+        finally:
+            self.return_connection(conn)
     
     def update_user_phone(self, user_id: int, phone_number: str) -> bool:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute("UPDATE users SET phone_number = ? WHERE user_id = ?", (phone_number, user_id))
             conn.commit()
             return cursor.rowcount > 0
+        finally:
+            self.return_connection(conn)
     
     def update_balance(self, user_id: int, amount: int, transaction_type: str, description: str = None) -> Optional[Dict]:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             
             # Get current balance
@@ -233,7 +300,7 @@ class Database:
             if not row:
                 return None
             
-            current_balance = row[0]
+            current_balance = row['balance']
             new_balance = current_balance + amount
             
             if new_balance < 0:
@@ -264,9 +331,12 @@ class Database:
                 'new_balance': new_balance,
                 'amount': amount
             }
+        finally:
+            self.return_connection(conn)
     
     def add_active_game(self, user_id: int, game_id: int, card_ids: List[int], stake: int) -> bool:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO active_games (user_id, game_id, card_ids, stake)
@@ -274,22 +344,31 @@ class Database:
             ''', (user_id, game_id, json.dumps(card_ids), stake))
             conn.commit()
             return True
+        finally:
+            self.return_connection(conn)
     
     def get_active_games_count(self, user_id: int) -> int:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM active_games WHERE user_id = ?", (user_id,))
             return cursor.fetchone()[0]
+        finally:
+            self.return_connection(conn)
     
     def get_total_stake(self, user_id: int) -> int:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute("SELECT SUM(stake) FROM active_games WHERE user_id = ?", (user_id,))
             result = cursor.fetchone()[0]
             return result or 0
+        finally:
+            self.return_connection(conn)
     
     def get_user_transactions(self, user_id: int, limit: int = 20) -> List[Dict]:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT * FROM transactions 
@@ -298,11 +377,13 @@ class Database:
                 LIMIT ?
             ''', (user_id, limit))
             rows = cursor.fetchall()
-            columns = [description[0] for description in cursor.description]
-            return [dict(zip(columns, row)) for row in rows]
+            return [dict(row) for row in rows]
+        finally:
+            self.return_connection(conn)
     
     def get_payment_methods(self, type: str = None, active_only: bool = True) -> List[Dict]:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             query = "SELECT * FROM payment_methods WHERE 1=1"
             params = []
@@ -316,14 +397,16 @@ class Database:
             
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            columns = [description[0] for description in cursor.description]
-            return [dict(zip(columns, row)) for row in rows]
+            return [dict(row) for row in rows]
+        finally:
+            self.return_connection(conn)
     
     def create_payment_request(self, user_id: int, method_id: int, amount: int, sender_phone: str) -> str:
         import uuid
         request_id = str(uuid.uuid4())[:8].upper()
         
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO payment_requests (request_id, user_id, method_id, amount, sender_phone)
@@ -331,9 +414,12 @@ class Database:
             ''', (request_id, user_id, method_id, amount, sender_phone))
             conn.commit()
             return request_id
+        finally:
+            self.return_connection(conn)
     
     def get_payment_request(self, request_id: str) -> Optional[Dict]:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT pr.*, u.first_name, u.username 
@@ -343,12 +429,14 @@ class Database:
             ''', (request_id,))
             row = cursor.fetchone()
             if row:
-                columns = [description[0] for description in cursor.description]
-                return dict(zip(columns, row))
+                return dict(row)
             return None
+        finally:
+            self.return_connection(conn)
     
     def get_user_payment_requests(self, user_id: int, limit: int = 10) -> List[Dict]:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT * FROM payment_requests 
@@ -357,11 +445,13 @@ class Database:
                 LIMIT ?
             ''', (user_id, limit))
             rows = cursor.fetchall()
-            columns = [description[0] for description in cursor.description]
-            return [dict(zip(columns, row)) for row in rows]
+            return [dict(row) for row in rows]
+        finally:
+            self.return_connection(conn)
     
     def get_pending_payment_requests(self, limit: int = 20) -> List[Dict]:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT pr.*, u.first_name, u.username, u.phone_number
@@ -372,11 +462,13 @@ class Database:
                 LIMIT ?
             ''', (limit,))
             rows = cursor.fetchall()
-            columns = [description[0] for description in cursor.description]
-            return [dict(zip(columns, row)) for row in rows]
+            return [dict(row) for row in rows]
+        finally:
+            self.return_connection(conn)
     
     def update_payment_request_status(self, request_id: str, status: str, admin_notes: str = None) -> bool:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 UPDATE payment_requests 
@@ -385,9 +477,12 @@ class Database:
             ''', (status, admin_notes, request_id))
             conn.commit()
             return cursor.rowcount > 0
+        finally:
+            self.return_connection(conn)
     
     def add_payment_proof(self, request_id: str, proof_type: str, proof_data: str) -> bool:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO payment_proofs (request_id, proof_type, proof_data)
@@ -395,9 +490,12 @@ class Database:
             ''', (request_id, proof_type, proof_data))
             conn.commit()
             return True
+        finally:
+            self.return_connection(conn)
     
     def save_user_cards(self, user_id: int, game_id: int, card_ids: List[int], cards_data: List[Dict]) -> bool:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             for card_id, card_data in zip(card_ids, cards_data):
                 cursor.execute('''
@@ -406,26 +504,31 @@ class Database:
                 ''', (user_id, game_id, card_id, json.dumps(card_data)))
             conn.commit()
             return True
+        finally:
+            self.return_connection(conn)
     
     def get_user_cards(self, user_id: int, game_id: int) -> List[Dict]:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT * FROM user_cards 
                 WHERE user_id = ? AND game_id = ?
             ''', (user_id, game_id))
             rows = cursor.fetchall()
-            columns = [description[0] for description in cursor.description]
             cards = []
             for row in rows:
-                card = dict(zip(columns, row))
+                card = dict(row)
                 card['card_data'] = json.loads(card['card_data'])
                 card['marked_numbers'] = json.loads(card['marked_numbers'])
                 cards.append(card)
             return cards
+        finally:
+            self.return_connection(conn)
     
     def update_marked_numbers(self, user_id: int, game_id: int, card_id: int, marked_numbers: List[int]) -> bool:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             cursor.execute('''
                 UPDATE user_cards 
@@ -434,9 +537,12 @@ class Database:
             ''', (json.dumps(marked_numbers), user_id, game_id, card_id))
             conn.commit()
             return cursor.rowcount > 0
+        finally:
+            self.return_connection(conn)
     
     def get_system_stats(self) -> Dict:
-        with self.get_connection() as conn:
+        conn = self.get_connection()
+        try:
             cursor = conn.cursor()
             
             # Total users
@@ -466,3 +572,5 @@ class Database:
                 'total_withdrawals': total_withdrawals,
                 'active_games': active_games
             }
+        finally:
+            self.return_connection(conn)
