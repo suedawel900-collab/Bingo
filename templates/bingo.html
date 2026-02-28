@@ -137,7 +137,7 @@
             gap: 15px;
         }
         
-        /* TOP SECTION: Selected Cards (HORIZONTAL SCROLL) */
+        /* TOP SECTION: Selected Cards (HORIZONTAL SCROLL) - Support multiple cards */
         .selected-section {
             background: #fff3e0;
             border-radius: 12px;
@@ -291,18 +291,6 @@
             font-size: 14px;
             transition: all 0.2s;
         }
-        .confirm-btn {
-            background: #4CAF50;
-            color: white;
-        }
-        .confirm-btn:hover:not(:disabled) {
-            background: #45a049;
-            transform: translateY(-2px);
-        }
-        .confirm-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
         .clear-btn {
             background: #dc3545;
             color: white;
@@ -398,6 +386,34 @@
             font-size: 14px;
         }
         
+        /* Card navigation for multiple cards */
+        .card-navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .card-nav-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 5px 15px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .card-nav-btn:hover {
+            background: #5a67d8;
+        }
+        .card-nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .card-counter {
+            font-size: 14px;
+            color: #666;
+        }
+        
         /* BINGO Grid */
         .bingo-header {
             display: grid;
@@ -468,7 +484,7 @@
             color: #4CAF50;
         }
         
-        /* Prize Pool Display - FIXED: Shows final values */
+        /* Prize Pool - FIXED: Shows only winner amount */
         .prize-display {
             background: #fff3e0;
             border-radius: 8px;
@@ -486,21 +502,11 @@
             font-weight: bold;
             color: #e65100;
         }
-        .prize-breakdown {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px dashed #ff9800;
-            font-size: 12px;
-        }
-        .winner-prize {
+        .winner-only {
+            font-size: 14px;
             color: #4CAF50;
             font-weight: bold;
-        }
-        .house-fee {
-            color: #9C27B0;
-            font-weight: bold;
+            margin-top: 5px;
         }
         
         /* Auto-mark */
@@ -534,10 +540,16 @@
             cursor: pointer;
             margin-bottom: 10px;
             transition: all 0.2s;
+            animation: pulse 1.5s infinite;
+        }
+        .bingo-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(245,87,108,0.4);
         }
         .bingo-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            animation: none;
         }
         
         /* Players List */
@@ -588,6 +600,15 @@
             border: 3px solid white;
             box-shadow: 0 0 20px gold;
             display: none;
+        }
+        .winner-amount {
+            font-size: 24px;
+            color: #4CAF50;
+            background: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 10px;
         }
         
         /* Message */
@@ -658,12 +679,12 @@
                 <div class="info-value" id="active-game-display">1</div>
             </div>
             <div class="info-item">
-                <div>Prize</div>
+                <div>Prize Pool</div>
                 <div class="info-value prize-value" id="prize-pool">0 ETB</div>
             </div>
             <div class="info-item">
-                <div>Ready</div>
-                <div class="info-value" id="ready-count">0</div>
+                <div>Players</div>
+                <div class="info-value" id="player-count">0</div>
             </div>
         </div>
         
@@ -680,10 +701,10 @@
         
         <!-- Main Content -->
         <div class="main-content">
-            <!-- Selected Cards -->
+            <!-- Selected Cards - Support multiple cards -->
             <div class="selected-section">
                 <div class="selected-header">
-                    <span>📋 Your Cards</span>
+                    <span>📋 Your Cards ({{ max_cards }} max)</span>
                     <span id="selected-count">0/{{ max_cards }}</span>
                 </div>
                 <div id="selected-scroll" class="selected-scroll"></div>
@@ -700,9 +721,9 @@
                     <div class="card-grid" id="card-grid"></div>
                 </div>
                 
-                <!-- Action Buttons - Only Clear button remains -->
+                <!-- Action Buttons -->
                 <div class="action-buttons">
-                    <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()">Clear</button>
+                    <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()">Clear All</button>
                 </div>
             </div>
             
@@ -713,6 +734,7 @@
                     <!-- Winner Announcement -->
                     <div id="winner-announcement" class="winner-announcement">
                         <div id="winner-text"></div>
+                        <div class="winner-amount" id="winner-amount"></div>
                     </div>
                     
                     <!-- Called Numbers -->
@@ -724,10 +746,15 @@
                     <!-- Last Number -->
                     <div class="last-number" id="last-number">🎲 Ready</div>
                     
-                    <!-- Current Card -->
+                    <!-- Current Card with Navigation for multiple cards -->
                     <div class="current-card-section">
+                        <div class="card-navigation">
+                            <button class="card-nav-btn" id="prev-card" onclick="navigateCard(-1)">◀ Prev</button>
+                            <span class="card-counter" id="card-counter">Card <span id="current-card-index">1</span>/<span id="total-cards-count">0</span></span>
+                            <button class="card-nav-btn" id="next-card" onclick="navigateCard(1)">Next ▶</button>
+                        </div>
                         <div class="card-title">
-                            Your Card: <span id="current-card-id">#0</span>
+                            Card #<span id="current-card-id">0</span>
                         </div>
                         <div class="bingo-header">
                             <div>B</div>
@@ -748,14 +775,11 @@
                         <div class="balance-amount" id="game-balance">{{ initial_balance }} ETB</div>
                     </div>
                     
-                    <!-- Prize Pool - FIXED: Shows final values -->
+                    <!-- Prize Pool - FIXED: Shows only winner amount -->
                     <div class="prize-display">
-                        <div class="prize-label">💰 Prize Pool</div>
-                        <div class="prize-amount" id="game-prize">0 ETB</div>
-                        <div class="prize-breakdown">
-                            <span>Winner: <span class="winner-prize" id="winner-prize">0 ETB</span></span>
-                            <span>House: <span class="house-fee" id="game-house-fee">0 ETB</span></span>
-                        </div>
+                        <div class="prize-label">🏆 Winner Prize</div>
+                        <div class="prize-amount" id="winner-prize">0 ETB</div>
+                        <div class="winner-only">(90% of pool)</div>
                     </div>
                     
                     <!-- Auto-mark -->
@@ -770,8 +794,8 @@
                         ⏱️ Game starting in <span id="timer-seconds">20</span>s
                     </div>
                     
-                    <!-- BINGO Button -->
-                    <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 BINGO!</button>
+                    <!-- BINGO Button - Enhanced for winner detection -->
+                    <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 CLAIM BINGO!</button>
                     
                     <!-- Players List -->
                     <div class="players-list" id="players-list"></div>
@@ -794,13 +818,14 @@
         // Game settings
         const TOTAL_NUMBERS = 75;
         const TOTAL_CARDS = 1000;
-        const HOUSE_COMMISSION = 0.2;
+        const HOUSE_COMMISSION = 0.2; // 20% house fee
         
         // State
         let ws = null;
         let selectedCards = [];
-        let myCards = {};
-        let marked = {};
+        let myCards = {}; // card_id -> card data
+        let myCardIds = []; // array of card IDs for navigation
+        let marked = {}; // card_id -> array of marked numbers
         let called = [];
         let players = [];
         let takenCards = new Set();
@@ -808,12 +833,12 @@
         let gameEnded = false;
         let currentRound = 1;
         let currentWinner = null;
+        let currentCardIndex = 0; // Index in myCardIds array
         let currentCardId = null;
         let balance = {{ initial_balance }};
         let activeGames = {{ initial_active_games }};
         let totalStake = {{ initial_stake }};
         let isReady = false;
-        let hasCards = false;
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
         let isProcessing = false;
@@ -854,7 +879,7 @@
             document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
         }
         
-        // Calculate prize pool - FIXED: Shows final values
+        // Calculate prize pool - FIXED: Shows only winner amount
         function calculatePrizePool() {
             const totalCards = players.reduce((sum, p) => sum + (p.card_count || 0), 0);
             const totalPrize = totalCards * pricePerCard;
@@ -862,9 +887,7 @@
             const winnerPrize = totalPrize - houseFee;
             
             document.getElementById('prize-pool').textContent = `${totalPrize.toFixed(2)} ETB`;
-            document.getElementById('game-prize').textContent = `${totalPrize.toFixed(2)} ETB`;
             document.getElementById('house-fee').textContent = `${houseFee.toFixed(2)} ETB`;
-            document.getElementById('game-house-fee').textContent = `${houseFee.toFixed(2)} ETB`;
             document.getElementById('winner-prize').textContent = `${winnerPrize.toFixed(2)} ETB`;
             
             return { totalPrize, winnerPrize, houseFee };
@@ -892,6 +915,23 @@
                     timerDisplay.style.display = 'none';
                 }
             }, 1000);
+        }
+        
+        // Navigate between multiple cards
+        function navigateCard(direction) {
+            if (myCardIds.length === 0) return;
+            
+            currentCardIndex = (currentCardIndex + direction + myCardIds.length) % myCardIds.length;
+            currentCardId = myCardIds[currentCardIndex];
+            
+            document.getElementById('current-card-id').textContent = currentCardId;
+            document.getElementById('current-card-index').textContent = currentCardIndex + 1;
+            
+            // Update navigation buttons
+            document.getElementById('prev-card').disabled = myCardIds.length <= 1;
+            document.getElementById('next-card').disabled = myCardIds.length <= 1;
+            
+            renderCurrentCard();
         }
         
         // WebSocket connection
@@ -924,6 +964,7 @@
                     currentRound = data.round || 1;
                     
                     document.getElementById('active-game-display').textContent = currentRound;
+                    document.getElementById('player-count').textContent = players.length;
                     calculatePrizePool();
                     updateCardGrid();
                     updatePlayersList();
@@ -943,8 +984,23 @@
                 else if (data.type === 'your_card') {
                     myCards[data.card_id] = data.card;
                     marked[data.card_id] = data.marked || [];
-                    currentCardId = data.card_id;
-                    document.getElementById('current-card-id').textContent = `#${currentCardId}`;
+                    
+                    // Add to card IDs array if not already present
+                    if (!myCardIds.includes(data.card_id)) {
+                        myCardIds.push(data.card_id);
+                    }
+                    
+                    // Update card counter
+                    document.getElementById('total-cards-count').textContent = myCardIds.length;
+                    
+                    // Set current card if this is the first one
+                    if (myCardIds.length === 1) {
+                        currentCardId = data.card_id;
+                        currentCardIndex = 0;
+                        document.getElementById('current-card-id').textContent = currentCardId;
+                        document.getElementById('current-card-index').textContent = 1;
+                    }
+                    
                     renderCurrentCard();
                 }
                 else if (data.type === 'cards_selected') {
@@ -972,6 +1028,7 @@
                     players = data.players || [];
                     calculatePrizePool();
                     updatePlayersList();
+                    document.getElementById('player-count').textContent = players.length;
                 }
                 else if (data.type === 'game_started') {
                     gameStarted = true;
@@ -1014,7 +1071,8 @@
                     document.getElementById('bingo-btn').disabled = true;
                     
                     const winnerDiv = document.getElementById('winner-announcement');
-                    document.getElementById('winner-text').innerHTML = `🏆 ${data.winner.name} WINS! 🏆<br>Prize: ${data.prize} ETB`;
+                    document.getElementById('winner-text').innerHTML = `🏆 ${data.winner.name} WINS! 🏆`;
+                    document.getElementById('winner-amount').textContent = `${data.prize} ETB`;
                     winnerDiv.style.display = 'block';
                     
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
@@ -1035,16 +1093,19 @@
                     
                     selectedCards = [];
                     myCards = {};
+                    myCardIds = [];
                     marked = {};
                     isReady = false;
-                    hasCards = false;
                     takenCards.clear();
+                    currentCardIndex = 0;
+                    currentCardId = null;
                     
                     document.getElementById('status').textContent = '⏳ WAITING';
                     document.getElementById('bingo-btn').disabled = true;
                     document.getElementById('last-number').textContent = '🎲 Ready';
                     document.getElementById('winner-announcement').style.display = 'none';
                     document.getElementById('auto-start-timer').style.display = 'none';
+                    document.getElementById('total-cards-count').textContent = '0';
                     
                     if (autoStartTimer) {
                         clearInterval(autoStartTimer);
@@ -1110,7 +1171,7 @@
             console.log(`✅ Loaded ${TOTAL_CARDS} cards`);
         }
         
-        // Toggle card selection
+        // Toggle card selection - Support multiple cards
         function toggleCardSelection(cardId) {
             console.log('Toggling card:', cardId);
             
@@ -1232,8 +1293,11 @@
             });
         }
         
+        // Render current card
         function renderCurrentCard() {
-            if (!currentCardId || !myCards[currentCardId]) return;
+            if (!currentCardId || !myCards[currentCardId]) {
+                return;
+            }
             
             const card = myCards[currentCardId];
             const markedNumbers = marked[currentCardId] || [];
@@ -1268,6 +1332,7 @@
             }
         }
         
+        // Mark number on card
         function markNumber(cardId, num) {
             if (!gameStarted || num === 'FREE') return;
             const numInt = parseInt(num);
@@ -1280,6 +1345,74 @@
                 type: 'mark_number',
                 card_id: cardId,
                 number: numInt
+            }));
+        }
+        
+        // Check for BINGO - Winner detection
+        function checkBingo() {
+            if (!gameStarted || !currentCardId) return;
+            
+            // Check if current card has bingo
+            const card = myCards[currentCardId];
+            const markedNumbers = marked[currentCardId] || [];
+            
+            // Check rows
+            for (let row = 0; row < 5; row++) {
+                let rowComplete = true;
+                for (let col = 0; col < 5; col++) {
+                    const val = card[col][row];
+                    if (val !== 'FREE' && !markedNumbers.includes(val)) {
+                        rowComplete = false;
+                        break;
+                    }
+                }
+                if (rowComplete) {
+                    claimBingo(currentCardId);
+                    return;
+                }
+            }
+            
+            // Check columns
+            for (let col = 0; col < 5; col++) {
+                let colComplete = true;
+                for (let row = 0; row < 5; row++) {
+                    const val = card[col][row];
+                    if (val !== 'FREE' && !markedNumbers.includes(val)) {
+                        colComplete = false;
+                        break;
+                    }
+                }
+                if (colComplete) {
+                    claimBingo(currentCardId);
+                    return;
+                }
+            }
+            
+            // Check diagonals
+            let diag1Complete = true;
+            let diag2Complete = true;
+            for (let i = 0; i < 5; i++) {
+                const val1 = card[i][i];
+                const val2 = card[4-i][i];
+                
+                if (val1 !== 'FREE' && !markedNumbers.includes(val1)) diag1Complete = false;
+                if (val2 !== 'FREE' && !markedNumbers.includes(val2)) diag2Complete = false;
+            }
+            
+            if (diag1Complete || diag2Complete) {
+                claimBingo(currentCardId);
+                return;
+            }
+            
+            showMessage('No bingo on this card yet!', 'error');
+        }
+        
+        // Claim BINGO
+        function claimBingo(cardId) {
+            showMessage('🎯 BINGO claimed! Verifying...', 'info');
+            ws.send(JSON.stringify({
+                type: 'claim_bingo',
+                card_id: cardId
             }));
         }
         
@@ -1356,15 +1489,6 @@
         function toggleAutoDaub() {
             autoDaubEnabled = document.getElementById('autoDaub').checked;
             showMessage(autoDaubEnabled ? 'Auto-mark ON' : 'Auto-mark OFF', 'info');
-        }
-        
-        function checkBingo() {
-            if (!gameStarted || !currentCardId) return;
-            ws.send(JSON.stringify({
-                type: 'claim_bingo',
-                card_id: currentCardId
-            }));
-            showMessage('🎯 BINGO claimed!', 'info');
         }
         
         function showMessage(text, type) {
