@@ -1420,11 +1420,11 @@ async def approve_payment_callback(update: Update, context: ContextTypes.DEFAULT
             ]])
         )
         
-        # Confirm to admin
+        # Confirm to admin - FIXED: Added missing quote
         await query.edit_message_text(
             f"✅ **Payment Approved Successfully!**\n\n"
             f"**Request ID:** `{request_id}`\n"
-            f"**User ID:** {request['user_id']}\n
+            f"**User ID:** {request['user_id']}\n"
             f"**Amount:** {request['amount']/100:.0f} ETB\n\n"
             f"The user has been notified.",
             parse_mode='Markdown'
@@ -1485,7 +1485,7 @@ async def reject_payment_callback(update: Update, context: ContextTypes.DEFAULT_
             ]])
         )
         
-        # Confirm to admin
+        # Confirm to admin - FIXED: Added missing quote
         await query.edit_message_text(
             f"❌ **Payment Rejected**\n\n"
             f"**Request ID:** `{request_id}`\n"
@@ -1787,6 +1787,13 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'message': message
                 })
             
+            elif data['type'] == 'reset_game':
+                if user_id != int(ADMIN_USER_ID):
+                    await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
+                    continue
+                await game_manager.reset_game(game_id)
+                await websocket.send_json({'type': 'game_reset', 'success': True})
+            
             elif data['type'] == 'set_pattern':
                 if user_id != int(ADMIN_USER_ID):
                     await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
@@ -1854,7 +1861,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                             
                             # Check bingo using pattern
                             if game_manager.check_card_bingo(card, marked_set):
-                                await game_manager.declare_winner(game_id, user_id, card_id, called[-1] if called else 0)
+                                await game_manager.declare_winner(game_id, user_id, card_id, game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0)
                             else:
                                 await websocket.send_json({
                                     'type': 'error',
