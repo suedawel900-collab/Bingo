@@ -991,7 +991,7 @@
         const TOTAL_CARDS = 1000;
         const HOUSE_COMMISSION = 0.2; // 20% house fee
         
-        // BINGO column ranges (standard BINGO)
+        // BINGO column ranges
         const BINGO_COLUMNS = [
             { name: 'B', min: 1, max: 15 },
             { name: 'I', min: 16, max: 30 },
@@ -1025,13 +1025,17 @@
         let autoDaubEnabled = false;
         let roundLocked = false;
         
-        // Show admin controls if admin
-        if (userId == ADMIN_USER_ID || isAdmin) {
+        // Show admin controls and start button only for admin
+        if (userId == ADMIN_USER_ID) {
             document.getElementById('admin-controls').style.display = 'block';
+            document.getElementById('start-game-btn').style.display = 'block';
             document.getElementById('status').textContent = '👑 ADMIN';
+        } else {
+            // Hide start button for regular players
+            document.getElementById('start-game-btn').style.display = 'none';
         }
         
-        // Show auto-reset option for admin
+        // Show auto-reset option only for admin
         if (isAdmin) {
             document.getElementById('auto-reset-container').style.display = 'block';
         }
@@ -1057,13 +1061,9 @@
                         updateWallet();
                         document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
                     }
-                } else {
-                    console.log('Using initial balance from template');
-                    // Keep using initial values from template
                 }
             } catch (e) {
                 console.error('Error fetching balance:', e);
-                // Continue with existing balance
             }
         }
         
@@ -1074,7 +1074,7 @@
             document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
         }
         
-        // Calculate prize pool with 20% house commission
+        // Calculate prize pool
         function calculatePrizePool() {
             const totalCards = players.reduce((sum, p) => sum + (p.card_count || 0), 0);
             const totalPrize = totalCards * pricePerCard;
@@ -1097,8 +1097,6 @@
                     patterns = await response.json();
                     console.log('✅ Patterns loaded:', patterns);
                 } else {
-                    console.log('Using default patterns');
-                    // Use default patterns if API fails
                     patterns = [
                         {id: 1, name: 'Full House', description: 'All numbers on card'},
                         {id: 2, name: 'Four Corners', description: 'All four corners'},
@@ -1107,7 +1105,6 @@
                     ];
                 }
                 
-                // Populate pattern select
                 const select = document.getElementById('pattern-select');
                 if (select) {
                     select.innerHTML = '<option value="">Select Pattern</option>';
@@ -1120,13 +1117,6 @@
                 }
             } catch (e) {
                 console.error('Error loading patterns:', e);
-                // Set default patterns on error
-                patterns = [
-                    {id: 1, name: 'Full House', description: 'All numbers on card'},
-                    {id: 2, name: 'Four Corners', description: 'All four corners'},
-                    {id: 3, name: 'X Pattern', description: 'Both diagonals'},
-                    {id: 4, name: 'Blackout', description: 'Entire card filled'}
-                ];
             }
         }
         
@@ -1190,17 +1180,22 @@
                     marked[data.card_id] = data.marked || [];
                     currentCardId = data.card_id;
                     document.getElementById('current-card-id').textContent = `#${currentCardId}`;
-                    
-                    console.log("🎴 Card #" + data.card_id + " received:", data.card);
-                    
                     renderCurrentCard();
                 }
+                // Handle cards_selected with balance update
                 else if (data.type === 'cards_selected') {
                     if (data.success) {
                         showMessage(`✅ ${data.message}`, 'success');
                         if (data.card_ids) {
                             selectedCards = data.card_ids;
                             updateSelectedDisplay();
+                            
+                            // Update balance from server response
+                            if (data.cost) {
+                                balance -= (data.cost / 100); // Convert cents to ETB
+                                updateWallet();
+                                document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
+                            }
                         }
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
@@ -1210,6 +1205,7 @@
                         document.getElementById('confirm-btn').textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
                     }
                 }
+                // Handle finalized
                 else if (data.type === 'finalized') {
                     if (data.success) {
                         isReady = true;
@@ -1218,7 +1214,7 @@
                         document.getElementById('confirm-btn').textContent = '✓ READY';
                         document.getElementById('status').textContent = '✅ READY';
                         
-                        showMessage('✅ Ready to play! Click START GAME.', 'success');
+                        showMessage('✅ Ready to play! Admin will start the game.', 'success');
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
                         isProcessing = false;
@@ -1235,7 +1231,7 @@
                     
                     const readyCount = players.filter(p => p.ready).length;
                     const startBtn = document.getElementById('start-game-btn');
-                    if (readyCount > 0) {
+                    if (readyCount > 0 && isAdmin) {
                         startBtn.classList.add('ready');
                         startBtn.disabled = false;
                     } else {
@@ -1278,14 +1274,11 @@
                     called = [];
                     currentWinner = null;
                     
-                    // Clear ALL player cards and selections
                     selectedCards = [];
                     myCards = {};
                     marked = {};
                     isReady = false;
                     hasCards = false;
-                    
-                    // Clear taken cards set (allow cards to be selected again)
                     takenCards.clear();
                     
                     document.getElementById('status').textContent = '⏳ WAITING';
@@ -1297,7 +1290,6 @@
                     document.getElementById('confirm-btn').textContent = 'Confirm';
                     document.getElementById('play-again-btn').style.display = 'none';
                     
-                    // Clear the selected cards display
                     document.getElementById('selected-scroll').innerHTML = '';
                     document.getElementById('selected-count').textContent = `0/${maxCards}`;
                     document.getElementById('total-cost').textContent = 'Total: 0 ETB';
@@ -1305,11 +1297,8 @@
                     currentRound = data.round || currentRound + 1;
                     document.getElementById('active-game-display').textContent = currentRound;
                     
-                    // Re-enable all card buttons by updating the grid
                     updateSelectedDisplay();
                     updateCardGrid();
-                    
-                    // Clear current card display
                     document.getElementById('current-card-id').textContent = '#0';
                     document.getElementById('card-display').innerHTML = '';
                     
@@ -1323,23 +1312,16 @@
                     
                     document.getElementById('status').textContent = '🏆 WINNER!';
                     document.getElementById('bingo-btn').disabled = true;
-                    
-                    // Show "Play Again" button for ALL players
                     document.getElementById('play-again-btn').style.display = 'block';
                     
-                    // Show winner announcement
                     const winnerDiv = document.getElementById('winner-announcement');
                     const winnerText = document.getElementById('winner-text');
-                    
                     winnerText.innerHTML = `🏆 ${data.winner.name} WINS! 🏆<br>Prize: ${data.prize} ETB`;
-                    
                     winnerDiv.style.display = 'block';
                     
-                    // Show next round button for admin
                     if (isAdmin) {
                         document.getElementById('next-round-btn').style.display = 'block';
                         
-                        // Auto-reset after 30 seconds if enabled
                         if (document.getElementById('auto-reset')?.checked) {
                             setTimeout(() => {
                                 if (isAdmin && gameEnded) {
@@ -1354,7 +1336,6 @@
                     updatePlayersList();
                     fetchBalance();
                     
-                    // Auto-hide winner announcement after 10 seconds
                     setTimeout(() => {
                         winnerDiv.style.display = 'none';
                     }, 10000);
@@ -1384,8 +1365,6 @@
                     const delay = 2000 * Math.pow(2, reconnectAttempts - 1);
                     showMessage(`Reconnecting in ${delay/1000}s... (${reconnectAttempts}/${maxReconnectAttempts})`, 'info');
                     setTimeout(connectWebSocket, delay);
-                } else {
-                    showMessage('Max reconnection attempts reached. Please refresh the page.', 'error');
                 }
             };
             
@@ -1414,7 +1393,6 @@
             updateCardGrid();
         }
         
-        // Toggle card selection
         function toggleCardSelection(cardId) {
             if (gameStarted || isReady || isProcessing || gameEnded || roundLocked) {
                 if (gameEnded) {
@@ -1450,7 +1428,6 @@
             updateCardGrid();
         }
         
-        // Update selected display (HORIZONTAL)
         function updateSelectedDisplay() {
             const scroll = document.getElementById('selected-scroll');
             const totalCost = document.getElementById('total-cost');
@@ -1563,58 +1540,10 @@
             });
         }
         
-        // Generate a proper BINGO card with standard column ranges
-        function generateProperBingoCard() {
-            const card = [];
-            
-            // Generate 5 rows
-            for (let row = 0; row < 5; row++) {
-                const rowData = [];
-                
-                // Generate 5 columns (B, I, N, G, O)
-                for (let col = 0; col < 5; col++) {
-                    // FREE space in the center (row 2, col 2)
-                    if (row === 2 && col === 2) {
-                        rowData.push('FREE');
-                    } else {
-                        const column = BINGO_COLUMNS[col];
-                        // Generate a random number within the column range
-                        const number = Math.floor(Math.random() * (column.max - column.min + 1)) + column.min;
-                        rowData.push(number);
-                    }
-                }
-                
-                card.push(rowData);
-            }
-            
-            return card;
-        }
-        
-        // Render current card as HORIZONTAL 5x5 grid
         function renderCurrentCard() {
             if (!currentCardId || !myCards[currentCardId]) {
-                // If no card, display a sample card for demonstration
                 const grid = document.getElementById('card-display');
                 grid.innerHTML = '';
-                
-                const sampleCard = generateProperBingoCard();
-                
-                for (let row = 0; row < 5; row++) {
-                    for (let col = 0; col < 5; col++) {
-                        const cell = document.createElement('div');
-                        cell.className = 'bingo-cell';
-                        
-                        let num = sampleCard[row][col];
-                        cell.textContent = num;
-                        
-                        if (row === 2 && col === 2) {
-                            cell.classList.add('free');
-                            cell.textContent = 'FREE';
-                        }
-                        
-                        grid.appendChild(cell);
-                    }
-                }
                 return;
             }
             
@@ -1624,40 +1553,14 @@
             
             grid.innerHTML = '';
             
-            // Determine the structure of the card
-            let cardData;
-            
-            if (Array.isArray(card) && card.length === 5 && Array.isArray(card[0]) && card[0].length === 5) {
-                cardData = card;
-            } else if (Array.isArray(card) && card.length === 5 && Array.isArray(card[0]) && card[0].length === 5) {
-                // Convert from column-major to row-major
-                cardData = [];
-                for (let row = 0; row < 5; row++) {
-                    cardData[row] = [];
-                    for (let col = 0; col < 5; col++) {
-                        cardData[row][col] = card[col][row];
-                    }
-                }
-            } else if (Array.isArray(card) && card.length === 25) {
-                cardData = [];
-                for (let row = 0; row < 5; row++) {
-                    cardData[row] = [];
-                    for (let col = 0; col < 5; col++) {
-                        cardData[row][col] = card[row * 5 + col];
-                    }
-                }
-            } else {
-                cardData = generateProperBingoCard();
-            }
-            
-            // Render the HORIZONTAL 5x5 grid
+            // Simple rendering - assume card is 5x5 array
             for (let row = 0; row < 5; row++) {
                 for (let col = 0; col < 5; col++) {
                     const cell = document.createElement('div');
                     cell.className = 'bingo-cell';
                     
-                    let num = cardData[row]?.[col];
-                    if (num === undefined || num === null) num = '?';
+                    let num = card[row]?.[col];
+                    if (num === undefined) num = '?';
                     
                     cell.textContent = num;
                     
@@ -1730,14 +1633,7 @@
                 const card = myCards[cardId];
                 for (let row = 0; row < 5; row++) {
                     for (let col = 0; col < 5; col++) {
-                        let cardNum;
-                        if (Array.isArray(card) && card.length === 5) {
-                            if (Array.isArray(card[0])) {
-                                cardNum = card[row][col];
-                            } else {
-                                cardNum = card[col][row];
-                            }
-                        }
+                        let cardNum = card[row]?.[col];
                         if (cardNum === num && !marked[cardId].includes(num)) {
                             ws.send(JSON.stringify({
                                 type: 'mark_number',
@@ -1765,18 +1661,15 @@
             showMessage('🎯 BINGO claimed!', 'info');
         }
         
-        // Prepare for next round (clear selections but keep balance)
         function prepareForNextRound() {
             if (!gameEnded) return;
             
-            // Clear local selections
             selectedCards = [];
             myCards = {};
             marked = {};
             isReady = false;
             hasCards = false;
             
-            // Update UI
             document.getElementById('selected-scroll').innerHTML = '';
             document.getElementById('selected-count').textContent = `0/${maxCards}`;
             document.getElementById('total-cost').textContent = 'Total: 0 ETB';
@@ -1785,36 +1678,39 @@
             document.getElementById('play-again-btn').style.display = 'none';
             document.getElementById('status').textContent = '⏳ SELECT CARDS';
             
-            // Re-enable card selection
             roundLocked = false;
             gameEnded = false;
             
-            // Update card grid to show available cards
             updateCardGrid();
-            
-            // Clear current card display
             document.getElementById('current-card-id').textContent = '#0';
             document.getElementById('card-display').innerHTML = '';
             
             showMessage('Select your cards for the next round!', 'success');
         }
         
-        // Start game function
+        // Start game function - only works for admin
         function startGame() {
+            // Check if user is admin
+            if (userId != ADMIN_USER_ID) {
+                showMessage('Only admin can start the game', 'error');
+                return;
+            }
+            
             const readyCount = players.filter(p => p.ready).length;
             if (readyCount === 0) {
                 showMessage('No players ready!', 'error');
                 return;
             }
             
-            if (gameEnded) {
-                document.getElementById('play-again-btn').style.display = 'none';
+            if (gameStarted) {
+                showMessage('Game already started!', 'error');
+                return;
             }
             
             ws.send(JSON.stringify({type: 'start_game'}));
+            showMessage('Starting game...', 'info');
         }
         
-        // Admin functions
         function callNumber() {
             const number = parseInt(document.getElementById('call-number').value);
             if (number >= 1 && number <= 75) {
@@ -1837,7 +1733,6 @@
             }
         }
         
-        // Start next round
         function startNextRound() {
             if (!isAdmin) return;
             
