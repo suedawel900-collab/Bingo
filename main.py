@@ -84,7 +84,7 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# Game Manager - Fixed Version
+# Game Manager - Fixed Version with Debug Logging
 class GameManager:
     def __init__(self):
         self.active_games = {}
@@ -149,6 +149,7 @@ class GameManager:
                 'cards_won': 0,
                 'balance': user['balance']
             }
+            logger.info(f"Created new player {user_id} in game {game_id} with balance {user['balance']}")
         
         active_games = db.get_active_games_count(user_id)
         total_stake = db.get_total_stake(user_id)
@@ -240,35 +241,46 @@ class GameManager:
             })
         return players
     
-    # FIXED: Balance is deducted immediately when cards are selected
+    # FIXED: Balance is deducted immediately when cards are selected with better logging
     async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]):
+        logger.info(f"select_cards called - game:{game_id}, user:{user_id}, cards:{card_ids}")
+        
         if game_id not in self.active_games:
+            logger.error(f"Game {game_id} not found")
             return False, "Game not found", 0, None
         
         if self.game_started[game_id]:
+            logger.warning(f"Game {game_id} already started")
             return False, "Game already started", 0, None
         
         if user_id not in self.active_games[game_id]['players']:
+            logger.error(f"User {user_id} not found in game {game_id}")
             return False, "Player not found", 0, None
         
         player = self.active_games[game_id]['players'][user_id]
+        logger.info(f"Player current cards: {player['card_ids']}, balance: {player['balance']}")
         
         if len(player['card_ids']) + len(card_ids) > MAX_CARDS_PER_PLAYER:
+            logger.warning(f"Max cards exceeded: {len(player['card_ids'])} + {len(card_ids)} > {MAX_CARDS_PER_PLAYER}")
             return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0, None
         
         # Check cards availability
         for card_id in card_ids:
             if card_id in self.taken_cards[game_id]:
+                logger.warning(f"Card {card_id} already taken")
                 return False, f"Card {card_id} already taken", 0, None
             
             card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
             if not card_data:
+                logger.error(f"Card {card_id} not found")
                 return False, f"Card {card_id} not found", 0, None
         
         total_cost = len(card_ids) * CARD_PRICE
+        logger.info(f"Total cost: {total_cost}, player balance: {player['balance']}")
         
         # Check balance
         if player['balance'] < total_cost:
+            logger.warning(f"Insufficient balance: {player['balance']} < {total_cost}")
             return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
         
         # Add cards and deduct balance immediately
@@ -278,6 +290,7 @@ class GameManager:
             player['cards'].append(card_data['card'])
             player['card_ids'].append(card_id)
             player['marked'][card_id] = []
+            logger.info(f"Added card {card_id} to player {user_id}")
         
         player['total_spent'] += total_cost
         player['balance'] -= total_cost  # Deduct balance immediately
@@ -288,23 +301,31 @@ class GameManager:
         
         return True, f"Selected {len(card_ids)} cards", total_cost, player['balance']
     
-    # FIXED: Finalize selection updates database and returns balance
+    # FIXED: Finalize selection updates database
     async def finalize_selection(self, game_id: int, user_id: int):
+        logger.info(f"finalize_selection called - game:{game_id}, user:{user_id}")
+        
         if game_id not in self.active_games:
+            logger.error(f"Game {game_id} not found")
             return False, "Game not found", None
         
         if user_id not in self.active_games[game_id]['players']:
+            logger.error(f"User {user_id} not found in game {game_id}")
             return False, "Player not found", None
         
         player = self.active_games[game_id]['players'][user_id]
+        logger.info(f"Player cards: {player['card_ids']}, spent: {player['total_spent']}, ready: {player['ready']}")
         
         if len(player['card_ids']) == 0:
+            logger.warning(f"User {user_id} has no cards selected")
             return False, "No cards selected", player['balance']
         
         if player['ready']:
+            logger.warning(f"User {user_id} is already ready")
             return False, "Already ready", player['balance']
         
         total_cost = player['total_spent']
+        logger.info(f"Finalizing with total cost: {total_cost}")
         
         # Update database with the already deducted balance
         result = db.update_balance(
@@ -316,6 +337,7 @@ class GameManager:
         
         if not result:
             # If database update fails, refund the player
+            logger.error(f"Failed to deduct balance for user {user_id}, refunding {total_cost}")
             player['balance'] += total_cost
             player['total_spent'] = 0
             for card_id in player['card_ids']:
@@ -323,14 +345,13 @@ class GameManager:
             player['cards'] = []
             player['card_ids'] = []
             player['marked'] = {}
-            logger.error(f"Failed to deduct balance for user {user_id}")
             return False, "Failed to deduct balance", player['balance']
         
         # Save to active games
         db.add_active_game(user_id, game_id, player['card_ids'], total_cost)
         player['ready'] = True
         
-        logger.info(f"User {user_id} finalized selection for game {game_id}, cost: {total_cost}, new balance: {player['balance']}")
+        logger.info(f"User {user_id} finalized selection for game {game_id}, new balance: {player['balance']}")
         
         await self.broadcast(game_id, {
             'type': 'player_ready',
@@ -937,9 +958,12 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             logger.info(f"WebSocket message: {data['type']} from user {user_id}")
             
             if data['type'] == 'select_cards':
+                logger.info(f"Processing select_cards for user {user_id} with cards {data['card_ids']}")
                 success, message, cost, new_balance = await game_manager.select_cards(
                     game_id, user_id, data['card_ids']
                 )
+                logger.info(f"select_cards result: success={success}, message={message}, cost={cost}, new_balance={new_balance}")
+                
                 await websocket.send_json({
                     'type': 'cards_selected',
                     'success': success,
