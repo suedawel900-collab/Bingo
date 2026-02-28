@@ -84,7 +84,7 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# Game Manager - Fixed Version with Debug Logging
+# Game Manager - Fixed Version
 class GameManager:
     def __init__(self):
         self.active_games = {}
@@ -241,7 +241,6 @@ class GameManager:
             })
         return players
     
-    # FIXED: Balance is deducted immediately when cards are selected with better logging
     async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]):
         logger.info(f"select_cards called - game:{game_id}, user:{user_id}, cards:{card_ids}")
         
@@ -301,7 +300,6 @@ class GameManager:
         
         return True, f"Selected {len(card_ids)} cards", total_cost, player['balance']
     
-    # FIXED: Finalize selection updates database
     async def finalize_selection(self, game_id: int, user_id: int):
         logger.info(f"finalize_selection called - game:{game_id}, user:{user_id}")
         
@@ -361,7 +359,7 @@ class GameManager:
         
         return True, "Ready to play", player['balance']
     
-    # FIXED: Only admin can start the game
+    # FIXED: Start game with automatic number generation
     async def start_game(self, game_id: int, user_id: int):
         # Allow only admin to start
         if str(user_id) != ADMIN_USER_ID:
@@ -388,13 +386,14 @@ class GameManager:
         if self.number_tasks.get(game_id):
             self.number_tasks[game_id].cancel()
         
-        # Start new number generation
+        # Start new number generation task (automatic every 2 seconds)
         self.number_tasks[game_id] = asyncio.create_task(
-            self.generate_numbers(game_id)
+            self.generate_numbers_automatically(game_id)
         )
         
         logger.info(f"Game {game_id} started by admin {user_id} with {len(ready_players)} players")
         
+        # Broadcast game started to all players
         await self.broadcast(game_id, {
             'type': 'game_started',
             'round': self.round_number[game_id]
@@ -402,60 +401,30 @@ class GameManager:
         
         return True, "Game started"
     
-    async def reset_game(self, game_id: int):
-        if game_id not in self.active_games:
-            return
-        
-        if self.number_tasks[game_id]:
-            self.number_tasks[game_id].cancel()
-            self.number_tasks[game_id] = None
-        
-        self.game_started[game_id] = False
-        self.game_winner[game_id] = None
-        self.active_games[game_id]['called_numbers'] = []
-        self.countdown_timers[game_id] = 15
-        
-        # Reset all players for new round
-        for player in self.active_games[game_id]['players'].values():
-            player['cards'] = []
-            player['card_ids'] = []
-            player['marked'] = {}
-            player['ready'] = False
-            player['winner'] = False
-        
-        # Clear taken cards
-        self.taken_cards[game_id] = set()
-        
-        # Reset game stats
-        self.active_games[game_id]['total_cards_sold'] = 0
-        self.active_games[game_id]['prize_pool'] = 0
-        
-        self.round_number[game_id] += 1
-        
-        await self.broadcast(game_id, {
-            'type': 'game_reset',
-            'round': self.round_number[game_id],
-            'players': self.get_players(game_id),
-            'countdown': 15
-        })
-    
-    async def generate_numbers(self, game_id: int):
+    # NEW: Automatic number generation every 2 seconds
+    async def generate_numbers_automatically(self, game_id: int):
         try:
-            while game_id in self.active_games and self.game_started[game_id]:
-                await asyncio.sleep(2)
+            while game_id in self.active_games and self.game_started[game_id] and not self.game_winner[game_id]:
+                await asyncio.sleep(2)  # Wait 2 seconds between numbers
                 
                 if not self.game_started[game_id] or self.game_winner[game_id]:
                     break
                 
+                # Get available numbers (not called yet)
                 available = [n for n in range(1, 76) 
                             if n not in self.active_games[game_id]['called_numbers']]
                 
                 if available:
+                    # Pick a random number
                     number = random.choice(available)
                     self.active_games[game_id]['called_numbers'].append(number)
                     
+                    logger.info(f"Game {game_id} - Auto-called number: {number}")
+                    
+                    # Check for winners after each number
                     await self.check_winners(game_id, number)
                     
+                    # Broadcast the called number to all players
                     await self.broadcast(game_id, {
                         'type': 'number_called',
                         'number': number,
@@ -463,14 +432,23 @@ class GameManager:
                         'left': len(available) - 1
                     })
                 else:
+                    # No more numbers available - game over
+                    logger.info(f"Game {game_id} - No more numbers available")
                     await self.broadcast(game_id, {
                         'type': 'game_over',
-                        'message': 'All numbers called'
+                        'message': 'All numbers have been called!'
                     })
                     await self.reset_game(game_id)
                     break
+                    
         except asyncio.CancelledError:
-            pass
+            logger.info(f"Number generation cancelled for game {game_id}")
+        except Exception as e:
+            logger.error(f"Error in number generation for game {game_id}: {e}")
+    
+    # Keep the old method for backward compatibility
+    async def generate_numbers(self, game_id: int):
+        await self.generate_numbers_automatically(game_id)
     
     async def check_winners(self, game_id: int, last_number: int):
         if game_id not in self.active_games or self.game_winner[game_id]:
@@ -490,6 +468,7 @@ class GameManager:
                     marked.add('FREE')
                 
                 if self.check_card_bingo(card, marked):
+                    logger.info(f"BINGO! User {user_id} with card {card_id} at number {last_number}")
                     await self.declare_winner(game_id, user_id, card_id, last_number)
                     return
     
@@ -553,6 +532,8 @@ class GameManager:
         
         player['balance'] += winner_prize
         
+        logger.info(f"Game {game_id} winner: {player['name']}, prize: {winner_prize/100} ETB")
+        
         await self.broadcast(game_id, {
             'type': 'game_won',
             'winner': self.game_winner[game_id],
@@ -599,7 +580,47 @@ class GameManager:
             return False
         
         player['marked'][card_id].append(number)
+        logger.info(f"User {user_id} marked number {number} on card {card_id}")
         return True
+    
+    async def reset_game(self, game_id: int):
+        if game_id not in self.active_games:
+            return
+        
+        if self.number_tasks[game_id]:
+            self.number_tasks[game_id].cancel()
+            self.number_tasks[game_id] = None
+        
+        self.game_started[game_id] = False
+        self.game_winner[game_id] = None
+        self.active_games[game_id]['called_numbers'] = []
+        self.countdown_timers[game_id] = 15
+        
+        # Reset all players for new round
+        for player in self.active_games[game_id]['players'].values():
+            player['cards'] = []
+            player['card_ids'] = []
+            player['marked'] = {}
+            player['ready'] = False
+            player['winner'] = False
+        
+        # Clear taken cards
+        self.taken_cards[game_id] = set()
+        
+        # Reset game stats
+        self.active_games[game_id]['total_cards_sold'] = 0
+        self.active_games[game_id]['prize_pool'] = 0
+        
+        self.round_number[game_id] += 1
+        
+        logger.info(f"Game {game_id} reset for round {self.round_number[game_id]}")
+        
+        await self.broadcast(game_id, {
+            'type': 'game_reset',
+            'round': self.round_number[game_id],
+            'players': self.get_players(game_id),
+            'countdown': 15
+        })
     
     async def get_user_stats(self, user_id: int):
         user = db.get_user(user_id)
@@ -710,8 +731,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "2. Choose your cards\n"
             "3. Click Confirm to lock in your cards\n"
             "4. Wait for admin to start the game\n"
-            "5. Mark numbers as they are called\n"
-            "6. Click BINGO when you win!\n\n"
+            "5. Numbers are called automatically every 2 seconds\n"
+            "6. Mark numbers as they are called\n"
+            "7. Click BINGO when you win!\n\n"
             f"**Price:** {CARD_PRICE/100} ETB per card\n\n"
             "**Note:** Only admin can start the game"
         )
@@ -946,7 +968,7 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "initial_stake": db.get_total_stake(user_id) / 100
     })
 
-# ==================== WEBSOCKET ENDPOINT - FIXED ====================
+# ==================== WEBSOCKET ENDPOINT ====================
 
 @app.websocket("/ws/{game_id}/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
@@ -962,7 +984,6 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 success, message, cost, new_balance = await game_manager.select_cards(
                     game_id, user_id, data['card_ids']
                 )
-                logger.info(f"select_cards result: success={success}, message={message}, cost={cost}, new_balance={new_balance}")
                 
                 await websocket.send_json({
                     'type': 'cards_selected',
@@ -983,27 +1004,28 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                             'card_id': card_id
                         })
             
-            # FIXED: Handle finalize message with proper response
             elif data['type'] == 'finalize':
                 logger.info(f"Processing finalize for user {user_id}")
                 success, message, new_balance = await game_manager.finalize_selection(game_id, user_id)
                 
-                # Send response back to client
                 await websocket.send_json({
                     'type': 'finalized',
                     'success': success,
                     'message': message,
                     'new_balance': new_balance
                 })
-                logger.info(f"Sent finalized response to user {user_id}: success={success}, balance={new_balance}, message={message}")
+                logger.info(f"Sent finalized response to user {user_id}: success={success}")
             
+            # FIXED: Start game handler
             elif data['type'] == 'start_game':
+                logger.info(f"Start game requested by user {user_id}")
                 success, message = await game_manager.start_game(game_id, user_id)
                 await websocket.send_json({
                     'type': 'start_result',
                     'success': success,
                     'message': message
                 })
+                logger.info(f"Start game result: {success}, {message}")
             
             elif data['type'] == 'reset_game':
                 if str(user_id) != ADMIN_USER_ID:
@@ -1014,13 +1036,18 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             elif data['type'] == 'call_number':
                 if str(user_id) != ADMIN_USER_ID:
                     continue
-                # This would be handled by the game logic
-                # For now, just acknowledge
-                await websocket.send_json({
-                    'type': 'number_called',
-                    'number': data.get('number'),
-                    'called': game_manager.active_games[game_id]['called_numbers']
-                })
+                # Manual number calling (optional, numbers are auto-called)
+                number = data.get('number')
+                if number and 1 <= number <= 75:
+                    if number not in game_manager.active_games[game_id]['called_numbers']:
+                        game_manager.active_games[game_id]['called_numbers'].append(number)
+                        await game_manager.check_winners(game_id, number)
+                        await game_manager.broadcast(game_id, {
+                            'type': 'number_called',
+                            'number': number,
+                            'called': game_manager.active_games[game_id]['called_numbers']
+                        })
+                        logger.info(f"Admin {user_id} manually called number {number}")
             
             elif data['type'] == 'set_pattern':
                 if str(user_id) != ADMIN_USER_ID:
@@ -1032,7 +1059,6 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                         cursor.execute("UPDATE games SET pattern_id = ? WHERE id = ?", (pattern_id, game_id))
                         conn.commit()
                         
-                        # Get pattern name
                         cursor.execute("SELECT name FROM patterns WHERE id = ?", (pattern_id,))
                         pattern = cursor.fetchone()
                         pattern_name = pattern[0] if pattern else "Unknown"
