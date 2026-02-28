@@ -1098,9 +1098,10 @@
                             selectedCards = data.card_ids;
                             updateSelectedDisplay();
                             
-                            if (data.cost) {
-                                balance -= (data.cost / 100);
+                            if (data.new_balance !== undefined && data.new_balance !== null) {
+                                balance = data.new_balance / 100;
                                 updateWallet();
+                                console.log('Balance updated to:', balance);
                             }
                         }
                     } else {
@@ -1108,7 +1109,6 @@
                     }
                     isProcessing = false;
                 }
-                // FIXED: Handle finalized response from server
                 else if (data.type === 'finalized') {
                     if (data.success) {
                         isReady = true;
@@ -1117,18 +1117,18 @@
                         document.getElementById('confirm-btn').textContent = '✓ READY';
                         document.getElementById('status').textContent = '✅ READY';
                         
-                        // Update balance from server response if provided
-                        if (data.new_balance !== undefined) {
+                        if (data.new_balance !== undefined && data.new_balance !== null) {
                             balance = data.new_balance / 100;
                             updateWallet();
                         }
                         
                         showMessage('✅ Ready to play!', 'success');
                     } else {
-                        showMessage(`❌ ${data.message || 'Failed to confirm cards'}`, 'error');
+                        showMessage(`❌ ${data.message}`, 'error');
                         isProcessing = false;
                         document.getElementById('confirm-btn').disabled = false;
-                        document.getElementById('confirm-btn').textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
+                        const cost = selectedCards.length * pricePerCard;
+                        document.getElementById('confirm-btn').textContent = `Confirm (${cost.toFixed(2)} ETB)`;
                     }
                 }
                 else if (data.type === 'player_ready') {
@@ -1258,7 +1258,8 @@
                     if (isProcessing) {
                         isProcessing = false;
                         document.getElementById('confirm-btn').disabled = false;
-                        document.getElementById('confirm-btn').textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
+                        const cost = selectedCards.length * pricePerCard;
+                        document.getElementById('confirm-btn').textContent = `Confirm (${cost.toFixed(2)} ETB)`;
                     }
                 }
             };
@@ -1296,34 +1297,64 @@
                 grid.appendChild(btn);
             }
             updateCardGrid();
+            console.log(`✅ Loaded ${TOTAL_CARDS} cards`);
         }
         
+        // FIXED: Toggle card selection with better validation
         function toggleCardSelection(cardId) {
-            if (gameStarted || isReady || isProcessing || gameEnded || roundLocked) {
-                if (gameEnded) {
-                    showMessage('Game ended! Click PLAY AGAIN', 'info');
-                }
+            console.log('Toggling card:', cardId);
+            
+            if (gameStarted) {
+                showMessage('Game already started!', 'error');
+                return;
+            }
+            
+            if (isReady) {
+                showMessage('You are already ready!', 'error');
+                return;
+            }
+            
+            if (isProcessing) {
+                showMessage('Please wait for current operation', 'info');
+                return;
+            }
+            
+            if (gameEnded) {
+                showMessage('Game ended! Click PLAY AGAIN', 'info');
+                return;
+            }
+            
+            if (roundLocked) {
+                showMessage('Cards are locked for this round', 'info');
                 return;
             }
             
             const index = selectedCards.indexOf(cardId);
             if (index >= 0) {
+                // Deselect card
                 selectedCards.splice(index, 1);
+                console.log('Deselected card:', cardId, 'Remaining:', selectedCards.length);
             } else {
+                // Select card
                 if (selectedCards.length >= maxCards) {
-                    showMessage(`Maximum ${maxCards} cards`, 'error');
+                    showMessage(`Maximum ${maxCards} cards allowed`, 'error');
                     return;
                 }
+                
+                // Check balance before allowing selection
                 const totalCost = (selectedCards.length + 1) * pricePerCard;
                 if (totalCost > balance) {
-                    showMessage('Insufficient balance!', 'error');
+                    showMessage('Insufficient balance! Please deposit.', 'error');
                     return;
                 }
+                
                 if (takenCards.has(cardId)) {
-                    showMessage(`Card #${cardId} is taken`, 'error');
+                    showMessage(`Card #${cardId} is already taken by another player`, 'error');
                     return;
                 }
+                
                 selectedCards.push(cardId);
+                console.log('Selected card:', cardId, 'Total:', selectedCards.length);
             }
             
             selectedCards.sort((a, b) => a - b);
@@ -1355,13 +1386,15 @@
                 totalCost.textContent = `Total: ${cost.toFixed(2)} ETB`;
                 selectedCount.textContent = `${selectedCards.length}/${maxCards}`;
                 
-                if (cost <= balance && !isProcessing && !gameStarted && !gameEnded && !roundLocked) {
+                // Enable confirm button if cards are selected and not already processing
+                if (!isProcessing && !gameStarted && !isReady && !gameEnded && !roundLocked) {
                     confirmBtn.disabled = false;
                     confirmBtn.textContent = `Confirm (${cost.toFixed(2)} ETB)`;
                 } else {
                     confirmBtn.disabled = true;
                 }
                 clearBtn.style.display = 'block';
+                clearBtn.disabled = isProcessing || gameStarted || isReady || gameEnded || roundLocked;
             } else {
                 scroll.innerHTML = '';
                 totalCost.textContent = 'Total: 0 ETB';
@@ -1389,15 +1422,20 @@
             updateCardGrid();
         }
         
-        // FIXED: Finalize selection with proper error handling and timeout
+        // FIXED: Finalize selection with proper validation
         function finalizeSelection() {
+            console.log('Finalize button clicked');
+            console.log('Selected cards:', selectedCards);
+            console.log('Current balance:', balance);
+            
+            // Check if any cards are selected
             if (selectedCards.length === 0) {
-                showMessage('Select at least one card', 'error');
+                showMessage('Please select at least one card first!', 'error');
                 return;
             }
             
             if (isReady) {
-                showMessage('Already ready!', 'error');
+                showMessage('You are already ready!', 'info');
                 return;
             }
             
@@ -1411,14 +1449,24 @@
                 return;
             }
             
-            // Final balance check
+            if (gameStarted) {
+                showMessage('Game already started!', 'error');
+                return;
+            }
+            
+            if (gameEnded) {
+                showMessage('Game ended! Click PLAY AGAIN', 'error');
+                return;
+            }
+            
+            // Double-check balance
             const totalCost = selectedCards.length * pricePerCard;
             if (totalCost > balance) {
                 showMessage('Insufficient balance!', 'error');
                 return;
             }
             
-            console.log('Finalizing selection with cards:', selectedCards);
+            console.log('Sending finalize with cards:', selectedCards);
             console.log('Total cost:', totalCost);
             
             isProcessing = true;
@@ -1426,12 +1474,22 @@
             confirmBtn.disabled = true;
             confirmBtn.textContent = '⏳ Processing...';
             
-            // Send the finalize message to server
+            // First select the cards on server
             ws.send(JSON.stringify({ 
-                type: 'finalize'
+                type: 'select_cards',
+                card_ids: selectedCards
             }));
             
-            // Set a timeout to reset if no response
+            // Then after a short delay, send finalize
+            setTimeout(() => {
+                if (isProcessing) {
+                    ws.send(JSON.stringify({ 
+                        type: 'finalize'
+                    }));
+                }
+            }, 500);
+            
+            // Timeout protection
             setTimeout(() => {
                 if (isProcessing) {
                     isProcessing = false;
