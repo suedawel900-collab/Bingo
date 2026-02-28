@@ -641,7 +641,7 @@
             cursor: not-allowed;
         }
         
-        /* Players List - FIXED: Better styling */
+        /* Players List */
         .players-list {
             background: #f8f9fa;
             padding: 10px;
@@ -894,7 +894,7 @@
                     <!-- BINGO Button -->
                     <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 BINGO!</button>
                     
-                    <!-- Players List - FIXED: Will show all players -->
+                    <!-- Players List -->
                     <div class="players-list" id="players-list"></div>
                 </div>
             </div>
@@ -1063,9 +1063,9 @@
                     document.getElementById('active-game-display').textContent = currentRound;
                     calculatePrizePool();
                     updateCardGrid();
-                    updatePlayersList(); // This updates the players list
+                    updatePlayersList();
                     updateCalledNumbers();
-                    updateReadyCount(); // This updates the ready count
+                    updateReadyCount();
                     
                     const playerData = players.find(p => p.id == userId);
                     if (playerData && playerData.card_count > 0) {
@@ -1108,6 +1108,7 @@
                     }
                     isProcessing = false;
                 }
+                // FIXED: Handle finalized response from server
                 else if (data.type === 'finalized') {
                     if (data.success) {
                         isReady = true;
@@ -1115,23 +1116,30 @@
                         document.getElementById('confirm-btn').disabled = true;
                         document.getElementById('confirm-btn').textContent = '✓ READY';
                         document.getElementById('status').textContent = '✅ READY';
+                        
+                        // Update balance from server response if provided
+                        if (data.new_balance !== undefined) {
+                            balance = data.new_balance / 100;
+                            updateWallet();
+                        }
+                        
                         showMessage('✅ Ready to play!', 'success');
                     } else {
-                        showMessage(`❌ ${data.message}`, 'error');
+                        showMessage(`❌ ${data.message || 'Failed to confirm cards'}`, 'error');
                         isProcessing = false;
                         document.getElementById('confirm-btn').disabled = false;
+                        document.getElementById('confirm-btn').textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
                     }
                 }
                 else if (data.type === 'player_ready') {
                     players = data.players || [];
                     calculatePrizePool();
-                    updatePlayersList(); // Update players list when someone becomes ready
-                    updateReadyCount(); // Update ready count
+                    updatePlayersList();
+                    updateReadyCount();
                     
                     const readyCount = players.filter(p => p.ready).length;
                     document.getElementById('ready-count').textContent = readyCount;
                     
-                    // FIXED: Enable start button for admin when players are ready
                     const startBtn = document.getElementById('start-game-btn');
                     if (readyCount > 0 && userId == ADMIN_USER_ID) {
                         startBtn.classList.add('ready');
@@ -1204,7 +1212,7 @@
                     updateSelectedDisplay();
                     updateCardGrid();
                     updateCalledNumbers();
-                    updatePlayersList(); // Update players list after reset
+                    updatePlayersList();
                     document.getElementById('current-card-id').textContent = '#0';
                     document.getElementById('card-display').innerHTML = '';
                     
@@ -1238,7 +1246,7 @@
                     
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
                     calculatePrizePool();
-                    updatePlayersList(); // Update players list after win
+                    updatePlayersList();
                     fetchBalance();
                     
                     setTimeout(() => {
@@ -1250,6 +1258,7 @@
                     if (isProcessing) {
                         isProcessing = false;
                         document.getElementById('confirm-btn').disabled = false;
+                        document.getElementById('confirm-btn').textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
                     }
                 }
             };
@@ -1380,6 +1389,7 @@
             updateCardGrid();
         }
         
+        // FIXED: Finalize selection with proper error handling and timeout
         function finalizeSelection() {
             if (selectedCards.length === 0) {
                 showMessage('Select at least one card', 'error');
@@ -1392,20 +1402,44 @@
             }
             
             if (isProcessing) {
-                showMessage('Processing...', 'info');
+                showMessage('Already processing...', 'info');
                 return;
             }
             
             if (!ws || ws.readyState !== WebSocket.OPEN) {
-                showMessage('Not connected', 'error');
+                showMessage('Not connected to server', 'error');
                 return;
             }
             
-            isProcessing = true;
-            document.getElementById('confirm-btn').disabled = true;
-            document.getElementById('confirm-btn').textContent = '⏳ Processing...';
+            // Final balance check
+            const totalCost = selectedCards.length * pricePerCard;
+            if (totalCost > balance) {
+                showMessage('Insufficient balance!', 'error');
+                return;
+            }
             
-            ws.send(JSON.stringify({ type: 'finalize' }));
+            console.log('Finalizing selection with cards:', selectedCards);
+            console.log('Total cost:', totalCost);
+            
+            isProcessing = true;
+            const confirmBtn = document.getElementById('confirm-btn');
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = '⏳ Processing...';
+            
+            // Send the finalize message to server
+            ws.send(JSON.stringify({ 
+                type: 'finalize'
+            }));
+            
+            // Set a timeout to reset if no response
+            setTimeout(() => {
+                if (isProcessing) {
+                    isProcessing = false;
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = `Confirm (${totalCost.toFixed(2)} ETB)`;
+                    showMessage('Request timed out. Please try again.', 'error');
+                }
+            }, 10000);
         }
         
         function updateCardGrid() {
@@ -1494,7 +1528,6 @@
             }
         }
         
-        // FIXED: Update players list to show all players with their status
         function updatePlayersList() {
             const list = document.getElementById('players-list');
             if (!list) return;
@@ -1516,7 +1549,6 @@
                     list.appendChild(badge);
                 });
             } else {
-                // Show placeholder when no players
                 const badge = document.createElement('span');
                 badge.className = 'player-badge';
                 badge.style.background = '#999';
@@ -1590,7 +1622,6 @@
             showMessage('Select your cards!', 'success');
         }
         
-        // FIXED: Start game function with better error handling
         function startGame() {
             console.log('Start game clicked');
             
