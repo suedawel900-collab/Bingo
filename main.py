@@ -668,7 +668,6 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.callback_query:
         await update.callback_query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
 
-# Updated start command with phone number collection
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command with phone number request for new users"""
     user = update.effective_user
@@ -697,7 +696,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(update, context)
     return ConversationHandler.END
 
-# Handle phone number sharing
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle shared contact information"""
     contact = update.message.contact
@@ -1400,10 +1398,11 @@ async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=reply_markup
     )
 
-# ==================== WEBHOOK SETUP ====================
+# ==================== WEBHOOK SETUP (NO POLLING) ====================
 
 async def setup_bot():
     """Initialize and start the Telegram bot with webhook (NO POLLING)"""
+    # Build application
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Phone number conversation handler
@@ -1428,11 +1427,9 @@ async def setup_bot():
         allow_reentry=True
     )
     
-    # Add handlers
+    # Add all handlers
     application.add_handler(phone_conv)
     application.add_handler(payment_conv)
-    
-    # Main menu handlers
     application.add_handler(CallbackQueryHandler(play_callback, pattern="^play$"))
     application.add_handler(CallbackQueryHandler(balance_callback, pattern="^balance$"))
     application.add_handler(CallbackQueryHandler(deposit_command, pattern="^deposit$"))
@@ -1444,8 +1441,6 @@ async def setup_bot():
     application.add_handler(CallbackQueryHandler(approve_payment_callback, pattern="^approve_pay_"))
     application.add_handler(CallbackQueryHandler(reject_payment_callback, pattern="^reject_pay_"))
     application.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"))
-    
-    # Message handler for payment reference
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment_reference))
     
     # Initialize
@@ -1488,11 +1483,15 @@ async def shutdown_bot(application):
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting up...")
-    game_manager.bot_app = await setup_bot()
+    try:
+        game_manager.bot_app = await setup_bot()
+    except Exception as e:
+        logger.error(f"Failed to start bot: {e}")
     yield
     # Shutdown
     logger.info("🛑 Shutting down...")
-    await shutdown_bot(game_manager.bot_app)
+    if game_manager.bot_app:
+        await shutdown_bot(game_manager.bot_app)
 
 # Create FastAPI app with lifespan
 app = FastAPI(title="Bingo Game", lifespan=lifespan)
