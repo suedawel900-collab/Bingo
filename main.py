@@ -46,39 +46,55 @@ logger.info(f"✅ Using BASE_URL: {BASE_URL}")
 # Initialize database
 db = Database()
 
-# Load bingo cards
+# ==================== FIXED: Generate 1000 cards ====================
 CARDS_FILE = "static/bingo_cards.json"
 
 def generate_default_cards():
+    """Generate 1000 bingo cards with proper BINGO format"""
     cards = []
-    for i in range(1, 101):
+    for i in range(1, 1001):  # Generate 1000 cards (1-1000)
         card = []
+        # Generate 5 columns (B, I, N, G, O)
         for col in range(5):
             column = []
             min_num = col * 15 + 1
             max_num = (col + 1) * 15
+            # Generate 5 unique numbers for each column
             numbers = random.sample(range(min_num, max_num + 1), 5)
             column.extend(numbers)
             card.append(column)
+        # Set FREE space in the center (row 2, col 2)
         card[2][2] = "FREE"
         cards.append({"id": i, "card": card})
+    
+    logger.info(f"✅ Generated {len(cards)} cards (1-1000)")
     return cards
 
-# Load cards
+# Load cards with validation
 try:
     if os.path.exists(CARDS_FILE):
         with open(CARDS_FILE, 'r') as f:
             BINGO_CARDS = json.load(f)
-            logger.info(f"✅ Loaded {len(BINGO_CARDS)} cards")
+            logger.info(f"✅ Loaded {len(BINGO_CARDS)} cards from file")
+            
+            # Validate that we have 1000 cards
+            if len(BINGO_CARDS) < 1000:
+                logger.warning(f"Only {len(BINGO_CARDS)} cards found, regenerating to 1000...")
+                BINGO_CARDS = generate_default_cards()
+                os.makedirs("static", exist_ok=True)
+                with open(CARDS_FILE, 'w') as f:
+                    json.dump(BINGO_CARDS, f)
+                logger.info(f"✅ Regenerated and saved {len(BINGO_CARDS)} cards")
     else:
         BINGO_CARDS = generate_default_cards()
         os.makedirs("static", exist_ok=True)
         with open(CARDS_FILE, 'w') as f:
             json.dump(BINGO_CARDS, f)
-        logger.info(f"✅ Generated {len(BINGO_CARDS)} default cards")
+        logger.info(f"✅ Generated and saved {len(BINGO_CARDS)} default cards")
 except Exception as e:
     logger.error(f"Error loading cards: {e}")
     BINGO_CARDS = generate_default_cards()
+    logger.info(f"✅ Generated {len(BINGO_CARDS)} cards as fallback")
 
 # Templates
 templates = Jinja2Templates(directory="templates")
@@ -269,9 +285,10 @@ class GameManager:
                 logger.warning(f"Card {card_id} already taken")
                 return False, f"Card {card_id} already taken", 0, None
             
+            # FIXED: Check if card exists in BINGO_CARDS
             card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
             if not card_data:
-                logger.error(f"Card {card_id} not found")
+                logger.error(f"Card {card_id} not found in BINGO_CARDS (total cards: {len(BINGO_CARDS)})")
                 return False, f"Card {card_id} not found", 0, None
         
         total_cost = len(card_ids) * CARD_PRICE
@@ -359,7 +376,6 @@ class GameManager:
         
         return True, "Ready to play", player['balance']
     
-    # FIXED: Start game with automatic number generation
     async def start_game(self, game_id: int, user_id: int):
         # Allow only admin to start
         if str(user_id) != ADMIN_USER_ID:
@@ -401,7 +417,6 @@ class GameManager:
         
         return True, "Game started"
     
-    # NEW: Automatic number generation every 2 seconds
     async def generate_numbers_automatically(self, game_id: int):
         try:
             while game_id in self.active_games and self.game_started[game_id] and not self.game_winner[game_id]:
@@ -446,7 +461,6 @@ class GameManager:
         except Exception as e:
             logger.error(f"Error in number generation for game {game_id}: {e}")
     
-    # Keep the old method for backward compatibility
     async def generate_numbers(self, game_id: int):
         await self.generate_numbers_automatically(game_id)
     
@@ -728,7 +742,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❓ **Bingo Bot Help**\n\n"
             "**How to Play:**\n"
             "1. Click 'Play Bingo'\n"
-            "2. Choose your cards\n"
+            "2. Choose your cards (1-1000)\n"
             "3. Click Confirm to lock in your cards\n"
             "4. Wait for admin to start the game\n"
             "5. Numbers are called automatically every 2 seconds\n"
@@ -1016,7 +1030,6 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 })
                 logger.info(f"Sent finalized response to user {user_id}: success={success}")
             
-            # FIXED: Start game handler
             elif data['type'] == 'start_game':
                 logger.info(f"Start game requested by user {user_id}")
                 success, message = await game_manager.start_game(game_id, user_id)
