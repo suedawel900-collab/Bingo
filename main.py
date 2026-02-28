@@ -49,20 +49,16 @@ db = Database()
 CARDS_FILE = "static/bingo_cards.json"
 
 def generate_default_cards():
-    """Generate proper BINGO cards with standard column ranges"""
     cards = []
     for i in range(1, 101):
         card = []
-        # Generate 5 columns (B, I, N, G, O)
         for col in range(5):
             column = []
             min_num = col * 15 + 1
             max_num = (col + 1) * 15
-            # Generate 5 unique numbers per column
             numbers = random.sample(range(min_num, max_num + 1), 5)
             column.extend(numbers)
             card.append(column)
-        # Set FREE space in center
         card[2][2] = "FREE"
         cards.append({"id": i, "card": card})
     return cards
@@ -668,6 +664,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif update.callback_query:
         await update.callback_query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
 
+# Updated start command with phone number collection
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command with phone number request for new users"""
     user = update.effective_user
@@ -696,6 +693,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(update, context)
     return ConversationHandler.END
 
+# Handle phone number sharing
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle shared contact information"""
     contact = update.message.contact
@@ -1398,11 +1396,10 @@ async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reply_markup=reply_markup
     )
 
-# ==================== WEBHOOK SETUP (NO POLLING) ====================
+# ==================== BOT SETUP ====================
 
 async def setup_bot():
-    """Initialize and start the Telegram bot with webhook (NO POLLING)"""
-    # Build application
+    """Initialize and start the Telegram bot"""
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Phone number conversation handler
@@ -1415,7 +1412,7 @@ async def setup_bot():
         name="phone_conversation"
     )
     
-    # Payment conversation handler
+    # Payment conversation handler - SIMPLIFIED
     payment_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(deposit_command, pattern='^deposit$')],
         states={
@@ -1427,9 +1424,11 @@ async def setup_bot():
         allow_reentry=True
     )
     
-    # Add all handlers
+    # Add handlers
     application.add_handler(phone_conv)
     application.add_handler(payment_conv)
+    
+    # Main menu handlers
     application.add_handler(CallbackQueryHandler(play_callback, pattern="^play$"))
     application.add_handler(CallbackQueryHandler(balance_callback, pattern="^balance$"))
     application.add_handler(CallbackQueryHandler(deposit_command, pattern="^deposit$"))
@@ -1441,24 +1440,19 @@ async def setup_bot():
     application.add_handler(CallbackQueryHandler(approve_payment_callback, pattern="^approve_pay_"))
     application.add_handler(CallbackQueryHandler(reject_payment_callback, pattern="^reject_pay_"))
     application.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"))
+    
+    # Message handler for payment reference
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment_reference))
     
-    # Initialize
+    # Initialize and start
     await application.initialize()
     await application.start()
     
-    # Set webhook (NO POLLING!)
-    webhook_url = f"{BASE_URL}/webhook"
-    
-    # Delete any existing webhook first
+    # Delete webhook and use polling
     await application.bot.delete_webhook()
-    logger.info("✅ Deleted existing webhook")
+    await application.updater.start_polling()
     
-    # Set the new webhook
-    await application.bot.set_webhook(url=webhook_url)
-    logger.info(f"✅ Webhook set to {webhook_url}")
-    
-    logger.info("🤖 Telegram bot started successfully (webhook mode)")
+    logger.info("🤖 Telegram bot started successfully")
     
     return application
 
@@ -1466,16 +1460,9 @@ async def shutdown_bot(application):
     """Shutdown the bot gracefully"""
     if application:
         logger.info("🛑 Stopping bot...")
-        try:
-            # Delete webhook before stopping
-            await application.bot.delete_webhook()
-            logger.info("✅ Webhook deleted")
-        except Exception as e:
-            logger.error(f"Error deleting webhook: {e}")
-        
+        await application.updater.stop()
         await application.stop()
         await application.shutdown()
-        logger.info("✅ Bot stopped")
 
 # ==================== LIFESPAN MANAGEMENT ====================
 
@@ -1483,35 +1470,15 @@ async def shutdown_bot(application):
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting up...")
-    try:
-        game_manager.bot_app = await setup_bot()
-    except Exception as e:
-        logger.error(f"Failed to start bot: {e}")
+    game_manager.bot_app = await setup_bot()
     yield
     # Shutdown
     logger.info("🛑 Shutting down...")
-    if game_manager.bot_app:
-        await shutdown_bot(game_manager.bot_app)
+    await shutdown_bot(game_manager.bot_app)
 
 # Create FastAPI app with lifespan
 app = FastAPI(title="Bingo Game", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# ==================== WEBHOOK ENDPOINT ====================
-
-@app.post("/webhook")
-async def telegram_webhook(request: Request):
-    """Telegram webhook endpoint"""
-    if game_manager.bot_app:
-        try:
-            data = await request.json()
-            update = Update.de_json(data, game_manager.bot_app.bot)
-            await game_manager.bot_app.process_update(update)
-            return {"ok": True}
-        except Exception as e:
-            logger.error(f"Webhook error: {e}")
-            return {"ok": False, "error": str(e)}
-    return {"ok": False, "error": "Bot not initialized"}
 
 # ==================== FASTAPI ROUTES ====================
 
