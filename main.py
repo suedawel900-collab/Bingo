@@ -3,6 +3,7 @@ import json
 import random
 import asyncio
 import logging
+import time
 from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Dict, Set, List, Any, Optional
@@ -83,7 +84,7 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# Game Manager - FIXED VERSION
+# Game Manager - FIXED VERSION with Connection Limits
 class GameManager:
     def __init__(self):
         self.active_games = {}
@@ -95,10 +96,25 @@ class GameManager:
         self.number_tasks = {}
         self.countdown_timers = {}
         self.bot_app = None
+        # Connection tracking
+        self.user_connections = {}  # Track connections per user
+        self.MAX_CONNECTIONS_PER_USER = 2  # Limit per user
+        self.connection_last_activity = {}  # Track last activity time
         
     async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
+        # Check if user has too many connections
+        if user_id in self.user_connections:
+            if self.user_connections[user_id] >= self.MAX_CONNECTIONS_PER_USER:
+                await websocket.close(code=1008, reason="Too many connections")
+                logger.warning(f"User {user_id} exceeded connection limit")
+                return
+        
         await websocket.accept()
         logger.info(f"User {user_id} connected to game {game_id}")
+        
+        # Track connection
+        self.user_connections[user_id] = self.user_connections.get(user_id, 0) + 1
+        self.connection_last_activity[(game_id, user_id)] = time.time()
         
         user = db.get_or_create_user(
             user_id=user_id,
@@ -216,12 +232,31 @@ class GameManager:
             })
         
         asyncio.create_task(self.update_countdown(game_id))
+        asyncio.create_task(self.monitor_connection(game_id, user_id, websocket))
         
         await self.broadcast(game_id, {
             'type': 'player_reconnected',
             'players': self.get_players(game_id),
             'user_id': user_id
         })
+    
+    async def monitor_connection(self, game_id: int, user_id: int, websocket: WebSocket):
+        """Monitor connection for inactivity"""
+        MAX_IDLE_TIME = 120  # 2 minutes max idle
+        CHECK_INTERVAL = 30  # Check every 30 seconds
+        
+        try:
+            while True:
+                await asyncio.sleep(CHECK_INTERVAL)
+                
+                # Check last activity
+                last_activity = self.connection_last_activity.get((game_id, user_id), 0)
+                if time.time() - last_activity > MAX_IDLE_TIME:
+                    logger.info(f"Closing idle connection for user {user_id} in game {game_id}")
+                    await websocket.close(code=1000, reason="Idle timeout")
+                    break
+        except:
+            pass
     
     async def update_countdown(self, game_id: int):
         try:
@@ -245,6 +280,16 @@ class GameManager:
         if game_id in self.game_connections:
             if websocket in self.game_connections[game_id]:
                 self.game_connections[game_id].remove(websocket)
+            
+            # Decrement connection count
+            if user_id in self.user_connections:
+                self.user_connections[user_id] -= 1
+                if self.user_connections[user_id] <= 0:
+                    del self.user_connections[user_id]
+            
+            # Remove activity tracking
+            self.connection_last_activity.pop((game_id, user_id), None)
+            
             logger.info(f"User {user_id} disconnected from game {game_id}")
     
     async def broadcast(self, game_id: int, message: dict):
@@ -1396,6 +1441,18 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     logger.info("🛑 Shutting down...")
+    
+    # Close all WebSocket connections
+    for game_id, connections in game_manager.game_connections.items():
+        for conn in connections:
+            try:
+                await conn.close(code=1001, reason="Server shutting down")
+            except:
+                pass
+    
+    # Close database connections
+    db.close_all_connections()
+    
     await shutdown_bot(game_manager.bot_app)
 
 # Create FastAPI app with lifespan
@@ -1484,145 +1541,163 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
 async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
     await game_manager.connect(game_id, websocket, user_id)
     
+    # Track last activity
+    last_activity = time.time()
+    HEARTBEAT_INTERVAL = 30
+    MAX_IDLE_TIME = 120
+    
     try:
         while True:
-            data = await websocket.receive_json()
-            logger.info(f"Received: {data['type']} from user {user_id}")
+            # Check for inactivity
+            if time.time() - last_activity > MAX_IDLE_TIME:
+                logger.info(f"Closing idle connection for user {user_id}")
+                await websocket.close(code=1000, reason="Idle timeout")
+                break
             
-            if data['type'] == 'select_cards':
-                success, message, cost = await game_manager.select_cards(
-                    game_id, user_id, data['card_ids']
-                )
-                await websocket.send_json({
-                    'type': 'cards_selected',
-                    'success': success,
-                    'message': message,
-                    'cost': cost,
-                    'card_ids': data['card_ids'] if success else []
-                })
+            # Wait for message with timeout
+            try:
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=HEARTBEAT_INTERVAL)
+                last_activity = time.time()
                 
-                if success:
-                    for card_id in data['card_ids']:
-                        card = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-                        if card:
-                            await websocket.send_json({
-                                'type': 'your_card',
-                                'card': card['card'],
-                                'card_id': card_id
+                # Update activity tracker
+                game_manager.connection_last_activity[(game_id, user_id)] = time.time()
+                
+                logger.info(f"Received: {data['type']} from user {user_id}")
+                
+                if data['type'] == 'select_cards':
+                    success, message, cost = await game_manager.select_cards(
+                        game_id, user_id, data['card_ids']
+                    )
+                    await websocket.send_json({
+                        'type': 'cards_selected',
+                        'success': success,
+                        'message': message,
+                        'cost': cost,
+                        'card_ids': data['card_ids'] if success else []
+                    })
+                    
+                    if success:
+                        for card_id in data['card_ids']:
+                            card = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+                            if card:
+                                await websocket.send_json({
+                                    'type': 'your_card',
+                                    'card': card['card'],
+                                    'card_id': card_id
+                                })
+                
+                elif data['type'] == 'finalize':
+                    success, message = await game_manager.finalize_selection(game_id, user_id)
+                    await websocket.send_json({
+                        'type': 'finalized',
+                        'success': success,
+                        'message': message
+                    })
+                    
+                    if success:
+                        stats = await game_manager.get_user_stats(user_id)
+                        await websocket.send_json({
+                            'type': 'stats_update',
+                            **stats
+                        })
+                
+                elif data['type'] == 'start_game':
+                    success, message = await game_manager.start_game(game_id, user_id)
+                    await websocket.send_json({
+                        'type': 'start_result',
+                        'success': success,
+                        'message': message
+                    })
+                
+                elif data['type'] == 'reset_game':
+                    if str(user_id) != ADMIN_USER_ID:
+                        await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
+                        continue
+                    await game_manager.reset_game(game_id)
+                    await websocket.send_json({'type': 'game_reset', 'success': True})
+                
+                elif data['type'] == 'set_pattern':
+                    if str(user_id) != ADMIN_USER_ID:
+                        await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
+                        continue
+                        
+                    pattern_id = data.get('pattern_id')
+                    if pattern_id:
+                        with db.get_connection() as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE games SET pattern_id = ? WHERE id = ?", (pattern_id, game_id))
+                            conn.commit()
+                            
+                            # Get pattern name
+                            cursor.execute("SELECT name FROM patterns WHERE id = ?", (pattern_id,))
+                            pattern = cursor.fetchone()
+                            pattern_name = pattern[0] if pattern else "Unknown"
+                            
+                            await game_manager.broadcast(game_id, {
+                                'type': 'pattern_updated',
+                                'pattern_id': pattern_id,
+                                'pattern_name': pattern_name
                             })
-            
-            elif data['type'] == 'finalize':
-                success, message = await game_manager.finalize_selection(game_id, user_id)
-                await websocket.send_json({
-                    'type': 'finalized',
-                    'success': success,
-                    'message': message
-                })
                 
-                if success:
+                elif data['type'] == 'mark_number':
+                    success = game_manager.mark_number(
+                        game_id, user_id, data['card_id'], data['number']
+                    )
+                    if success:
+                        await websocket.send_json({
+                            'type': 'number_marked',
+                            'card_id': data['card_id'],
+                            'number': data['number']
+                        })
+                
+                elif data['type'] == 'get_stats':
                     stats = await game_manager.get_user_stats(user_id)
                     await websocket.send_json({
                         'type': 'stats_update',
                         **stats
                     })
-            
-            elif data['type'] == 'start_game':
-                success, message = await game_manager.start_game(game_id, user_id)
-                await websocket.send_json({
-                    'type': 'start_result',
-                    'success': success,
-                    'message': message
-                })
-            
-            elif data['type'] == 'reset_game':
-                if str(user_id) != ADMIN_USER_ID:
-                    await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
-                    continue
-                await game_manager.reset_game(game_id)
-                await websocket.send_json({'type': 'game_reset', 'success': True})
-            
-            elif data['type'] == 'set_pattern':
-                if str(user_id) != ADMIN_USER_ID:
-                    await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
-                    continue
-                    
-                pattern_id = data.get('pattern_id')
-                if pattern_id:
-                    with db.get_connection() as conn:
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE games SET pattern_id = ? WHERE id = ?", (pattern_id, game_id))
-                        conn.commit()
-                        
-                        # Get pattern name
-                        cursor.execute("SELECT name FROM patterns WHERE id = ?", (pattern_id,))
-                        pattern = cursor.fetchone()
-                        pattern_name = pattern[0] if pattern else "Unknown"
-                        
-                        await game_manager.broadcast(game_id, {
-                            'type': 'pattern_updated',
-                            'pattern_id': pattern_id,
-                            'pattern_name': pattern_name
-                        })
-            
-            elif data['type'] == 'mark_number':
-                success = game_manager.mark_number(
-                    game_id, user_id, data['card_id'], data['number']
-                )
-                if success:
-                    await websocket.send_json({
-                        'type': 'number_marked',
-                        'card_id': data['card_id'],
-                        'number': data['number']
-                    })
-            
-            elif data['type'] == 'get_stats':
-                stats = await game_manager.get_user_stats(user_id)
-                await websocket.send_json({
-                    'type': 'stats_update',
-                    **stats
-                })
-            
-            elif data['type'] == 'claim_bingo':
-                # Handle bingo claim
-                card_id = data.get('card_id')
-                if card_id:
-                    # Check if bingo is valid
-                    player = game_manager.active_games[game_id]['players'].get(user_id)
-                    if player:
-                        card_index = player['card_ids'].index(card_id) if card_id in player['card_ids'] else -1
-                        if card_index >= 0:
-                            card = player['cards'][card_index]
-                            marked_set = set(player['marked'].get(card_id, []))
-                            
-                            # Add FREE space
-                            if card[2][2] == 'FREE':
-                                marked_set.add('FREE')
-                            
-                            # Get current pattern
-                            with db.get_connection() as conn:
-                                cursor = conn.cursor()
-                                cursor.execute("SELECT pattern_id FROM games WHERE id = ?", (game_id,))
-                                pattern_id = cursor.fetchone()[0]
-                                cursor.execute("SELECT positions FROM patterns WHERE id = ?", (pattern_id,))
-                                pattern_data = cursor.fetchone()[0]
-                            
-                            # Check bingo using pattern
-                            if game_manager.check_card_bingo(card, marked_set):
-                                await game_manager.declare_winner(game_id, user_id, card_id, game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0)
-                            else:
-                                await websocket.send_json({
-                                    'type': 'error',
-                                    'message': 'Not a valid bingo pattern'
-                                })
-            
-            elif data['type'] == 'ping':
-                await websocket.send_json({'type': 'pong'})
                 
+                elif data['type'] == 'claim_bingo':
+                    # Handle bingo claim
+                    card_id = data.get('card_id')
+                    if card_id:
+                        # Check if bingo is valid
+                        player = game_manager.active_games[game_id]['players'].get(user_id)
+                        if player:
+                            card_index = player['card_ids'].index(card_id) if card_id in player['card_ids'] else -1
+                            if card_index >= 0:
+                                card = player['cards'][card_index]
+                                marked_set = set(player['marked'].get(card_id, []))
+                                
+                                # Add FREE space
+                                if card[2][2] == 'FREE':
+                                    marked_set.add('FREE')
+                                
+                                # Check bingo
+                                if game_manager.check_card_bingo(card, marked_set):
+                                    await game_manager.declare_winner(game_id, user_id, card_id, game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0)
+                                else:
+                                    await websocket.send_json({
+                                        'type': 'error',
+                                        'message': 'Not a valid bingo pattern'
+                                    })
+                
+                elif data['type'] == 'ping':
+                    await websocket.send_json({'type': 'pong'})
+                    
+            except asyncio.TimeoutError:
+                # Send ping to check connection
+                try:
+                    await websocket.send_json({'type': 'ping'})
+                except:
+                    break
+                    
     except WebSocketDisconnect:
         game_manager.disconnect(game_id, websocket, user_id)
         logger.info(f"User {user_id} disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+        game_manager.disconnect(game_id, websocket, user_id)
 
 @app.post("/api/join-game")
 async def join_game(request: Request):
