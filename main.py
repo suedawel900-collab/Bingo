@@ -1424,7 +1424,7 @@ async def approve_payment_callback(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text(
             f"✅ **Payment Approved Successfully!**\n\n"
             f"**Request ID:** `{request_id}`\n"
-            f"**User ID:** {request['user_id']}\n"
+            f"**User ID:** {request['user_id']}\n
             f"**Amount:** {request['amount']/100:.0f} ETB\n\n"
             f"The user has been notified.",
             parse_mode='Markdown'
@@ -1730,4 +1730,214 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "welcome_bonus": WELCOME_BONUS / 100,
         "initial_balance": user['balance'] / 100,
         "initial_active_games": active_games,
-        "initial_st
+        "initial_stake": total_stake / 100
+    })
+
+@app.websocket("/ws/{game_id}/{user_id}")
+async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
+    await game_manager.connect(game_id, websocket, user_id)
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            logger.info(f"Received: {data['type']} from user {user_id}")
+            
+            if data['type'] == 'select_cards':
+                success, message, cost = await game_manager.select_cards(
+                    game_id, user_id, data['card_ids']
+                )
+                await websocket.send_json({
+                    'type': 'cards_selected',
+                    'success': success,
+                    'message': message,
+                    'cost': cost,
+                    'card_ids': data['card_ids'] if success else []
+                })
+                
+                if success:
+                    for card_id in data['card_ids']:
+                        card = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+                        if card:
+                            await websocket.send_json({
+                                'type': 'your_card',
+                                'card': card['card'],
+                                'card_id': card_id
+                            })
+            
+            elif data['type'] == 'finalize':
+                success, message = await game_manager.finalize_selection(game_id, user_id)
+                await websocket.send_json({
+                    'type': 'finalized',
+                    'success': success,
+                    'message': message
+                })
+                
+                if success:
+                    stats = await game_manager.get_user_stats(user_id)
+                    await websocket.send_json({
+                        'type': 'stats_update',
+                        **stats
+                    })
+            
+            elif data['type'] == 'start_game':
+                success, message = await game_manager.start_game(game_id, user_id)
+                await websocket.send_json({
+                    'type': 'start_result',
+                    'success': success,
+                    'message': message
+                })
+            
+            elif data['type'] == 'set_pattern':
+                if user_id != int(ADMIN_USER_ID):
+                    await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
+                    continue
+                    
+                pattern_id = data.get('pattern_id')
+                if pattern_id:
+                    with db.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE games SET pattern_id = ? WHERE id = ?", (pattern_id, game_id))
+                        conn.commit()
+                        
+                        # Get pattern name
+                        cursor.execute("SELECT name FROM patterns WHERE id = ?", (pattern_id,))
+                        pattern = cursor.fetchone()
+                        pattern_name = pattern[0] if pattern else "Unknown"
+                        
+                        await game_manager.broadcast(game_id, {
+                            'type': 'pattern_updated',
+                            'pattern_id': pattern_id,
+                            'pattern_name': pattern_name
+                        })
+            
+            elif data['type'] == 'mark_number':
+                success = game_manager.mark_number(
+                    game_id, user_id, data['card_id'], data['number']
+                )
+                if success:
+                    await websocket.send_json({
+                        'type': 'number_marked',
+                        'card_id': data['card_id'],
+                        'number': data['number']
+                    })
+            
+            elif data['type'] == 'get_stats':
+                stats = await game_manager.get_user_stats(user_id)
+                await websocket.send_json({
+                    'type': 'stats_update',
+                    **stats
+                })
+            
+            elif data['type'] == 'claim_bingo':
+                # Handle bingo claim
+                card_id = data.get('card_id')
+                if card_id:
+                    # Check if bingo is valid
+                    player = game_manager.active_games[game_id]['players'].get(user_id)
+                    if player:
+                        card_index = player['card_ids'].index(card_id) if card_id in player['card_ids'] else -1
+                        if card_index >= 0:
+                            card = player['cards'][card_index]
+                            marked_set = set(player['marked'].get(card_id, []))
+                            
+                            # Add FREE space
+                            if card[2][2] == 'FREE':
+                                marked_set.add('FREE')
+                            
+                            # Get current pattern
+                            with db.get_connection() as conn:
+                                cursor = conn.cursor()
+                                cursor.execute("SELECT pattern_id FROM games WHERE id = ?", (game_id,))
+                                pattern_id = cursor.fetchone()[0]
+                                cursor.execute("SELECT positions FROM patterns WHERE id = ?", (pattern_id,))
+                                pattern_data = cursor.fetchone()[0]
+                            
+                            # Check bingo using pattern
+                            if game_manager.check_card_bingo(card, marked_set):
+                                await game_manager.declare_winner(game_id, user_id, card_id, called[-1] if called else 0)
+                            else:
+                                await websocket.send_json({
+                                    'type': 'error',
+                                    'message': 'Not a valid bingo pattern'
+                                })
+            
+            elif data['type'] == 'ping':
+                await websocket.send_json({'type': 'pong'})
+                
+    except WebSocketDisconnect:
+        game_manager.disconnect(game_id, websocket, user_id)
+        logger.info(f"User {user_id} disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+
+@app.post("/api/join-game")
+async def join_game(request: Request):
+    data = await request.json()
+    user_id = data.get('user_id')
+    game_id = data.get('game_id')
+    card_count = data.get('card_count', 1)
+    
+    total_cost = card_count * CARD_PRICE
+    
+    result = db.update_balance(
+        user_id=user_id,
+        amount=-total_cost,
+        transaction_type='game_fee',
+        description=f'Joined game #{game_id} with {card_count} cards'
+    )
+    
+    if result:
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE users SET games_played = games_played + 1 WHERE user_id = ?
+            ''', (user_id,))
+            conn.commit()
+        
+        return JSONResponse({
+            'success': True,
+            'balance': result['new_balance'],
+            'balance_etb': result['new_balance'] / 100,
+            'cost': total_cost,
+            'card_count': card_count
+        })
+    
+    return JSONResponse({
+        'success': False,
+        'error': 'Insufficient balance'
+    }, status_code=400)
+
+@app.get("/api/game-state/{game_id}")
+async def get_game_state(game_id: int):
+    if game_id in game_manager.active_games:
+        game = game_manager.active_games[game_id]
+        return {
+            'players': game_manager.get_players(game_id),
+            'started': game_manager.game_started.get(game_id, False),
+            'winner': game_manager.game_winner.get(game_id),
+            'round': game_manager.round_number.get(game_id, 1),
+            'called_numbers': game['called_numbers'],
+            'prize_pool': game['prize_pool'] / 100,
+            'total_cards': game['total_cards_sold'],
+            'countdown': game_manager.countdown_timers.get(game_id, 15)
+        }
+    return {'error': 'Game not found'}
+
+# Quick add funds endpoint for testing (remove in production)
+@app.get("/api/add-funds/{user_id}/{amount}")
+async def add_funds(user_id: int, amount: int):
+    """Quick endpoint to add funds for testing"""
+    result = db.update_balance(
+        user_id=user_id,
+        amount=amount * 100,  # Convert to cents
+        transaction_type='deposit',
+        description='Test deposit'
+    )
+    if result:
+        return {"success": True, "new_balance": result['new_balance'] / 100}
+    return {"success": False}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv('PORT', 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
