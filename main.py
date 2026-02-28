@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configuration
-BOT_TOKEN = os.getenv('BOT_TOKEN', '8578474198:AAGcqcyTihBMxV-gtqukkbU_SBk1EszG-7w')
+BOT_TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')  # Move to env variable
 ADMIN_USER_ID = os.getenv('ADMIN_USER_ID', '8741250511')
 RAILWAY_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'bingo-production-a078.up.railway.app')
 # Ensure URL has https://
@@ -83,7 +83,7 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# Game Manager
+# Game Manager - FIXED VERSION
 class GameManager:
     def __init__(self):
         self.active_games = {}
@@ -400,6 +400,7 @@ class GameManager:
         
         return True, "Game started"
     
+    # FIXED: Complete reset for new round - clears all player cards
     async def reset_game(self, game_id: int):
         if game_id not in self.active_games:
             return
@@ -413,11 +414,21 @@ class GameManager:
         self.active_games[game_id]['called_numbers'] = []
         self.countdown_timers[game_id] = 15
         
-        for player in self.active_games[game_id]['players'].values():
+        # FIX: Clear ALL player data for new round
+        for user_id, player in self.active_games[game_id]['players'].items():
+            player['cards'] = []
+            player['card_ids'] = []
+            player['marked'] = {}
             player['ready'] = False
             player['winner'] = False
-            for card_id in player['marked']:
-                player['marked'][card_id] = []
+            # Keep balance, total_spent, cards_won for stats
+        
+        # FIX: Clear taken cards set to allow cards to be selected again
+        self.taken_cards[game_id] = set()
+        
+        # Reset game stats
+        self.active_games[game_id]['total_cards_sold'] = 0
+        self.active_games[game_id]['prize_pool'] = 0
         
         self.round_number[game_id] += 1
         
@@ -425,10 +436,11 @@ class GameManager:
             'type': 'game_reset',
             'round': self.round_number[game_id],
             'players': self.get_players(game_id),
-            'countdown': 15
+            'countdown': 15,
+            'clear_cards': True  # Signal frontend to clear all cards
         })
         
-        logger.info(f"Game {game_id} reset for round {self.round_number[game_id]}")
+        logger.info(f"Game {game_id} reset for round {self.round_number[game_id]} - players can select new cards")
     
     async def generate_numbers(self, game_id: int):
         try:
@@ -872,6 +884,10 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "4. Numbers are called every 2 seconds\n"
         "5. Click numbers on your card to mark them\n"
         "6. Get 5 in a row to win!\n\n"
+        "**After a winner:**\n"
+        "• Cards are automatically cleared\n"
+        "• Click 'PLAY AGAIN' to select new cards\n"
+        "• Admin starts the next round\n\n"
         "**💰 Balance:**\n"
         "• Each game costs 10 ETB per card\n"
         "• Winner gets 90% of prize pool\n"
@@ -895,7 +911,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== SIMPLIFIED PAYMENT HANDLERS ====================
 
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start deposit process - SIMPLIFIED"""
+    """Start deposit process"""
     query = update.callback_query
     await query.answer()
     
@@ -1003,102 +1019,11 @@ async def handle_deposit_amount(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode='Markdown'
         )
         
-        return ConversationHandler.END
+        return REFERENCE
         
     except ValueError:
         await update.message.reply_text("❌ Invalid amount. Please enter a number.")
         return AMOUNT
-
-async def handle_payment_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle phone number for payment"""
-    phone = update.message.text.strip()
-    
-    # Validate phone
-    phone = phone.replace(' ', '').replace('-', '').replace('+', '')
-    
-    if phone.startswith('07') and len(phone) == 10:
-        phone = '09' + phone[2:]
-    elif phone.startswith('09') and len(phone) == 10:
-        pass
-    elif phone.startswith('251') and len(phone) == 12:
-        phone = '09' + phone[3:]
-    elif phone.startswith('+251') and len(phone) == 13:
-        phone = '09' + phone[4:]
-    else:
-        await update.message.reply_text(
-            "❌ Please enter a valid phone number (09xxxxxxxx or 07xxxxxxxx)"
-        )
-        return REFERENCE
-    
-    # Get pending amount
-    amount_cents = context.user_data.get('pending_amount')
-    if not amount_cents:
-        await update.message.reply_text("❌ Session expired. Please start over.")
-        return ConversationHandler.END
-    
-    user = update.effective_user
-    amount = amount_cents / 100
-    
-    # Save phone to user profile
-    db.update_user_phone(user.id, phone)
-    
-    # Create payment request
-    methods = db.get_payment_methods(type='mobile_money', active_only=True)
-    if not methods:
-        await update.message.reply_text("❌ No payment methods available")
-        return ConversationHandler.END
-    
-    method = methods[0]
-    method_id = method['id']
-    
-    request_id = db.create_payment_request(
-        user_id=user.id,
-        method_id=method_id,
-        amount=amount_cents,
-        sender_phone=phone
-    )
-    
-    if not request_id:
-        await update.message.reply_text("❌ Failed to create payment request")
-        return ConversationHandler.END
-    
-    context.user_data['payment_request_id'] = request_id
-    context.user_data['amount'] = amount_cents
-    context.user_data['phone'] = phone
-    
-    account_number = "0953933030"
-    
-    instructions = (
-        f"**Payment Instructions**\n\n"
-        f"1. Dial *127# for Telbirr or *847# for CBE Birr\n"
-        f"2. Select Send Money\n"
-        f"3. Enter number **{account_number}**\n"
-        f"4. Enter amount **{amount:.0f} ETB**\n"
-        f"5. Enter your PIN\n"
-        f"6. Save the reference number\n\n"
-        f"After payment, send the reference number here."
-    )
-    
-    message = (
-        f"💳 **Deposit Request**\n\n"
-        f"💰 Amount: **{amount:.0f} ETB**\n"
-        f"📱 Phone: {phone}\n"
-        f"🆔 Request ID: `{request_id}`\n\n"
-        f"**Instructions:**\n{instructions}"
-    )
-    
-    await update.message.reply_text(
-        message,
-        parse_mode='Markdown'
-    )
-    
-    await update.message.reply_text(
-        "📝 **Enter Transaction Reference**\n\n"
-        "Please enter the reference number you received after payment:",
-        parse_mode='Markdown'
-    )
-    
-    return ConversationHandler.END
 
 async def handle_payment_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle payment reference"""
@@ -1412,12 +1337,12 @@ async def setup_bot():
         name="phone_conversation"
     )
     
-    # Payment conversation handler - SIMPLIFIED
+    # Payment conversation handler
     payment_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(deposit_command, pattern='^deposit$')],
         states={
             AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_deposit_amount)],
-            REFERENCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment_phone)],
+            REFERENCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment_reference)],
         },
         fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(main_menu_callback, pattern='^main_menu$')],
         name="payment_conversation",
@@ -1440,9 +1365,6 @@ async def setup_bot():
     application.add_handler(CallbackQueryHandler(approve_payment_callback, pattern="^approve_pay_"))
     application.add_handler(CallbackQueryHandler(reject_payment_callback, pattern="^reject_pay_"))
     application.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"))
-    
-    # Message handler for payment reference
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_payment_reference))
     
     # Initialize and start
     await application.initialize()
@@ -1613,14 +1535,14 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 })
             
             elif data['type'] == 'reset_game':
-                if user_id != int(ADMIN_USER_ID):
+                if str(user_id) != ADMIN_USER_ID:
                     await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
                     continue
                 await game_manager.reset_game(game_id)
                 await websocket.send_json({'type': 'game_reset', 'success': True})
             
             elif data['type'] == 'set_pattern':
-                if user_id != int(ADMIN_USER_ID):
+                if str(user_id) != ADMIN_USER_ID:
                     await websocket.send_json({'type': 'error', 'message': 'Not authorized'})
                     continue
                     
@@ -1756,18 +1678,19 @@ async def get_game_state(game_id: int):
     return {'error': 'Game not found'}
 
 # Quick add funds endpoint for testing (remove in production)
-@app.get("/api/add-funds/{user_id}/{amount}")
-async def add_funds(user_id: int, amount: int):
-    """Quick endpoint to add funds for testing"""
-    result = db.update_balance(
-        user_id=user_id,
-        amount=amount * 100,  # Convert to cents
-        transaction_type='deposit',
-        description='Test deposit'
-    )
-    if result:
-        return {"success": True, "new_balance": result['new_balance'] / 100}
-    return {"success": False}
+if os.getenv('ENVIRONMENT') != 'production':
+    @app.get("/api/add-funds/{user_id}/{amount}")
+    async def add_funds(user_id: int, amount: int):
+        """Quick endpoint to add funds for testing"""
+        result = db.update_balance(
+            user_id=user_id,
+            amount=amount * 100,  # Convert to cents
+            transaction_type='deposit',
+            description='Test deposit'
+        )
+        if result:
+            return {"success": True, "new_balance": result['new_balance'] / 100}
+        return {"success": False}
 
 if __name__ == "__main__":
     import uvicorn
