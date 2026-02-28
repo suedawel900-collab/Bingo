@@ -370,7 +370,7 @@
             box-shadow: 0 2px 8px rgba(76,175,80,0.3);
         }
         
-        /* Current Card - HORIZONTAL 5x5 Grid - FIXED ORIENTATION */
+        /* Current Card - HORIZONTAL 5x5 Grid */
         .current-card-section {
             background: #f8f9fa;
             border-radius: 10px;
@@ -394,16 +394,6 @@
         }
         
         /* HORIZONTAL 5x5 Grid - CORRECT BINGO FORMAT (columns B,I,N,G,O) */
-        .bingo-grid {
-            display: grid !important;
-            grid-template-columns: repeat(5, 1fr) !important;
-            gap: 6px;
-            background: white;
-            padding: 8px;
-            border-radius: 8px;
-        }
-        
-        /* Add column headers for BINGO */
         .bingo-header {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
@@ -418,6 +408,15 @@
             color: white;
             padding: 5px;
             border-radius: 4px;
+        }
+        
+        .bingo-grid {
+            display: grid !important;
+            grid-template-columns: repeat(5, 1fr) !important;
+            gap: 6px;
+            background: white;
+            padding: 8px;
+            border-radius: 8px;
         }
         
         .bingo-cell {
@@ -969,7 +968,7 @@
                         </label>
                     </div>
                     
-                    <!-- START GAME BUTTON - FIXED: Always visible but only clickable by admin -->
+                    <!-- START GAME BUTTON - Always visible but only clickable by admin -->
                     <button class="start-game-btn" id="start-game-btn" onclick="startGame()" disabled>🚀 START GAME</button>
                     
                     <!-- Next Round Button -->
@@ -1061,7 +1060,7 @@
             document.getElementById('auto-reset-container').style.display = 'block';
         }
         
-        // FIXED: Start button visibility - always visible but only enabled for admin when ready
+        // Start button visibility - always visible but only enabled for admin when ready
         const startBtn = document.getElementById('start-game-btn');
         startBtn.style.display = 'block'; // Always show the button
         
@@ -1256,7 +1255,7 @@
                     
                     const readyCount = players.filter(p => p.ready).length;
                     const startBtn = document.getElementById('start-game-btn');
-                    // FIXED: Enable start button only for admin when players are ready
+                    // Enable start button only for admin when players are ready
                     if (readyCount > 0 && userId == ADMIN_USER_ID) {
                         startBtn.classList.add('ready');
                         startBtn.disabled = false;
@@ -1293,6 +1292,7 @@
                         renderCurrentCard();
                     }
                 }
+                // FIXED: Complete game reset with takenCards.clear()
                 else if (data.type === 'game_reset') {
                     gameStarted = false;
                     gameEnded = false;
@@ -1300,13 +1300,17 @@
                     called = [];
                     currentWinner = null;
                     
+                    // Clear ALL player cards and selections
                     selectedCards = [];
                     myCards = {};
                     marked = {};
                     isReady = false;
                     hasCards = false;
-                    takenCards.clear();
                     
+                    // CRITICAL: Clear taken cards set to allow cards to be selected again
+                    takenCards.clear(); // This unlocks all cards for the new round
+                    
+                    // Update UI
                     document.getElementById('status').textContent = '⏳ WAITING';
                     document.getElementById('bingo-btn').disabled = true;
                     document.getElementById('last-number').textContent = '🎲 Ready for next round';
@@ -1316,6 +1320,7 @@
                     document.getElementById('confirm-btn').textContent = 'Confirm';
                     document.getElementById('play-again-btn').style.display = 'none';
                     
+                    // Clear the selected cards display
                     document.getElementById('selected-scroll').innerHTML = '';
                     document.getElementById('selected-count').textContent = `0/${maxCards}`;
                     document.getElementById('total-cost').textContent = 'Total: 0 ETB';
@@ -1323,12 +1328,15 @@
                     currentRound = data.round || currentRound + 1;
                     document.getElementById('active-game-display').textContent = currentRound;
                     
+                    // Re-enable all card buttons by updating the grid
                     updateSelectedDisplay();
-                    updateCardGrid();
+                    updateCardGrid(); // This will show all cards as available (not taken)
+                    
+                    // Clear current card display
                     document.getElementById('current-card-id').textContent = '#0';
                     document.getElementById('card-display').innerHTML = '';
                     
-                    showMessage('🔄 New round started! Select your new cards.', 'info');
+                    showMessage('🔄 New round started! All cards are available again. Select your new cards.', 'info');
                 }
                 else if (data.type === 'game_won') {
                     gameStarted = false;
@@ -1558,15 +1566,16 @@
                 btn.classList.remove('selected', 'taken');
                 
                 if (selectedCards.includes(id)) {
-                    btn.classList.add('selected');
+                    btn.classList.add('selected'); // Cards you've selected this round
                 }
-                if (takenCards.has(id) && !selectedCards.includes(id)) {
-                    btn.classList.add('taken');
+                // After takenCards.clear(), this condition is false for all cards
+                else if (takenCards.has(id) && !selectedCards.includes(id)) {
+                    btn.classList.add('taken'); // Cards taken by others (cleared after reset)
                 }
             });
         }
         
-        // FIXED: Render current card in correct BINGO orientation (columns B,I,N,G,O)
+        // Render current card in correct BINGO orientation (columns B,I,N,G,O)
         function renderCurrentCard() {
             if (!currentCardId || !myCards[currentCardId]) {
                 const grid = document.getElementById('card-display');
@@ -1725,7 +1734,7 @@
             showMessage('Select your cards for the next round!', 'success');
         }
         
-        // FIXED: Start game function - only works for admin
+        // Start game function - only works for admin
         function startGame() {
             // Check if user is admin
             if (userId != ADMIN_USER_ID) {
