@@ -528,6 +528,44 @@
             box-shadow: 0 4px 10px rgba(156,39,176,0.4);
         }
         
+        /* PLAY AGAIN Button - NEW */
+        .play-again-btn {
+            width: 100%;
+            padding: 12px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+            display: none;
+            animation: pulse 1.5s infinite;
+        }
+        .play-again-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(76,175,80,0.4);
+        }
+        
+        /* Auto-reset container - NEW */
+        .auto-reset-container {
+            margin-bottom: 10px;
+            padding: 8px;
+            background: #f0f0f0;
+            border-radius: 6px;
+            display: none;
+        }
+        .auto-reset-container label {
+            color: #333;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+        
         /* Admin Controls */
         .admin-controls {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -894,6 +932,16 @@
                         </label>
                     </div>
                     
+                    <!-- PLAY AGAIN Button - NEW -->
+                    <button class="play-again-btn" id="play-again-btn" onclick="prepareForNextRound()">🎮 PLAY AGAIN (Select New Cards)</button>
+                    
+                    <!-- Auto-reset option for admin - NEW -->
+                    <div class="auto-reset-container" id="auto-reset-container">
+                        <label>
+                            <input type="checkbox" id="auto-reset" checked> Auto-start next round after 30 seconds
+                        </label>
+                    </div>
+                    
                     <!-- START GAME BUTTON -->
                     <button class="start-game-btn" id="start-game-btn" onclick="startGame()" disabled>🚀 START GAME</button>
                     
@@ -979,6 +1027,11 @@
         if (userId == ADMIN_USER_ID || isAdmin) {
             document.getElementById('admin-controls').style.display = 'block';
             document.getElementById('status').textContent = '👑 ADMIN';
+        }
+        
+        // Show auto-reset option for admin - NEW
+        if (isAdmin) {
+            document.getElementById('auto-reset-container').style.display = 'block';
         }
         
         // Initialize
@@ -1104,6 +1157,7 @@
                         document.getElementById('status').textContent = '🎮 PLAYING';
                         document.getElementById('bingo-btn').disabled = false;
                         document.getElementById('next-round-btn').style.display = 'none';
+                        document.getElementById('play-again-btn').style.display = 'none';
                     }
                 }
                 else if (data.type === 'your_card') {
@@ -1182,6 +1236,7 @@
                     document.getElementById('bingo-btn').disabled = false;
                     document.getElementById('last-number').textContent = '🎲 Game Started!';
                     document.getElementById('next-round-btn').style.display = 'none';
+                    document.getElementById('play-again-btn').style.display = 'none';
                     showMessage('🚀 Game started!', 'success');
                 }
                 else if (data.type === 'number_called') {
@@ -1205,6 +1260,52 @@
                     document.getElementById('pattern-name').textContent = data.pattern_name;
                     showMessage(`🎯 Pattern changed to: ${data.pattern_name}`, 'info');
                 }
+                // FIXED: Complete game reset handler
+                else if (data.type === 'game_reset') {
+                    gameStarted = false;
+                    gameEnded = false;
+                    roundLocked = false;
+                    called = [];
+                    currentWinner = null;
+                    
+                    // Clear ALL player cards and selections
+                    selectedCards = [];
+                    myCards = {};
+                    marked = {};
+                    isReady = false;
+                    hasCards = false;
+                    
+                    // Clear taken cards set (allow cards to be selected again)
+                    takenCards.clear();
+                    
+                    document.getElementById('status').textContent = '⏳ WAITING';
+                    document.getElementById('bingo-btn').disabled = true;
+                    document.getElementById('last-number').textContent = '🎲 Ready for next round';
+                    document.getElementById('next-round-btn').style.display = 'none';
+                    document.getElementById('winner-announcement').style.display = 'none';
+                    document.getElementById('confirm-btn').disabled = true;
+                    document.getElementById('confirm-btn').textContent = 'Confirm';
+                    document.getElementById('play-again-btn').style.display = 'none';
+                    
+                    // Clear the selected cards display
+                    document.getElementById('selected-scroll').innerHTML = '';
+                    document.getElementById('selected-count').textContent = `0/${maxCards}`;
+                    document.getElementById('total-cost').textContent = 'Total: 0 ETB';
+                    
+                    currentRound = data.round || currentRound + 1;
+                    document.getElementById('active-game-display').textContent = currentRound;
+                    
+                    // Re-enable all card buttons by updating the grid
+                    updateSelectedDisplay();
+                    updateCardGrid();
+                    
+                    // Clear current card display
+                    document.getElementById('current-card-id').textContent = '#0';
+                    document.getElementById('card-display').innerHTML = '';
+                    
+                    showMessage('🔄 New round started! Select your new cards.', 'info');
+                }
+                // FIXED: Game won handler with Play Again button
                 else if (data.type === 'game_won') {
                     gameStarted = false;
                     gameEnded = true;
@@ -1213,6 +1314,9 @@
                     
                     document.getElementById('status').textContent = '🏆 WINNER!';
                     document.getElementById('bingo-btn').disabled = true;
+                    
+                    // Show "Play Again" button for ALL players
+                    document.getElementById('play-again-btn').style.display = 'block';
                     
                     // Show winner announcement with animated card
                     const winnerDiv = document.getElementById('winner-announcement');
@@ -1235,45 +1339,26 @@
                     // Show next round button for admin
                     if (isAdmin) {
                         document.getElementById('next-round-btn').style.display = 'block';
+                        
+                        // Auto-reset after 30 seconds if enabled
+                        if (document.getElementById('auto-reset')?.checked) {
+                            setTimeout(() => {
+                                if (isAdmin && gameEnded) {
+                                    startNextRound();
+                                }
+                            }, 30000); // 30 seconds delay
+                        }
                     }
                     
-                    showMessage(`🏆 ${data.winner.name} won!`, 'success');
+                    showMessage(`🏆 ${data.winner.name} won! Click PLAY AGAIN for next round`, 'success');
                     calculatePrizePool();
                     updatePlayersList();
                     fetchBalance();
                     
-                    // Auto-hide after 10 seconds
+                    // Auto-hide winner announcement after 10 seconds
                     setTimeout(() => {
                         winnerDiv.style.display = 'none';
                     }, 10000);
-                }
-                else if (data.type === 'game_reset') {
-                    gameStarted = false;
-                    gameEnded = false;
-                    roundLocked = false;
-                    called = [];
-                    currentWinner = null;
-                    
-                    selectedCards = [];
-                    myCards = {};
-                    marked = {};
-                    isReady = false;
-                    hasCards = false;
-                    
-                    document.getElementById('status').textContent = '⏳ WAITING';
-                    document.getElementById('bingo-btn').disabled = true;
-                    document.getElementById('last-number').textContent = '🎲 Ready for next round';
-                    document.getElementById('next-round-btn').style.display = 'none';
-                    document.getElementById('winner-announcement').style.display = 'none';
-                    
-                    currentRound++;
-                    document.getElementById('active-game-display').textContent = currentRound;
-                    
-                    updateSelectedDisplay();
-                    updateCardGrid();
-                    updateCalledNumbers();
-                    
-                    showMessage('🔄 New round started! Select your cards.', 'info');
                 }
                 else if (data.type === 'stats_update') {
                     balance = data.balance;
@@ -1333,10 +1418,12 @@
             updateCardGrid();
         }
         
-        // Toggle card selection
+        // FIXED: Toggle card selection with gameEnded check
         function toggleCardSelection(cardId) {
             if (gameStarted || isReady || isProcessing || gameEnded || roundLocked) {
-                if (gameEnded || roundLocked) {
+                if (gameEnded) {
+                    showMessage('Game ended! Click PLAY AGAIN to select new cards', 'info');
+                } else if (roundLocked) {
                     showMessage('Cards are locked until next round starts', 'info');
                 }
                 return;
@@ -1733,16 +1820,58 @@
             showMessage('🎯 BINGO claimed!', 'info');
         }
         
-        // Admin functions
+        // NEW: Prepare for next round (clear selections but keep balance)
+        function prepareForNextRound() {
+            if (!gameEnded) return;
+            
+            // Clear local selections
+            selectedCards = [];
+            myCards = {};
+            marked = {};
+            isReady = false;
+            hasCards = false;
+            
+            // Update UI
+            document.getElementById('selected-scroll').innerHTML = '';
+            document.getElementById('selected-count').textContent = `0/${maxCards}`;
+            document.getElementById('total-cost').textContent = 'Total: 0 ETB';
+            document.getElementById('confirm-btn').disabled = true;
+            document.getElementById('confirm-btn').textContent = 'Confirm';
+            document.getElementById('play-again-btn').style.display = 'none';
+            document.getElementById('status').textContent = '⏳ SELECT CARDS';
+            
+            // Re-enable card selection
+            roundLocked = false;
+            gameEnded = false;
+            
+            // Update card grid to show available cards
+            updateCardGrid();
+            
+            // Clear current card display
+            document.getElementById('current-card-id').textContent = '#0';
+            document.getElementById('card-display').innerHTML = '';
+            
+            showMessage('Select your cards for the next round!', 'success');
+        }
+        
+        // FIXED: Start game function
         function startGame() {
             const readyCount = players.filter(p => p.ready).length;
             if (readyCount === 0) {
                 showMessage('No players ready!', 'error');
                 return;
             }
+            
+            // If game ended, this is a new round
+            if (gameEnded) {
+                // Hide play again button when game starts
+                document.getElementById('play-again-btn').style.display = 'none';
+            }
+            
             ws.send(JSON.stringify({type: 'start_game'}));
         }
         
+        // Admin functions
         function callNumber() {
             const number = parseInt(document.getElementById('call-number').value);
             if (number >= 1 && number <= 75) {
@@ -1765,19 +1894,19 @@
             }
         }
         
-        // Start next round
+        // FIXED: Start next round
         function startNextRound() {
             if (!isAdmin) return;
             
-            if (balance < pricePerCard) {
-                showMessage('Insufficient balance for next round. Please deposit.', 'error');
-                return;
-            }
-            
-            roundLocked = false;
+            // First reset the game (clears cards)
             ws.send(JSON.stringify({type: 'reset_game'}));
             
-            showMessage('Starting next round... Select your cards!', 'info');
+            // Hide next round button, show start button
+            document.getElementById('next-round-btn').style.display = 'none';
+            document.getElementById('start-game-btn').disabled = true;
+            document.getElementById('start-game-btn').textContent = '🚀 START GAME';
+            
+            showMessage('New round ready! Players can select cards.', 'info');
         }
         
         function showMessage(text, type) {
