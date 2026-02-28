@@ -137,7 +137,7 @@
             gap: 15px;
         }
         
-        /* TOP SECTION: Selected Cards (HORIZONTAL SCROLL) - FIXED */
+        /* TOP SECTION: Selected Cards (HORIZONTAL SCROLL) */
         .selected-section {
             background: #fff3e0;
             border-radius: 12px;
@@ -370,7 +370,7 @@
             box-shadow: 0 2px 8px rgba(76,175,80,0.3);
         }
         
-        /* Current Card - HORIZONTAL 5x5 Grid - FIXED */
+        /* Current Card - HORIZONTAL 5x5 Grid */
         .current-card-section {
             background: #f8f9fa;
             border-radius: 10px;
@@ -393,7 +393,7 @@
             font-size: 14px;
         }
         
-        /* HORIZONTAL 5x5 Grid - FIXED - Numbers read left to right, top to bottom */
+        /* HORIZONTAL 5x5 Grid - Numbers read left to right, top to bottom */
         .bingo-grid {
             display: grid !important;
             grid-template-columns: repeat(5, 1fr) !important;
@@ -812,7 +812,7 @@
         
         <!-- Main Content - Stacked Layout -->
         <div class="main-content">
-            <!-- TOP SECTION: Selected Cards (HORIZONTAL SCROLL) - FIXED -->
+            <!-- TOP SECTION: Selected Cards (HORIZONTAL SCROLL) -->
             <div class="selected-section">
                 <div class="selected-header">
                     <span>📋 Your Cards (Horizontal Scroll)</span>
@@ -863,7 +863,7 @@
                     <!-- Last Number -->
                     <div class="last-number" id="last-number">🎲 Ready</div>
                     
-                    <!-- Current Card - HORIZONTAL 5x5 Grid - FIXED -->
+                    <!-- Current Card - HORIZONTAL 5x5 Grid with proper BINGO ranges -->
                     <div class="current-card-section">
                         <div class="card-title">
                             Your Card: <span id="current-card-id">#0</span>
@@ -940,6 +940,15 @@
         const TOTAL_NUMBERS = 75;
         const TOTAL_CARDS = 1000;
         const HOUSE_COMMISSION = 0.2; // 20% house fee
+        
+        // BINGO column ranges (standard BINGO)
+        const BINGO_COLUMNS = [
+            { name: 'B', min: 1, max: 15 },
+            { name: 'I', min: 16, max: 30 },
+            { name: 'N', min: 31, max: 45 },
+            { name: 'G', min: 46, max: 60 },
+            { name: 'O', min: 61, max: 75 }
+        ];
         
         // State
         let ws = null;
@@ -1114,6 +1123,11 @@
                             selectedCards = data.card_ids;
                             updateSelectedDisplay();
                         }
+                        // Update balance if returned from server
+                        if (data.new_balance !== undefined) {
+                            balance = data.new_balance;
+                            updateWallet();
+                        }
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
                         isProcessing = false;
@@ -1130,7 +1144,7 @@
                         document.getElementById('confirm-btn').textContent = '✓ READY';
                         document.getElementById('status').textContent = '✅ READY';
                         
-                        if (data.new_balance) {
+                        if (data.new_balance !== undefined) {
                             balance = data.new_balance;
                             updateWallet();
                         }
@@ -1435,6 +1449,12 @@
                 return;
             }
             
+            const totalCost = selectedCards.length * pricePerCard;
+            if (totalCost > balance) {
+                showMessage('Insufficient balance!', 'error');
+                return;
+            }
+            
             isProcessing = true;
             const confirmBtn = document.getElementById('confirm-btn');
             confirmBtn.disabled = true;
@@ -1460,10 +1480,59 @@
             });
         }
         
-        // Render current card as HORIZONTAL 5x5 grid
+        // Generate a proper BINGO card with standard column ranges
+        function generateProperBingoCard() {
+            const card = [];
+            
+            // Generate 5 rows
+            for (let row = 0; row < 5; row++) {
+                const rowData = [];
+                
+                // Generate 5 columns (B, I, N, G, O)
+                for (let col = 0; col < 5; col++) {
+                    // FREE space in the center (row 2, col 2)
+                    if (row === 2 && col === 2) {
+                        rowData.push('FREE');
+                    } else {
+                        const column = BINGO_COLUMNS[col];
+                        // Generate a random number within the column range
+                        const number = Math.floor(Math.random() * (column.max - column.min + 1)) + column.min;
+                        rowData.push(number);
+                    }
+                }
+                
+                card.push(rowData);
+            }
+            
+            return card;
+        }
+        
+        // Render current card as HORIZONTAL 5x5 grid with proper BINGO format
         function renderCurrentCard() {
             if (!currentCardId || !myCards[currentCardId]) {
-                console.log("No card to render");
+                // If no card, display a sample card for demonstration
+                const grid = document.getElementById('card-display');
+                grid.innerHTML = '';
+                
+                // Create a sample proper BINGO card
+                const sampleCard = generateProperBingoCard();
+                
+                for (let row = 0; row < 5; row++) {
+                    for (let col = 0; col < 5; col++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'bingo-cell';
+                        
+                        let num = sampleCard[row][col];
+                        cell.textContent = num;
+                        
+                        if (row === 2 && col === 2) {
+                            cell.classList.add('free');
+                            cell.textContent = 'FREE';
+                        }
+                        
+                        grid.appendChild(cell);
+                    }
+                }
                 return;
             }
             
@@ -1475,7 +1544,7 @@
             
             grid.innerHTML = '';
             
-            // Determine the structure of the card
+            // Determine the structure of the card and convert to proper format if needed
             let cardData;
             
             // If card is already a 5x5 array (rows)
@@ -1503,16 +1572,10 @@
                     }
                 }
             }
-            // Fallback - use a default card
+            // Fallback - use a proper BINGO card
             else {
-                console.log("Using fallback data");
-                cardData = [
-                    [1, 2, 3, 4, 5],
-                    [6, 7, 8, 9, 10],
-                    [11, 12, 'FREE', 14, 15],
-                    [16, 17, 18, 19, 20],
-                    [21, 22, 23, 24, 25]
-                ];
+                console.log("Using generated proper BINGO card");
+                cardData = generateProperBingoCard();
             }
             
             // Render the HORIZONTAL 5x5 grid (rows first)
@@ -1526,15 +1589,18 @@
                     
                     cell.textContent = num;
                     
+                    // Check if this is the FREE space (center)
                     if (row === 2 && col === 2 || num === 'FREE') {
                         cell.classList.add('free');
                         cell.textContent = 'FREE';
                     }
                     
-                    if (called.includes(num)) {
+                    // Check if number has been called
+                    if (called.includes(num) && num !== 'FREE') {
                         cell.classList.add('marked');
                     }
                     
+                    // Check if player has marked this number
                     if (markedNumbers.includes(num)) {
                         cell.classList.add('marked');
                     }
@@ -1557,13 +1623,7 @@
             if (Array.isArray(card) && card.length === 5 && Array.isArray(card[0])) {
                 cardData = card;
             } else {
-                cardData = [
-                    [1, 2, 3, 4, 5],
-                    [6, 7, 8, 9, 10],
-                    [11, 12, 'FREE', 14, 15],
-                    [16, 17, 18, 19, 20],
-                    [21, 22, 23, 24, 25]
-                ];
+                cardData = generateProperBingoCard();
             }
             
             for (let row = 0; row < 5; row++) {
