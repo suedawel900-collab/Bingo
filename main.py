@@ -243,33 +243,33 @@ class GameManager:
     # FIXED: Balance is deducted immediately when cards are selected
     async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]):
         if game_id not in self.active_games:
-            return False, "Game not found", 0
+            return False, "Game not found", 0, None
         
         if self.game_started[game_id]:
-            return False, "Game already started", 0
+            return False, "Game already started", 0, None
         
         if user_id not in self.active_games[game_id]['players']:
-            return False, "Player not found", 0
+            return False, "Player not found", 0, None
         
         player = self.active_games[game_id]['players'][user_id]
         
         if len(player['card_ids']) + len(card_ids) > MAX_CARDS_PER_PLAYER:
-            return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0
+            return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0, None
         
         # Check cards availability
         for card_id in card_ids:
             if card_id in self.taken_cards[game_id]:
-                return False, f"Card {card_id} already taken", 0
+                return False, f"Card {card_id} already taken", 0, None
             
             card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
             if not card_data:
-                return False, f"Card {card_id} not found", 0
+                return False, f"Card {card_id} not found", 0, None
         
         total_cost = len(card_ids) * CARD_PRICE
         
         # Check balance
         if player['balance'] < total_cost:
-            return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost
+            return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
         
         # Add cards and deduct balance immediately
         for card_id in card_ids:
@@ -286,23 +286,23 @@ class GameManager:
         
         logger.info(f"User {user_id} selected {len(card_ids)} cards, cost: {total_cost}, new balance: {player['balance']}")
         
-        return True, f"Selected {len(card_ids)} cards", total_cost
+        return True, f"Selected {len(card_ids)} cards", total_cost, player['balance']
     
     # FIXED: Finalize selection updates database
     async def finalize_selection(self, game_id: int, user_id: int):
         if game_id not in self.active_games:
-            return False, "Game not found"
+            return False, "Game not found", None
         
         if user_id not in self.active_games[game_id]['players']:
-            return False, "Player not found"
+            return False, "Player not found", None
         
         player = self.active_games[game_id]['players'][user_id]
         
         if len(player['card_ids']) == 0:
-            return False, "No cards selected"
+            return False, "No cards selected", None
         
         if player['ready']:
-            return False, "Already ready"
+            return False, "Already ready", None
         
         total_cost = player['total_spent']
         
@@ -318,13 +318,18 @@ class GameManager:
             # If database update fails, refund the player
             player['balance'] += total_cost
             player['total_spent'] = 0
-            return False, "Failed to deduct balance"
+            for card_id in player['card_ids']:
+                self.taken_cards[game_id].discard(card_id)
+            player['cards'] = []
+            player['card_ids'] = []
+            player['marked'] = {}
+            return False, "Failed to deduct balance", None
         
         # Save to active games
         db.add_active_game(user_id, game_id, player['card_ids'], total_cost)
         player['ready'] = True
         
-        logger.info(f"User {user_id} finalized selection for game {game_id}, cost: {total_cost}")
+        logger.info(f"User {user_id} finalized selection for game {game_id}, cost: {total_cost}, new balance: {player['balance']}")
         
         await self.broadcast(game_id, {
             'type': 'player_ready',
@@ -332,7 +337,7 @@ class GameManager:
             'user_id': user_id
         })
         
-        return True, "Ready to play"
+        return True, "Ready to play", player['balance']
     
     # FIXED: Only admin can start the game
     async def start_game(self, game_id: int, user_id: int):
@@ -681,9 +686,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "**How to Play:**\n"
             "1. Click 'Play Bingo'\n"
             "2. Choose your cards\n"
-            "3. Wait for admin to start the game\n"
-            "4. Mark numbers as called\n"
-            "5. Click BINGO when you win!\n\n"
+            "3. Click Confirm to lock in your cards\n"
+            "4. Wait for admin to start the game\n"
+            "5. Mark numbers as they are called\n"
+            "6. Click BINGO when you win!\n\n"
             f"**Price:** {CARD_PRICE/100} ETB per card\n\n"
             "**Note:** Only admin can start the game"
         )
@@ -928,7 +934,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             logger.info(f"WebSocket message: {data['type']} from user {user_id}")
             
             if data['type'] == 'select_cards':
-                success, message, cost = await game_manager.select_cards(
+                success, message, cost, new_balance = await game_manager.select_cards(
                     game_id, user_id, data['card_ids']
                 )
                 await websocket.send_json({
@@ -936,6 +942,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'success': success,
                     'message': message,
                     'cost': cost,
+                    'new_balance': new_balance,
                     'card_ids': data['card_ids'] if success else []
                 })
                 
@@ -948,12 +955,14 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                             'card_id': card_id
                         })
             
+            # FIXED: Handle finalize message
             elif data['type'] == 'finalize':
-                success, message = await game_manager.finalize_selection(game_id, user_id)
+                success, message, new_balance = await game_manager.finalize_selection(game_id, user_id)
                 await websocket.send_json({
                     'type': 'finalized',
                     'success': success,
-                    'message': message
+                    'message': message,
+                    'new_balance': new_balance
                 })
             
             elif data['type'] == 'start_game':
@@ -969,6 +978,33 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     continue
                 await game_manager.reset_game(game_id)
                 await websocket.send_json({'type': 'game_reset', 'success': True})
+            
+            elif data['type'] == 'call_number':
+                if str(user_id) != ADMIN_USER_ID:
+                    continue
+                # This would be handled by the game logic
+                pass
+            
+            elif data['type'] == 'set_pattern':
+                if str(user_id) != ADMIN_USER_ID:
+                    continue
+                pattern_id = data.get('pattern_id')
+                if pattern_id:
+                    with db.get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE games SET pattern_id = ? WHERE id = ?", (pattern_id, game_id))
+                        conn.commit()
+                        
+                        # Get pattern name
+                        cursor.execute("SELECT name FROM patterns WHERE id = ?", (pattern_id,))
+                        pattern = cursor.fetchone()
+                        pattern_name = pattern[0] if pattern else "Unknown"
+                        
+                        await game_manager.broadcast(game_id, {
+                            'type': 'pattern_updated',
+                            'pattern_id': pattern_id,
+                            'pattern_name': pattern_name
+                        })
             
             elif data['type'] == 'mark_number':
                 success = game_manager.mark_number(
