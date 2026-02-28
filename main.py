@@ -34,11 +34,10 @@ if not RAILWAY_URL.startswith('http'):
 else:
     BASE_URL = RAILWAY_URL
 
-CARD_PRICE = 1000  # 10 ETB in cents (matches your existing)
+CARD_PRICE = 1000  # 10 ETB in cents
 MAX_CARDS_PER_PLAYER = 20
 WELCOME_BONUS = 1000  # 10 ETB welcome bonus
-MIN_CARDS_TO_START = 5  # Minimum cards needed to auto-start (from your example)
-HOUSE_PERCENT = 0.20  # 20% house fee (matches your existing)
+AUTO_START_DELAY = 20  # Auto-start game after 20 seconds
 
 # Conversation states
 PHONE_NUMBER, AMOUNT, REFERENCE = range(3)
@@ -126,9 +125,38 @@ class IntegratedBingoGame:
         self.user_connections = {}
         self.MAX_CONNECTIONS_PER_USER = 2
         
+        # Auto-start timer
+        self.auto_start_timer = None
+        self.first_card_time = None
+        
         # Sync with existing game structure
         self.game_id = 1  # Default game ID
         
+    # ==================== AUTO-START FUNCTIONALITY ====================
+    
+    async def start_auto_start_timer(self):
+        """Start a timer to auto-start the game after 20 seconds"""
+        if self.auto_start_timer:
+            self.auto_start_timer.cancel()
+        
+        self.first_card_time = time.time()
+        logger.info(f"Auto-start timer started - game will start in {AUTO_START_DELAY} seconds")
+        
+        async def auto_start():
+            await asyncio.sleep(AUTO_START_DELAY)
+            
+            # Check if game hasn't started yet and there are players
+            game_id = self.game_id
+            if not self.game_started and game_id in self.active_games:
+                players = self.active_games[game_id]['players']
+                if len(players) > 0:
+                    logger.info(f"Auto-starting game {game_id} after {AUTO_START_DELAY} seconds")
+                    await self.start_round(game_id)
+                else:
+                    logger.info("No players, not auto-starting")
+        
+        self.auto_start_timer = asyncio.create_task(auto_start())
+    
     # ==================== EXISTING GAMEMANAGER METHODS ====================
     
     async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
@@ -174,7 +202,7 @@ class IntegratedBingoGame:
                 'cards': [],
                 'card_ids': [],
                 'marked': {},
-                'ready': False,
+                'ready': True,  # Auto-ready when they select cards
                 'winner': False,
                 'total_spent': 0,
                 'cards_won': 0,
@@ -197,7 +225,9 @@ class IntegratedBingoGame:
             'countdown': self.countdown_timers[game_id],
             'balance': user['balance'] / 100,
             'active_games': active_games_count,
-            'total_stake': total_stake / 100
+            'total_stake': total_stake / 100,
+            'auto_start_delay': AUTO_START_DELAY,
+            'auto_start_active': self.auto_start_timer is not None
         })
         
         # Send player's cards if any
@@ -315,6 +345,8 @@ class IntegratedBingoGame:
             return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
         
         # Add cards and deduct balance immediately
+        was_empty = len(self.active_games[game_id]['players']) == 0 or all(len(p['card_ids']) == 0 for p in self.active_games[game_id]['players'].values())
+        
         for card_id in card_ids:
             self.taken_cards[game_id].add(card_id)
             card_data = next(c for c in BINGO_CARDS if c['id'] == card_id)
@@ -325,144 +357,35 @@ class IntegratedBingoGame:
         
         player['total_spent'] += total_cost
         player['balance'] -= total_cost  # Deduct balance immediately
+        player['ready'] = True  # Auto-ready when cards are selected
         self.active_games[game_id]['total_cards_sold'] += len(card_ids)
         self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * CARD_PRICE
         self.total_pool = self.active_games[game_id]['prize_pool']  # Sync with Telegram tracking
         
         logger.info(f"User {user_id} selected {len(card_ids)} cards, cost: {total_cost}, new balance: {player['balance']}")
         
-        # Check if we have enough cards to auto-start (from original BingoGame)
-        total_cards_sold = self.active_games[game_id]['total_cards_sold']
-        if total_cards_sold >= MIN_CARDS_TO_START and not self.game_started:
-            asyncio.create_task(self.start_round(game_id))
+        # Start auto-start timer if this is the first card
+        if was_empty and not self.game_started:
+            await self.start_auto_start_timer()
         
-        return True, f"Selected {len(card_ids)} cards", total_cost, player['balance']
-    
-    async def finalize_selection(self, game_id: int, user_id: int):
-        logger.info(f"finalize_selection called - game:{game_id}, user:{user_id}")
-        
-        if game_id not in self.active_games:
-            logger.error(f"Game {game_id} not found")
-            return False, "Game not found", None
-        
-        if user_id not in self.active_games[game_id]['players']:
-            logger.error(f"User {user_id} not found in game {game_id}")
-            return False, "Player not found", None
-        
-        player = self.active_games[game_id]['players'][user_id]
-        logger.info(f"Player cards: {player['card_ids']}, spent: {player['total_spent']}, ready: {player['ready']}")
-        
-        if len(player['card_ids']) == 0:
-            logger.warning(f"User {user_id} has no cards selected")
-            return False, "No cards selected", player['balance']
-        
-        if player['ready']:
-            logger.warning(f"User {user_id} is already ready")
-            return False, "Already ready", player['balance']
-        
-        total_cost = player['total_spent']
-        logger.info(f"Finalizing with total cost: {total_cost}")
-        
-        # Update database with the already deducted balance
-        result = db.update_balance(
+        # Update database
+        db.update_balance(
             user_id=user_id,
             amount=-total_cost,
             transaction_type='game_fee',
-            description=f'Joined game #{game_id} with {len(player["card_ids"])} cards'
+            description=f'Selected cards for game #{game_id}'
         )
         
-        if not result:
-            # If database update fails, refund the player
-            logger.error(f"Failed to deduct balance for user {user_id}, refunding {total_cost}")
-            player['balance'] += total_cost
-            player['total_spent'] = 0
-            for card_id in player['card_ids']:
-                self.taken_cards[game_id].discard(card_id)
-            player['cards'] = []
-            player['card_ids'] = []
-            player['marked'] = {}
-            return False, "Failed to deduct balance", player['balance']
-        
-        # Save to active games
-        db.add_active_game(user_id, game_id, player['card_ids'], total_cost)
-        player['ready'] = True
-        
-        # Update Telegram tracking
-        self.register_user(user_id)
-        self.cards[user_id] = len(player['card_ids'])
-        
-        logger.info(f"User {user_id} finalized selection for game {game_id}, new balance: {player['balance']}")
-        
+        # Broadcast player ready status
         await self.broadcast(game_id, {
             'type': 'player_ready',
             'players': self.get_players(game_id),
             'user_id': user_id
         })
         
-        return True, "Ready to play", player['balance']
+        return True, f"Selected {len(card_ids)} cards", total_cost, player['balance']
     
-    async def start_game(self, game_id: int, user_id: int):
-        # Allow only admin to start
-        if str(user_id) != ADMIN_USER_ID:
-            logger.warning(f"User {user_id} is not admin, cannot start game")
-            return False, "Only admin can start the game"
-        
-        if game_id not in self.active_games:
-            logger.error(f"Game {game_id} not found")
-            return False, "Game not found"
-        
-        if self.game_started:
-            logger.warning(f"Game {game_id} already started")
-            return False, "Game already started"
-        
-        # Check if there are any ready players
-        ready_players = [p for p in self.active_games[game_id]['players'].values() if p['ready']]
-        if len(ready_players) == 0:
-            logger.warning(f"No players ready in game {game_id}")
-            return False, "No players ready"
-        
-        logger.info(f"Starting game {game_id} with {len(ready_players)} ready players")
-        
-        # Start the round using the original method
-        await self.start_round(game_id)
-        
-        return True, "Game started"
-    
-    # ==================== ORIGINAL BINGOGAME METHODS ====================
-    
-    def register_user(self, user_id):
-        """Register user for Telegram tracking"""
-        if user_id not in self.users:
-            self.users[user_id] = {
-                "balance": db.get_user(user_id)['balance'] if db.get_user(user_id) else 0
-            }
-    
-    async def buy_card(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Telegram command to buy a card"""
-        user_id = update.effective_user.id
-        self.register_user(user_id)
-        
-        if self.game_started:
-            await update.message.reply_text("❌ Round already started")
-            return
-        
-        user_data = db.get_user(user_id)
-        if not user_data or user_data['balance'] < CARD_PRICE:
-            await update.message.reply_text("❌ Not enough balance")
-            return
-        
-        # Open web app for card selection
-        webapp_url = f"{BASE_URL}/game?user_id={user_id}&game_id=1"
-        
-        keyboard = [[
-            InlineKeyboardButton("🎮 Select Cards", web_app={'url': webapp_url})
-        ]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "✅ Click below to select your cards:",
-            reply_markup=reply_markup
-        )
+    # ==================== AUTO-START ROUND ====================
     
     async def start_round(self, game_id: int = 1):
         """Start the round and begin drawing numbers"""
@@ -473,11 +396,17 @@ class IntegratedBingoGame:
             return
         
         total_cards = self.active_games[game_id]['total_cards_sold']
-        if total_cards < MIN_CARDS_TO_START:
+        if total_cards == 0:
+            logger.info("No cards sold, not starting game")
             return
         
         self.game_started = True
         logger.info(f"Round {self.round_number} started with {total_cards} cards")
+        
+        # Cancel auto-start timer if it exists
+        if self.auto_start_timer:
+            self.auto_start_timer.cancel()
+            self.auto_start_timer = None
         
         # Broadcast game started to all players
         await self.broadcast(game_id, {
@@ -509,22 +438,64 @@ class IntegratedBingoGame:
                 'called': self.active_games[game_id]['called_numbers']
             })
             
-            # Check for winner (simplified for now)
-            winner = self.check_winner(game_id)
+            # Check for winner
+            winner = await self.check_winner(game_id, n)
             if winner:
                 await self.finish_round(game_id, winner)
                 break
     
-    def check_winner(self, game_id: int = 1):
-        """Check if someone has won (simplified - will be replaced with actual bingo check)"""
-        # For now, random winner after 10 numbers for testing
-        if len(self.called_numbers) > 10 and self.active_games[game_id]['players']:
-            # In real implementation, this would check actual bingo patterns
-            # For now, return a random player
-            players = list(self.active_games[game_id]['players'].keys())
-            if players:
-                return random.choice(players)
+    async def check_winner(self, game_id: int, last_number: int):
+        """Check if someone has won"""
+        if game_id not in self.active_games:
+            return None
+        
+        called = set(self.active_games[game_id]['called_numbers'])
+        
+        for user_id, player in self.active_games[game_id]['players'].items():
+            if player['winner']:
+                continue
+            
+            for card_idx, card in enumerate(player['cards']):
+                card_id = player['card_ids'][card_idx]
+                marked = set(player['marked'].get(card_id, []))
+                
+                if card[2][2] == 'FREE':
+                    marked.add('FREE')
+                
+                if self.check_card_bingo(card, marked):
+                    logger.info(f"BINGO! User {user_id} with card {card_id} at number {last_number}")
+                    return user_id
+        
         return None
+    
+    def check_card_bingo(self, card, marked):
+        # Check rows
+        for row in range(5):
+            bingo = True
+            for col in range(5):
+                val = card[col][row]
+                if val != 'FREE' and val not in marked:
+                    bingo = False
+                    break
+            if bingo:
+                return True
+        
+        # Check columns
+        for col in range(5):
+            bingo = True
+            for row in range(5):
+                val = card[col][row]
+                if val != 'FREE' and val not in marked:
+                    bingo = False
+                    break
+            if bingo:
+                return True
+        
+        # Check diagonals
+        diag1 = all(card[i][i] == 'FREE' or card[i][i] in marked for i in range(5))
+        diag2 = all(card[4-i][i] == 'FREE' or card[4-i][i] in marked for i in range(5))
+        
+        return diag1 or diag2
     
     async def finish_round(self, game_id: int, winner_id: int):
         """Finish the round and distribute prizes"""
@@ -532,7 +503,7 @@ class IntegratedBingoGame:
             return
         
         prize_pool = self.active_games[game_id]['prize_pool']
-        house_cut = prize_pool * HOUSE_PERCENT
+        house_cut = prize_pool * 0.2  # 20% house fee
         winner_prize = prize_pool - house_cut
         
         self.house_profit += house_cut
@@ -593,6 +564,8 @@ class IntegratedBingoGame:
         self.round_number += 1
         self.called_numbers = []
         self.game_started = False
+        self.auto_start_timer = None
+        self.first_card_time = None
         
         if game_id in self.active_games:
             self.active_games[game_id]['called_numbers'] = []
@@ -612,222 +585,36 @@ class IntegratedBingoGame:
         
         logger.info(f"Round {self.round_number} ready to start")
     
-    # ==================== TELEGRAM COMMANDS ====================
+    def register_user(self, user_id):
+        """Register user for Telegram tracking"""
+        if user_id not in self.users:
+            self.users[user_id] = {
+                "balance": db.get_user(user_id)['balance'] if db.get_user(user_id) else 0
+            }
     
-    async def admin_dashboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Admin dashboard command"""
-        if update.effective_user.id != int(ADMIN_USER_ID):
-            return
+    def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
+        if game_id not in self.active_games:
+            return False
         
-        total_users = len(self.users)
-        total_balance = sum(u.get("balance", 0) for u in self.users.values())
+        if not self.game_started:
+            return False
         
-        game_id = 1
-        active_players = len(self.active_games[game_id]['players']) if game_id in self.active_games else 0
-        ready_players = len([p for p in self.active_games[game_id]['players'].values() if p['ready']]) if game_id in self.active_games else 0
-        total_cards = self.active_games[game_id]['total_cards_sold'] if game_id in self.active_games else 0
+        if self.game_winner.get(game_id):
+            return False
         
-        text = (
-            f"📊 **ADMIN DASHBOARD**\n\n"
-            f"**Round:** {self.round_number}\n"
-            f"**Game Status:** {'🟢 Started' if self.game_started else '🔴 Waiting'}\n"
-            f"**Players:** {active_players}\n"
-            f"**Ready Players:** {ready_players}\n"
-            f"**Cards Sold:** {total_cards}\n"
-            f"**Prize Pool:** {self.active_games[game_id]['prize_pool']/100 if game_id in self.active_games else 0:.2f} ETB\n"
-            f"**House Profit:** {self.house_profit/100:.2f} ETB\n\n"
-            f"**Total Users:** {total_users}\n"
-            f"**Total Balances:** {total_balance/100:.2f} ETB"
-        )
+        if user_id not in self.active_games[game_id]['players']:
+            return False
         
-        # Add start button if game not started
-        keyboard = []
-        if not self.game_started and game_id in self.active_games and len([p for p in self.active_games[game_id]['players'].values() if p['ready']]) > 0:
-            keyboard.append([InlineKeyboardButton("🚀 Start Game", callback_data="admin_start")])
+        player = self.active_games[game_id]['players'][user_id]
         
-        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+        if card_id not in player['marked']:
+            return False
         
-        await update.message.reply_text(text, parse_mode='Markdown', reply_markup=reply_markup)
-    
-    async def request_withdraw(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Request withdrawal"""
-        user_id = update.effective_user.id
+        if number in player['marked'][card_id]:
+            return False
         
-        if not context.args:
-            await update.message.reply_text("Usage: /withdraw <amount>")
-            return
-        
-        try:
-            amount = int(context.args[0]) * 100  # Convert to cents
-        except:
-            await update.message.reply_text("Please enter a valid amount")
-            return
-        
-        user_data = db.get_user(user_id)
-        if not user_data or user_data['balance'] < amount:
-            await update.message.reply_text("❌ Not enough balance")
-            return
-        
-        withdraw_id = len(self.withdraw_requests) + 1
-        
-        self.withdraw_requests[withdraw_id] = {
-            "user_id": user_id,
-            "amount": amount,
-            "status": "pending",
-            "username": update.effective_user.first_name
-        }
-        
-        await update.message.reply_text(f"⏳ Withdrawal request #{withdraw_id} sent to admin")
-        
-        # Notify admin
-        await context.bot.send_message(
-            int(ADMIN_USER_ID),
-            f"💳 **Withdraw Request**\n\n"
-            f"**ID:** {withdraw_id}\n"
-            f"**User:** {update.effective_user.first_name} (ID: `{user_id}`)\n"
-            f"**Amount:** {amount/100:.2f} ETB\n"
-            f"**Balance:** {user_data['balance']/100:.2f} ETB",
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("✅ Approve", callback_data=f"approve_{withdraw_id}"),
-                InlineKeyboardButton("❌ Reject", callback_data=f"reject_{withdraw_id}")
-            ]])
-        )
-    
-    async def approve_withdraw(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Approve withdrawal (admin only)"""
-        if update.effective_user.id != int(ADMIN_USER_ID):
-            return
-        
-        if not context.args:
-            await update.message.reply_text("Usage: /approve <withdraw_id>")
-            return
-        
-        try:
-            withdraw_id = int(context.args[0])
-        except:
-            await update.message.reply_text("Invalid withdraw ID")
-            return
-        
-        request = self.withdraw_requests.get(withdraw_id)
-        if not request:
-            await update.message.reply_text("Request not found")
-            return
-        
-        if request["status"] != "pending":
-            await update.message.reply_text(f"Request already {request['status']}")
-            return
-        
-        user_id = request["user_id"]
-        amount = request["amount"]
-        
-        # Update database
-        result = db.update_balance(
-            user_id=user_id,
-            amount=-amount,
-            transaction_type='withdrawal',
-            description=f'Withdrawal request #{withdraw_id}'
-        )
-        
-        if result:
-            request["status"] = "approved"
-            
-            await context.bot.send_message(
-                user_id,
-                f"✅ **Withdrawal Approved!**\n\n"
-                f"Amount: **{amount/100:.2f} ETB**\n"
-                f"Request ID: #{withdraw_id}",
-                parse_mode='Markdown'
-            )
-            
-            await update.message.reply_text(f"✅ Withdrawal #{withdraw_id} approved")
-        else:
-            await update.message.reply_text("❌ Failed to process withdrawal")
-    
-    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle callback queries from inline keyboards"""
-        query = update.callback_query
-        await query.answer()
-        
-        data = query.data
-        
-        if data == "admin_start":
-            # Admin wants to start the game
-            if update.effective_user.id != int(ADMIN_USER_ID):
-                await query.edit_message_text("❌ Only admin can start the game")
-                return
-            
-            game_id = 1
-            if game_id in self.active_games and not self.game_started:
-                ready_players = [p for p in self.active_games[game_id]['players'].values() if p['ready']]
-                if ready_players:
-                    await self.start_round(game_id)
-                    await query.edit_message_text("🚀 Game started!")
-                else:
-                    await query.edit_message_text("❌ No players ready")
-            else:
-                await query.edit_message_text("❌ Game already started or not found")
-        
-        elif data.startswith("approve_"):
-            # Approve withdrawal from callback
-            if update.effective_user.id != int(ADMIN_USER_ID):
-                return
-            
-            withdraw_id = int(data.split("_")[1])
-            request = self.withdraw_requests.get(withdraw_id)
-            
-            if not request or request["status"] != "pending":
-                await query.edit_message_text("Request not found or already processed")
-                return
-            
-            user_id = request["user_id"]
-            amount = request["amount"]
-            
-            result = db.update_balance(
-                user_id=user_id,
-                amount=-amount,
-                transaction_type='withdrawal',
-                description=f'Withdrawal request #{withdraw_id}'
-            )
-            
-            if result:
-                request["status"] = "approved"
-                
-                await context.bot.send_message(
-                    user_id,
-                    f"✅ **Withdrawal Approved!**\n\n"
-                    f"Amount: **{amount/100:.2f} ETB**\n"
-                    f"Request ID: #{withdraw_id}",
-                    parse_mode='Markdown'
-                )
-                
-                await query.edit_message_text(f"✅ Withdrawal #{withdraw_id} approved")
-            else:
-                await query.edit_message_text("❌ Failed to process withdrawal")
-        
-        elif data.startswith("reject_"):
-            # Reject withdrawal from callback
-            if update.effective_user.id != int(ADMIN_USER_ID):
-                return
-            
-            withdraw_id = int(data.split("_")[1])
-            request = self.withdraw_requests.get(withdraw_id)
-            
-            if not request or request["status"] != "pending":
-                await query.edit_message_text("Request not found or already processed")
-                return
-            
-            request["status"] = "rejected"
-            
-            await context.bot.send_message(
-                request["user_id"],
-                f"❌ **Withdrawal Rejected**\n\n"
-                f"Request ID: #{withdraw_id}\n"
-                f"Please contact admin for more information.",
-                parse_mode='Markdown'
-            )
-            
-            await query.edit_message_text(f"❌ Withdrawal #{withdraw_id} rejected")
+        player['marked'][card_id].append(number)
+        return True
 
 # Initialize the integrated game manager
 game_manager = IntegratedBingoGame()
@@ -838,14 +625,9 @@ async def setup_bot():
     """Initialize bot with webhook mode"""
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Add handlers from original bot
+    # Add handlers
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("buy", game_manager.buy_card))
-    application.add_handler(CommandHandler("dashboard", game_manager.admin_dashboard))
-    application.add_handler(CommandHandler("withdraw", game_manager.request_withdraw))
-    application.add_handler(CommandHandler("approve", game_manager.approve_withdraw))
-    application.add_handler(CallbackQueryHandler(game_manager.handle_callback))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern="^(play|balance|deposit|help|admin|menu)$"))
+    application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     # Initialize
@@ -889,7 +671,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle button callbacks from original bot"""
+    """Handle button callbacks"""
     query = update.callback_query
     await query.answer()
     
@@ -909,7 +691,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         webapp_url = f"{BASE_URL}/game?user_id={user.id}&game_id=1"
         
         await query.edit_message_text(
-            "🎮 **Click to open game**",
+            "🎮 **Click to open game**\n\n"
+            f"⏱️ Game will auto-start {AUTO_START_DELAY} seconds after first card is selected!",
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🎮 Open Game", web_app={'url': webapp_url})
@@ -951,17 +734,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "**How to Play:**\n"
             "1. Click 'Play Bingo'\n"
             "2. Choose your cards (1-1000)\n"
-            "3. Click Confirm to lock in your cards\n"
-            "4. Wait for admin to start the game\n"
-            "5. Numbers are called automatically every 3 seconds\n"
-            "6. Mark numbers as they are called\n"
-            "7. Click BINGO when you win!\n\n"
+            "3. Game auto-starts **20 seconds** after first card is selected!\n"
+            "4. Numbers are called automatically every 3 seconds\n"
+            "5. Mark numbers as they are called\n"
+            "6. Click BINGO when you win!\n\n"
             f"**Price:** {CARD_PRICE/100} ETB per card\n\n"
-            "**Commands:**\n"
-            "/buy - Buy a card (opens web app)\n"
-            "/withdraw <amount> - Request withdrawal\n"
-            "/dashboard - Admin dashboard\n\n"
-            "**Note:** Only admin can start the game"
+            "**No admin needed - game starts automatically!**"
         )
         await query.edit_message_text(
             help_text,
@@ -979,7 +757,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👑 **Admin Panel**\n\n"
             f"Users: {stats['total_users']}\n"
             f"Total Balance: {stats['total_balance']/100:.2f} ETB\n"
-            f"Pending Payments: {pending}",
+            f"Pending Payments: {pending}\n\n"
+            f"Auto-start delay: {AUTO_START_DELAY} seconds",
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("📊 Pending", callback_data="admin_pending"),
@@ -1071,7 +850,8 @@ async def root():
         "status": "online", 
         "cards": len(BINGO_CARDS),
         "price_per_card": CARD_PRICE / 100,
-        "max_cards_per_player": MAX_CARDS_PER_PLAYER
+        "max_cards_per_player": MAX_CARDS_PER_PLAYER,
+        "auto_start_delay": AUTO_START_DELAY
     }
 
 @app.get("/health")
@@ -1169,7 +949,8 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "max_cards": MAX_CARDS_PER_PLAYER,
         "initial_balance": user['balance'] / 100,
         "initial_active_games": db.get_active_games_count(user_id),
-        "initial_stake": db.get_total_stake(user_id) / 100
+        "initial_stake": db.get_total_stake(user_id) / 100,
+        "auto_start_delay": AUTO_START_DELAY
     })
 
 # ==================== WEBSOCKET ENDPOINT ====================
@@ -1208,83 +989,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                             'card_id': card_id
                         })
             
-            elif data['type'] == 'finalize':
-                logger.info(f"Processing finalize for user {user_id}")
-                success, message, new_balance = await game_manager.finalize_selection(game_id, user_id)
-                
-                await websocket.send_json({
-                    'type': 'finalized',
-                    'success': success,
-                    'message': message,
-                    'new_balance': new_balance
-                })
-                logger.info(f"Sent finalized response to user {user_id}: success={success}")
-            
-            elif data['type'] == 'start_game':
-                logger.info(f"Start game requested by user {user_id}")
-                success, message = await game_manager.start_game(game_id, user_id)
-                await websocket.send_json({
-                    'type': 'start_result',
-                    'success': success,
-                    'message': message
-                })
-                logger.info(f"Start game result: success={success}, message={message}")
-            
-            elif data['type'] == 'reset_game':
-                if str(user_id) != ADMIN_USER_ID:
-                    continue
-                await game_manager.reset_round(game_id)
-                await websocket.send_json({'type': 'game_reset', 'success': True})
-            
-            elif data['type'] == 'call_number':
-                if str(user_id) != ADMIN_USER_ID:
-                    continue
-                
-                # Check if game has started
-                if not game_manager.game_started:
-                    logger.warning(f"Admin {user_id} tried to call number but game hasn't started")
-                    await websocket.send_json({
-                        'type': 'error',
-                        'message': 'Game has not started yet! Click START GAME first.'
-                    })
-                    continue
-                
-                number = data.get('number')
-                if number and 1 <= number <= 75:
-                    if number not in game_manager.active_games[game_id]['called_numbers']:
-                        game_manager.active_games[game_id]['called_numbers'].append(number)
-                        game_manager.called_numbers.append(number)
-                        await game_manager.check_winners(game_id, number)
-                        await game_manager.broadcast(game_id, {
-                            'type': 'number_called',
-                            'number': number,
-                            'called': game_manager.active_games[game_id]['called_numbers']
-                        })
-                        logger.info(f"Admin {user_id} manually called number {number}")
-            
-            elif data['type'] == 'set_pattern':
-                if str(user_id) != ADMIN_USER_ID:
-                    continue
-                pattern_id = data.get('pattern_id')
-                if pattern_id:
-                    with db.get_connection() as conn:
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE games SET pattern_id = ? WHERE id = ?", (pattern_id, game_id))
-                        conn.commit()
-                        
-                        cursor.execute("SELECT name FROM patterns WHERE id = ?", (pattern_id,))
-                        pattern = cursor.fetchone()
-                        pattern_name = pattern[0] if pattern else "Unknown"
-                        
-                        await game_manager.broadcast(game_id, {
-                            'type': 'pattern_updated',
-                            'pattern_id': pattern_id,
-                            'pattern_name': pattern_name
-                        })
-            
             elif data['type'] == 'mark_number':
                 if not game_manager.game_started:
-                    logger.warning(f"User {user_id} tried to mark number but game hasn't started")
                     await websocket.send_json({
                         'type': 'error',
                         'message': 'Game has not started yet!'
@@ -1304,20 +1010,14 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             elif data['type'] == 'claim_bingo':
                 card_id = data.get('card_id')
                 if card_id:
-                    player = game_manager.active_games[game_id]['players'].get(user_id)
-                    if player and card_id in player['card_ids']:
-                        card_index = player['card_ids'].index(card_id)
-                        card = player['cards'][card_index]
-                        marked_set = set(player['marked'].get(card_id, []))
-                        
-                        if game_manager.check_card_bingo(card, marked_set):
-                            last_number = game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0
-                            await game_manager.finish_round(game_id, user_id)
-                        else:
-                            await websocket.send_json({
-                                'type': 'error',
-                                'message': 'Not a valid bingo'
-                            })
+                    winner_id = await game_manager.check_winner(game_id, game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0)
+                    if winner_id == user_id:
+                        await game_manager.finish_round(game_id, user_id)
+                    else:
+                        await websocket.send_json({
+                            'type': 'error',
+                            'message': 'Not a valid bingo or someone else won first'
+                        })
             
             elif data['type'] == 'ping':
                 await websocket.send_json({'type': 'pong'})
