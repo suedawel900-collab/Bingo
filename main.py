@@ -11,7 +11,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, ContextTypes,
     ConversationHandler, MessageHandler, filters
@@ -37,7 +37,7 @@ CARD_PRICE = 1000  # 10 ETB in cents
 MAX_CARDS_PER_PLAYER = 20
 WELCOME_BONUS = 1000  # 10 ETB welcome bonus
 
-# Conversation states for payment
+# Conversation states
 PHONE_NUMBER, AMOUNT, REFERENCE = range(3)
 
 logger.info(f"✅ Using BASE_URL: {BASE_URL}")
@@ -624,17 +624,17 @@ game_manager = GameManager()
 
 # ==================== TELEGRAM BOT HANDLERS ====================
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start command"""
-    user = update.effective_user
-    db.get_or_create_user(
-        user_id=user.id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel conversation"""
+    await update.message.reply_text(
+        "Operation cancelled. Send /start to begin again.",
+        reply_markup=ReplyKeyboardRemove()
     )
-    
-    # Get user balance
+    return ConversationHandler.END
+
+async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show main menu with all options"""
+    user = update.effective_user
     user_data = db.get_user(user.id)
     balance = user_data['balance'] / 100 if user_data else 0
     
@@ -655,16 +655,76 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        f"🎯 Welcome to Bingo Bot, {user.first_name}!\n\n"
-        f"💰 Your balance: **{balance:.2f} ETB**\n"
-        f"Get ready to play Bingo and win prizes!\n"
-        f"• Game fee: {CARD_PRICE/100} ETB per card\n"
-        f"• Max cards: {MAX_CARDS_PER_PLAYER}\n"
-        f"• Welcome bonus: {WELCOME_BONUS/100} ETB",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
+    message = f"🎯 Welcome back, {user.first_name}!\n\n"
+    message += f"💰 Your balance: **{balance:.2f} ETB**\n\n"
+    message += "Choose an option:"
+    
+    if update.message:
+        await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+
+# Updated start command with phone number collection
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command with phone number request for new users"""
+    user = update.effective_user
+    
+    # Check if user exists in database
+    user_data = db.get_user(user.id)
+    
+    # If user doesn't exist or has no phone number, request it
+    if not user_data or not user_data.get('phone_number'):
+        # Create keyboard with phone number request button
+        contact_button = KeyboardButton("📱 Share Phone Number", request_contact=True)
+        reply_markup = ReplyKeyboardMarkup(
+            [[contact_button]],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+        
+        await update.message.reply_text(
+            f"👋 Welcome to Bingo Bot, {user.first_name}!\n\n"
+            "Please share your phone number to continue:",
+            reply_markup=reply_markup
+        )
+        return PHONE_NUMBER
+    
+    # If user already has phone number, show main menu
+    await show_main_menu(update, context)
+    return ConversationHandler.END
+
+# Handle phone number sharing
+async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle shared contact information"""
+    contact = update.message.contact
+    user = update.effective_user
+    
+    # Verify that the shared contact belongs to the user
+    if contact.user_id != user.id:
+        await update.message.reply_text(
+            "❌ Please share your own phone number.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return PHONE_NUMBER
+    
+    # Create user with phone number
+    db.get_or_create_user(
+        user_id=user.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        phone_number=contact.phone_number
     )
+    
+    # Remove keyboard
+    await update.message.reply_text(
+        "✅ Phone number saved successfully! You've received 10 ETB welcome bonus.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
+    # Show main menu
+    await show_main_menu(update, context)
+    return ConversationHandler.END
 
 async def play_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle play button"""
@@ -866,7 +926,7 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
-    return PHONE_NUMBER
+    return AMOUNT
 
 async def payment_method_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle payment method selection"""
@@ -892,10 +952,10 @@ async def payment_method_selected(update: Update, context: ContextTypes.DEFAULT_
             InlineKeyboardButton("◀️ ተመለስ / Cancel", callback_data="main_menu")
         ]])
     )
-    return AMOUNT
+    return REFERENCE
 
 async def handle_phone_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle phone number input"""
+    """Handle phone number input for payment"""
     phone = update.message.text.strip()
     
     # Validate Ethiopian phone number
@@ -1106,14 +1166,6 @@ async def handle_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]])
         )
     
-    return ConversationHandler.END
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel conversation"""
-    await update.message.reply_text(
-        "Cancelled.",
-        reply_markup=ReplyKeyboardRemove()
-    )
     return ConversationHandler.END
 
 # ==================== ADMIN HANDLERS ====================
@@ -1420,13 +1472,23 @@ async def setup_bot():
     """Initialize and start the Telegram bot"""
     application = Application.builder().token(BOT_TOKEN).build()
     
+    # Phone number conversation handler
+    phone_conv = ConversationHandler(
+        entry_points=[CommandHandler('start', start_command)],
+        states={
+            PHONE_NUMBER: [MessageHandler(filters.CONTACT, handle_contact)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        name="phone_conversation",
+        persistent=False
+    )
+    
     # Payment conversation handler
     payment_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(deposit_command, pattern='^deposit$')],
         states={
-            PHONE_NUMBER: [CallbackQueryHandler(payment_method_selected, pattern='^pay_')],
-            AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone_number)],
-            REFERENCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_amount)],
+            AMOUNT: [CallbackQueryHandler(payment_method_selected, pattern='^pay_')],
+            REFERENCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_phone_number)],
         },
         fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(main_menu_callback, pattern='^main_menu$')],
         name="payment_conversation",
@@ -1434,11 +1496,11 @@ async def setup_bot():
         allow_reentry=True
     )
     
-    # Add handlers with CORRECT callback patterns
-    application.add_handler(CommandHandler("start", start_command))
+    # Add handlers
+    application.add_handler(phone_conv)
     application.add_handler(payment_conv)
     
-    # Main menu handlers - FIXED PATTERNS
+    # Main menu handlers
     application.add_handler(CallbackQueryHandler(play_callback, pattern="^play$"))
     application.add_handler(CallbackQueryHandler(balance_callback, pattern="^balance$"))
     application.add_handler(CallbackQueryHandler(deposit_command, pattern="^deposit$"))
@@ -1452,7 +1514,7 @@ async def setup_bot():
     application.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^main_menu$"))
     
     # Message handlers
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reference))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_amount))
     
     # Initialize and start
     await application.initialize()
@@ -1535,7 +1597,8 @@ async def get_user(user_id: int):
         "total_stake": total_stake,
         "total_stake_etb": total_stake / 100,
         "games_played": user['games_played'],
-        "games_won": user['games_won']
+        "games_won": user['games_won'],
+        "phone_number": user.get('phone_number', '')
     }
 
 @app.get("/api/patterns")
