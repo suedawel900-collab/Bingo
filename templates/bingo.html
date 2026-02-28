@@ -328,7 +328,7 @@
             flex: 1;
         }
         
-        /* Called Numbers - FIXED: Better display */
+        /* Called Numbers */
         .called-numbers-section {
             background: #f0f0f0;
             border-radius: 8px;
@@ -345,36 +345,37 @@
             display: flex;
             flex-wrap: wrap;
             gap: 5px;
-            min-height: 30px;
-            max-height: 80px;
+            min-height: 40px;
+            max-height: 100px;
             overflow-y: auto;
-            padding: 5px;
+            padding: 8px;
             background: white;
             border-radius: 4px;
+            border: 1px solid #ddd;
         }
         .called-badge {
             background: #4CAF50;
             color: white;
-            padding: 3px 8px;
-            border-radius: 15px;
-            font-size: 11px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
             font-weight: bold;
         }
         
-        /* Last Number - FIXED: Better visibility */
+        /* Last Number */
         .last-number {
             background: #4CAF50;
             color: white;
-            padding: 10px;
+            padding: 15px;
             text-align: center;
-            font-size: 28px;
+            font-size: 32px;
             font-weight: bold;
             border-radius: 8px;
             margin-bottom: 10px;
             box-shadow: 0 2px 8px rgba(76,175,80,0.3);
         }
         
-        /* Current Card - HORIZONTAL 5x5 Grid */
+        /* Current Card */
         .current-card-section {
             background: #f8f9fa;
             border-radius: 10px;
@@ -397,7 +398,7 @@
             font-size: 14px;
         }
         
-        /* HORIZONTAL 5x5 Grid - CORRECT BINGO FORMAT */
+        /* BINGO Grid */
         .bingo-header {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
@@ -406,14 +407,12 @@
             font-weight: bold;
             text-align: center;
         }
-        
         .bingo-header div {
             background: #667eea;
             color: white;
             padding: 5px;
             border-radius: 4px;
         }
-        
         .bingo-grid {
             display: grid !important;
             grid-template-columns: repeat(5, 1fr) !important;
@@ -422,7 +421,6 @@
             padding: 8px;
             border-radius: 8px;
         }
-        
         .bingo-cell {
             aspect-ratio: 1;
             background: white;
@@ -450,7 +448,7 @@
             border-color: #ffd700;
         }
         
-        /* Right Game Column - Controls */
+        /* Right Game Column */
         .game-right {
             width: 220px;
         }
@@ -543,10 +541,6 @@
             transition: all 0.2s;
             display: none;
         }
-        .next-round-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(156,39,176,0.4);
-        }
         
         /* PLAY AGAIN Button */
         .play-again-btn {
@@ -564,10 +558,6 @@
             display: none;
             animation: pulse 1.5s infinite;
         }
-        .play-again-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(76,175,80,0.4);
-        }
         
         /* Auto-reset container */
         .auto-reset-container {
@@ -576,14 +566,6 @@
             background: #f0f0f0;
             border-radius: 6px;
             display: none;
-        }
-        .auto-reset-container label {
-            color: #333;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            cursor: pointer;
         }
         
         /* Admin Controls */
@@ -621,9 +603,6 @@
             cursor: pointer;
             font-size: 13px;
         }
-        .admin-input button:hover {
-            background: #45a049;
-        }
         .pattern-select {
             width: 100%;
             padding: 8px;
@@ -642,9 +621,6 @@
             cursor: pointer;
             font-size: 13px;
         }
-        .set-pattern-btn:hover {
-            background: #0b7dda;
-        }
         
         /* BINGO Button */
         .bingo-btn {
@@ -659,10 +635,6 @@
             cursor: pointer;
             margin-bottom: 10px;
             transition: all 0.2s;
-        }
-        .bingo-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(245,87,108,0.4);
         }
         .bingo-btn:disabled {
             opacity: 0.5;
@@ -698,7 +670,6 @@
         /* Winner Announcement */
         .winner-announcement {
             background: linear-gradient(45deg, gold, #ffd700, #ffb347, #ff8c00);
-            background-size: 300% 300%;
             color: #333;
             padding: 15px;
             text-align: center;
@@ -706,78 +677,10 @@
             font-weight: bold;
             border-radius: 12px;
             margin-bottom: 15px;
-            animation: gradientBG 3s ease infinite, pulse 1.5s infinite;
+            animation: pulse 1.5s infinite;
             border: 3px solid white;
             box-shadow: 0 0 20px gold;
             display: none;
-        }
-        
-        .winner-card-display {
-            margin-top: 15px;
-            padding: 15px;
-            background: rgba(255,255,255,0.9);
-            border-radius: 12px;
-            animation: slideIn 0.5s ease-out;
-        }
-        
-        .winner-card-title {
-            font-size: 18px;
-            color: #9C27B0;
-            margin-bottom: 10px;
-        }
-        
-        .winner-bingo-grid {
-            display: grid !important;
-            grid-template-columns: repeat(5, 1fr) !important;
-            gap: 5px;
-            max-width: 300px;
-            margin: 0 auto;
-        }
-        
-        .winner-bingo-cell {
-            aspect-ratio: 1;
-            background: white;
-            border: 2px solid gold;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .winner-bingo-cell.winner-marked {
-            background: gold;
-            border-color: #ff8c00;
-            animation: winnerPulse 1s infinite;
-        }
-        
-        .winner-bingo-cell.free {
-            background: #ffd700;
-        }
-        
-        @keyframes gradientBG {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-        
-        @keyframes slideIn {
-            from {
-                transform: translateY(20px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-        
-        @keyframes winnerPulse {
-            0% { transform: scale(1); background: gold; }
-            50% { transform: scale(1.1); background: #ffd700; box-shadow: 0 0 15px #ff8c00; }
-            100% { transform: scale(1); background: gold; }
         }
         
         /* Message */
@@ -790,9 +693,9 @@
             font-size: 13px;
             font-weight: bold;
         }
-        .message.success { background: #d4edda; color: #155724; display: block; border: 1px solid #c3e6cb; }
-        .message.error { background: #f8d7da; color: #721c24; display: block; border: 1px solid #f5c6cb; }
-        .message.info { background: #d1ecf1; color: #0c5460; display: block; border: 1px solid #bee5eb; }
+        .message.success { background: #d4edda; color: #155724; display: block; }
+        .message.error { background: #f8d7da; color: #721c24; display: block; }
+        .message.info { background: #d1ecf1; color: #0c5460; display: block; }
         
         @keyframes pulse {
             0% { transform: scale(1); }
@@ -800,7 +703,6 @@
             100% { transform: scale(1); }
         }
     </style>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>">
 </head>
 <body>
     <div class="game-container">
@@ -887,7 +789,7 @@
                 
                 <!-- Action Buttons -->
                 <div class="action-buttons">
-                    <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()" style="display: none;">Clear</button>
+                    <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()">Clear</button>
                     <button class="action-btn confirm-btn" id="confirm-btn" onclick="finalizeSelection()" disabled>Confirm</button>
                 </div>
             </div>
@@ -901,7 +803,7 @@
                         <div id="winner-text"></div>
                     </div>
                     
-                    <!-- Called Numbers - FIXED: Will now display -->
+                    <!-- Called Numbers -->
                     <div class="called-numbers-section">
                         <div class="called-title">📞 CALLED NUMBERS:</div>
                         <div id="called-numbers-list" class="called-list"></div>
@@ -951,18 +853,18 @@
                     <!-- PLAY AGAIN Button -->
                     <button class="play-again-btn" id="play-again-btn" onclick="prepareForNextRound()">🎮 PLAY AGAIN</button>
                     
-                    <!-- Auto-reset for admin -->
+                    <!-- Auto-reset -->
                     <div class="auto-reset-container" id="auto-reset-container">
                         <label>
                             <input type="checkbox" id="auto-reset" checked> Auto-start next round after 30s
                         </label>
                     </div>
                     
-                    <!-- START GAME BUTTON - FIXED -->
+                    <!-- START GAME BUTTON -->
                     <button class="start-game-btn" id="start-game-btn" onclick="startGame()" disabled>🚀 START GAME</button>
                     
                     <!-- Next Round Button -->
-                    <button class="next-round-btn" id="next-round-btn" onclick="startNextRound()" style="display: none;">🔄 NEXT ROUND</button>
+                    <button class="next-round-btn" id="next-round-btn" onclick="startNextRound()">🔄 NEXT ROUND</button>
                     
                     <!-- Admin Controls -->
                     <div id="admin-controls" class="admin-controls">
@@ -971,10 +873,8 @@
                             <input type="number" id="call-number" min="1" max="75" placeholder="Number">
                             <button onclick="callNumber()">Call</button>
                         </div>
-                        <select id="pattern-select" class="pattern-select">
-                            <option value="">Select Pattern</option>
-                        </select>
-                        <button class="set-pattern-btn" onclick="setPattern()">Set</button>
+                        <select id="pattern-select" class="pattern-select"></select>
+                        <button class="set-pattern-btn" onclick="setPattern()">Set Pattern</button>
                     </div>
                     
                     <!-- BINGO Button -->
@@ -1085,8 +985,6 @@
             document.getElementById('game-prize').textContent = `${totalPrize.toFixed(2)} ETB`;
             document.getElementById('house-fee').textContent = `${houseFee.toFixed(2)} ETB`;
             document.getElementById('game-house-fee').textContent = `House (20%): ${houseFee.toFixed(2)} ETB`;
-            
-            return { totalPrize, winnerPrize, houseFee };
         }
         
         // Load patterns
@@ -1105,15 +1003,13 @@
                 }
                 
                 const select = document.getElementById('pattern-select');
-                if (select) {
-                    select.innerHTML = '<option value="">Select Pattern</option>';
-                    patterns.forEach(p => {
-                        const option = document.createElement('option');
-                        option.value = p.id;
-                        option.textContent = p.name;
-                        select.appendChild(option);
-                    });
-                }
+                select.innerHTML = '<option value="">Select Pattern</option>';
+                patterns.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.id;
+                    option.textContent = p.name;
+                    select.appendChild(option);
+                });
             } catch (e) {
                 console.error('Error loading patterns:', e);
             }
@@ -1152,19 +1048,7 @@
                     calculatePrizePool();
                     updateCardGrid();
                     updatePlayersList();
-                    updateCalledNumbers(); // FIXED: Will display called numbers
-                    
-                    const playerData = players.find(p => p.id == userId);
-                    if (playerData && playerData.card_count > 0) {
-                        hasCards = true;
-                        isReady = playerData.ready || false;
-                        
-                        if (isReady) {
-                            document.getElementById('confirm-btn').disabled = true;
-                            document.getElementById('confirm-btn').textContent = '✓ READY';
-                            document.getElementById('status').textContent = '✅ READY';
-                        }
-                    }
+                    updateCalledNumbers();
                     
                     if (gameStarted) {
                         document.getElementById('status').textContent = '🎮 PLAYING';
@@ -1178,7 +1062,6 @@
                     document.getElementById('current-card-id').textContent = `#${currentCardId}`;
                     renderCurrentCard();
                 }
-                // FIXED: Handle cards_selected properly
                 else if (data.type === 'cards_selected') {
                     if (data.success) {
                         showMessage(`✅ ${data.message}`, 'success');
@@ -1191,15 +1074,11 @@
                                 updateWallet();
                             }
                         }
-                        // Enable confirm button after successful selection
-                        document.getElementById('confirm-btn').disabled = false;
-                        document.getElementById('confirm-btn').textContent = `Confirm (${(selectedCards.length * pricePerCard).toFixed(2)} ETB)`;
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
+                        isProcessing = false;
                     }
-                    isProcessing = false;
                 }
-                // FIXED: Handle finalized - this confirms the cards
                 else if (data.type === 'finalized') {
                     if (data.success) {
                         isReady = true;
@@ -1207,7 +1086,6 @@
                         document.getElementById('confirm-btn').disabled = true;
                         document.getElementById('confirm-btn').textContent = '✓ READY';
                         document.getElementById('status').textContent = '✅ READY';
-                        
                         showMessage('✅ Ready to play!', 'success');
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
@@ -1223,7 +1101,6 @@
                     const readyCount = players.filter(p => p.ready).length;
                     document.getElementById('ready-count').textContent = readyCount;
                     
-                    // FIXED: Enable start button for admin when players are ready
                     const startBtn = document.getElementById('start-game-btn');
                     if (readyCount > 0 && userId == ADMIN_USER_ID) {
                         startBtn.classList.add('ready');
@@ -1233,7 +1110,6 @@
                         startBtn.disabled = true;
                     }
                 }
-                // FIXED: Handle game_started
                 else if (data.type === 'game_started') {
                     gameStarted = true;
                     gameEnded = false;
@@ -1243,12 +1119,11 @@
                     document.getElementById('last-number').textContent = '🎲 Game Started!';
                     showMessage('🚀 Game started!', 'success');
                 }
-                // FIXED: Handle number_called - updates display
                 else if (data.type === 'number_called') {
                     called = data.called || [];
                     document.getElementById('last-number').textContent = `🎲 ${data.number}`;
-                    updateCalledNumbers(); // This will now display the numbers
-                    renderCurrentCard(); // Update marks on card
+                    updateCalledNumbers();
+                    renderCurrentCard();
                     
                     if (document.getElementById('autoDaub').checked) {
                         autoMarkNumber(data.number);
@@ -1293,7 +1168,7 @@
                     
                     updateSelectedDisplay();
                     updateCardGrid();
-                    updateCalledNumbers(); // Clear called numbers display
+                    updateCalledNumbers();
                     document.getElementById('current-card-id').textContent = '#0';
                     document.getElementById('card-display').innerHTML = '';
                     
@@ -1310,8 +1185,7 @@
                     document.getElementById('play-again-btn').style.display = 'block';
                     
                     const winnerDiv = document.getElementById('winner-announcement');
-                    const winnerText = document.getElementById('winner-text');
-                    winnerText.innerHTML = `🏆 ${data.winner.name} WINS! 🏆<br>Prize: ${data.prize} ETB`;
+                    document.getElementById('winner-text').innerHTML = `🏆 ${data.winner.name} WINS! 🏆<br>Prize: ${data.prize} ETB`;
                     winnerDiv.style.display = 'block';
                     
                     if (isAdmin) {
@@ -1357,10 +1231,6 @@
                     setTimeout(connectWebSocket, delay);
                 }
             };
-            
-            ws.onerror = function() {
-                showMessage('Connection error', 'error');
-            };
         }
         
         function manualReconnect() {
@@ -1384,12 +1254,7 @@
         }
         
         function toggleCardSelection(cardId) {
-            if (gameStarted || isReady || isProcessing || gameEnded || roundLocked) {
-                if (gameEnded) {
-                    showMessage('Game ended! Click PLAY AGAIN', 'info');
-                }
-                return;
-            }
+            if (gameStarted || isReady || isProcessing || gameEnded || roundLocked) return;
             
             const index = selectedCards.indexOf(cardId);
             if (index >= 0) {
@@ -1397,11 +1262,6 @@
             } else {
                 if (selectedCards.length >= maxCards) {
                     showMessage(`Maximum ${maxCards} cards`, 'error');
-                    return;
-                }
-                const totalCost = (selectedCards.length + 1) * pricePerCard;
-                if (totalCost > balance) {
-                    showMessage('Insufficient balance!', 'error');
                     return;
                 }
                 if (takenCards.has(cardId)) {
@@ -1425,7 +1285,6 @@
             
             if (selectedCards.length > 0) {
                 scroll.innerHTML = '';
-                
                 selectedCards.forEach(id => {
                     const cardDiv = document.createElement('div');
                     cardDiv.className = 'selected-card';
@@ -1475,7 +1334,6 @@
             updateCardGrid();
         }
         
-        // FIXED: finalizeSelection - sends the finalize message
         function finalizeSelection() {
             if (selectedCards.length === 0) {
                 showMessage('Select at least one card', 'error');
@@ -1498,14 +1356,10 @@
             }
             
             isProcessing = true;
-            const confirmBtn = document.getElementById('confirm-btn');
-            confirmBtn.disabled = true;
-            confirmBtn.textContent = '⏳ Processing...';
+            document.getElementById('confirm-btn').disabled = true;
+            document.getElementById('confirm-btn').textContent = '⏳ Processing...';
             
-            // Send finalize message
-            ws.send(JSON.stringify({
-                type: 'finalize'
-            }));
+            ws.send(JSON.stringify({ type: 'finalize' }));
         }
         
         function updateCardGrid() {
@@ -1521,11 +1375,8 @@
             });
         }
         
-        // FIXED: Render current card correctly
         function renderCurrentCard() {
-            if (!currentCardId || !myCards[currentCardId]) {
-                return;
-            }
+            if (!currentCardId || !myCards[currentCardId]) return;
             
             const card = myCards[currentCardId];
             const markedNumbers = marked[currentCardId] || [];
@@ -1533,17 +1384,12 @@
             
             grid.innerHTML = '';
             
-            // Card is stored as 5 columns, each with 5 rows
             for (let row = 0; row < 5; row++) {
                 for (let col = 0; col < 5; col++) {
                     const cell = document.createElement('div');
                     cell.className = 'bingo-cell';
                     
-                    let num = '?';
-                    if (card && card[col] && card[col][row] !== undefined) {
-                        num = card[col][row];
-                    }
-                    
+                    let num = card[col]?.[row] || '?';
                     cell.textContent = num;
                     
                     if (row === 2 && col === 2 || num === 'FREE') {
@@ -1580,12 +1426,10 @@
             }));
         }
         
-        // FIXED: updateCalledNumbers - actually displays the numbers
         function updateCalledNumbers() {
             const list = document.getElementById('called-numbers-list');
-            if (!list) return;
-            
             list.innerHTML = '';
+            
             if (called && called.length > 0) {
                 called.forEach(num => {
                     const badge = document.createElement('span');
@@ -1594,12 +1438,11 @@
                     list.appendChild(badge);
                 });
             } else {
-                // Show placeholder when no numbers called
-                const placeholder = document.createElement('span');
-                placeholder.className = 'called-badge';
-                placeholder.style.background = '#999';
-                placeholder.textContent = 'No numbers yet';
-                list.appendChild(placeholder);
+                const badge = document.createElement('span');
+                badge.className = 'called-badge';
+                badge.style.background = '#999';
+                badge.textContent = 'No numbers yet';
+                list.appendChild(badge);
             }
         }
         
@@ -1623,8 +1466,7 @@
                 const card = myCards[cardId];
                 for (let col = 0; col < 5; col++) {
                     for (let row = 0; row < 5; row++) {
-                        let cardNum = card[col]?.[row];
-                        if (cardNum === num && !marked[cardId].includes(num)) {
+                        if (card[col]?.[row] === num && !marked[cardId].includes(num)) {
                             ws.send(JSON.stringify({
                                 type: 'mark_number',
                                 card_id: parseInt(cardId),
@@ -1678,16 +1520,9 @@
             showMessage('Select your cards!', 'success');
         }
         
-        // FIXED: startGame function
         function startGame() {
             if (userId != ADMIN_USER_ID) {
                 showMessage('Only admin can start the game', 'error');
-                return;
-            }
-            
-            const readyCount = players.filter(p => p.ready).length;
-            if (readyCount === 0) {
-                showMessage('No players ready!', 'error');
                 return;
             }
             
@@ -1696,7 +1531,7 @@
                 return;
             }
             
-            ws.send(JSON.stringify({type: 'start_game'}));
+            ws.send(JSON.stringify({ type: 'start_game' }));
             showMessage('Starting game...', 'info');
         }
         
@@ -1717,21 +1552,13 @@
                     type: 'set_pattern',
                     pattern_id: parseInt(patternId)
                 }));
-            } else {
-                showMessage('Select a pattern', 'error');
             }
         }
         
         function startNextRound() {
             if (!isAdmin) return;
-            
-            ws.send(JSON.stringify({type: 'reset_game'}));
-            
+            ws.send(JSON.stringify({ type: 'reset_game' }));
             document.getElementById('next-round-btn').style.display = 'none';
-            document.getElementById('start-game-btn').disabled = true;
-            document.getElementById('start-game-btn').textContent = '🚀 START GAME';
-            
-            showMessage('New round ready!', 'info');
         }
         
         function showMessage(text, type) {
