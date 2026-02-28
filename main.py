@@ -288,7 +288,7 @@ class GameManager:
         
         return True, f"Selected {len(card_ids)} cards", total_cost, player['balance']
     
-    # FIXED: Finalize selection updates database
+    # FIXED: Finalize selection updates database and returns balance
     async def finalize_selection(self, game_id: int, user_id: int):
         if game_id not in self.active_games:
             return False, "Game not found", None
@@ -299,10 +299,10 @@ class GameManager:
         player = self.active_games[game_id]['players'][user_id]
         
         if len(player['card_ids']) == 0:
-            return False, "No cards selected", None
+            return False, "No cards selected", player['balance']
         
         if player['ready']:
-            return False, "Already ready", None
+            return False, "Already ready", player['balance']
         
         total_cost = player['total_spent']
         
@@ -323,7 +323,8 @@ class GameManager:
             player['cards'] = []
             player['card_ids'] = []
             player['marked'] = {}
-            return False, "Failed to deduct balance", None
+            logger.error(f"Failed to deduct balance for user {user_id}")
+            return False, "Failed to deduct balance", player['balance']
         
         # Save to active games
         db.add_active_game(user_id, game_id, player['card_ids'], total_cost)
@@ -924,6 +925,8 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "initial_stake": db.get_total_stake(user_id) / 100
     })
 
+# ==================== WEBSOCKET ENDPOINT - FIXED ====================
+
 @app.websocket("/ws/{game_id}/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
     await game_manager.connect(game_id, websocket, user_id)
@@ -945,6 +948,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'new_balance': new_balance,
                     'card_ids': data['card_ids'] if success else []
                 })
+                logger.info(f"Sent cards_selected response to user {user_id}: success={success}")
                 
                 if success:
                     for card_id in data['card_ids']:
@@ -955,15 +959,19 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                             'card_id': card_id
                         })
             
-            # FIXED: Handle finalize message
+            # FIXED: Handle finalize message with proper response
             elif data['type'] == 'finalize':
+                logger.info(f"Processing finalize for user {user_id}")
                 success, message, new_balance = await game_manager.finalize_selection(game_id, user_id)
+                
+                # Send response back to client
                 await websocket.send_json({
                     'type': 'finalized',
                     'success': success,
                     'message': message,
                     'new_balance': new_balance
                 })
+                logger.info(f"Sent finalized response to user {user_id}: success={success}, balance={new_balance}, message={message}")
             
             elif data['type'] == 'start_game':
                 success, message = await game_manager.start_game(game_id, user_id)
@@ -983,7 +991,12 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 if str(user_id) != ADMIN_USER_ID:
                     continue
                 # This would be handled by the game logic
-                pass
+                # For now, just acknowledge
+                await websocket.send_json({
+                    'type': 'number_called',
+                    'number': data.get('number'),
+                    'called': game_manager.active_games[game_id]['called_numbers']
+                })
             
             elif data['type'] == 'set_pattern':
                 if str(user_id) != ADMIN_USER_ID:
@@ -1040,8 +1053,9 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
     
     except WebSocketDisconnect:
         game_manager.disconnect(game_id, websocket, user_id)
+        logger.info(f"User {user_id} disconnected from game {game_id}")
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error for user {user_id}: {e}")
         game_manager.disconnect(game_id, websocket, user_id)
 
 if __name__ == "__main__":
