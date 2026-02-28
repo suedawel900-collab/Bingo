@@ -46,7 +46,7 @@ logger.info(f"✅ Using BASE_URL: {BASE_URL}")
 # Initialize database
 db = Database()
 
-# ==================== FIXED: Generate 1000 cards ====================
+# ==================== Generate 1000 cards ====================
 CARDS_FILE = "static/bingo_cards.json"
 
 def generate_default_cards():
@@ -285,7 +285,7 @@ class GameManager:
                 logger.warning(f"Card {card_id} already taken")
                 return False, f"Card {card_id} already taken", 0, None
             
-            # FIXED: Check if card exists in BINGO_CARDS
+            # Check if card exists in BINGO_CARDS
             card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
             if not card_data:
                 logger.error(f"Card {card_id} not found in BINGO_CARDS (total cards: {len(BINGO_CARDS)})")
@@ -379,18 +379,24 @@ class GameManager:
     async def start_game(self, game_id: int, user_id: int):
         # Allow only admin to start
         if str(user_id) != ADMIN_USER_ID:
+            logger.warning(f"User {user_id} is not admin, cannot start game")
             return False, "Only admin can start the game"
         
         if game_id not in self.active_games:
+            logger.error(f"Game {game_id} not found")
             return False, "Game not found"
         
         if self.game_started[game_id]:
+            logger.warning(f"Game {game_id} already started")
             return False, "Game already started"
         
         # Check if there are any ready players
         ready_players = [p for p in self.active_games[game_id]['players'].values() if p['ready']]
         if len(ready_players) == 0:
+            logger.warning(f"No players ready in game {game_id}")
             return False, "No players ready"
+        
+        logger.info(f"Starting game {game_id} with {len(ready_players)} ready players")
         
         # Start the game
         self.game_started[game_id] = True
@@ -419,10 +425,12 @@ class GameManager:
     
     async def generate_numbers_automatically(self, game_id: int):
         try:
+            logger.info(f"Starting automatic number generation for game {game_id}")
             while game_id in self.active_games and self.game_started[game_id] and not self.game_winner[game_id]:
                 await asyncio.sleep(2)  # Wait 2 seconds between numbers
                 
                 if not self.game_started[game_id] or self.game_winner[game_id]:
+                    logger.info(f"Game {game_id} stopped, ending number generation")
                     break
                 
                 # Get available numbers (not called yet)
@@ -460,9 +468,6 @@ class GameManager:
             logger.info(f"Number generation cancelled for game {game_id}")
         except Exception as e:
             logger.error(f"Error in number generation for game {game_id}: {e}")
-    
-    async def generate_numbers(self, game_id: int):
-        await self.generate_numbers_automatically(game_id)
     
     async def check_winners(self, game_id: int, last_number: int):
         if game_id not in self.active_games or self.game_winner[game_id]:
@@ -577,6 +582,7 @@ class GameManager:
             return False
         
         if not self.game_started[game_id]:
+            logger.warning(f"User {user_id} tried to mark number {number} but game {game_id} hasn't started")
             return False
         
         if self.game_winner[game_id]:
@@ -982,7 +988,7 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "initial_stake": db.get_total_stake(user_id) / 100
     })
 
-# ==================== WEBSOCKET ENDPOINT ====================
+# ==================== WEBSOCKET ENDPOINT - FIXED ====================
 
 @app.websocket("/ws/{game_id}/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
@@ -1030,6 +1036,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 })
                 logger.info(f"Sent finalized response to user {user_id}: success={success}")
             
+            # FIXED: Start game handler
             elif data['type'] == 'start_game':
                 logger.info(f"Start game requested by user {user_id}")
                 success, message = await game_manager.start_game(game_id, user_id)
@@ -1038,7 +1045,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'success': success,
                     'message': message
                 })
-                logger.info(f"Start game result: {success}, {message}")
+                logger.info(f"Start game result: success={success}, message={message}")
             
             elif data['type'] == 'reset_game':
                 if str(user_id) != ADMIN_USER_ID:
@@ -1049,7 +1056,16 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             elif data['type'] == 'call_number':
                 if str(user_id) != ADMIN_USER_ID:
                     continue
-                # Manual number calling (optional, numbers are auto-called)
+                
+                # Check if game has started
+                if not game_manager.game_started.get(game_id, False):
+                    logger.warning(f"Admin {user_id} tried to call number but game {game_id} hasn't started")
+                    await websocket.send_json({
+                        'type': 'error',
+                        'message': 'Game has not started yet! Click START GAME first.'
+                    })
+                    continue
+                
                 number = data.get('number')
                 if number and 1 <= number <= 75:
                     if number not in game_manager.active_games[game_id]['called_numbers']:
@@ -1083,6 +1099,14 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                         })
             
             elif data['type'] == 'mark_number':
+                if not game_manager.game_started.get(game_id, False):
+                    logger.warning(f"User {user_id} tried to mark number but game {game_id} hasn't started")
+                    await websocket.send_json({
+                        'type': 'error',
+                        'message': 'Game has not started yet!'
+                    })
+                    continue
+                    
                 success = game_manager.mark_number(
                     game_id, user_id, data['card_id'], data['number']
                 )
