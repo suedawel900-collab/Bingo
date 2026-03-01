@@ -323,7 +323,6 @@ async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
         except Exception as e:
             logger.error(f"Failed to notify admin: {e}")
-            # Optionally store in DB that admin notification failed
     else:
         await update.message.reply_text(
             "❌ Failed to save reference. Please try again or contact admin."
@@ -1115,33 +1114,30 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "deposit":
+        # Fixed: Now instructs user to use /deposit command
         await query.edit_message_text(
-            "💰 Deposit Menu\n\n"
-            "Choose your payment method:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📱 Telebirr", callback_data="pay_telebirr")],
-                [InlineKeyboardButton("💳 CBE Birr", callback_data="pay_cbebirr")],
-                [InlineKeyboardButton("◀️ Cancel", callback_data="cancel_deposit")]
-            ])
-        )
-        return AMOUNT   # Return state to continue conversation
-
-    elif data == "withdraw":
-        # This will be handled by the withdraw command, but we can redirect
-        await query.edit_message_text(
-            "💸 Withdrawal\n\n"
-            "Use /withdraw command to request a withdrawal.\n"
-            "Or click below to start:",
+            "💰 **Deposit**\n\n"
+            "To add funds to your account, please use the command:\n"
+            "`/deposit`\n\n"
+            "You will be guided to choose a payment method and enter the amount.",
+            parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("💸 Start Withdrawal", callback_data="start_withdraw")
+                InlineKeyboardButton("◀️ Back", callback_data="menu")
             ]])
         )
 
-    elif data == "start_withdraw":
-        # Trigger withdraw command flow
-        context.user_data.clear()
-        await withdraw_command(update, context)
-        return
+    elif data == "withdraw":
+        # Fixed: Now instructs user to use /withdraw command
+        await query.edit_message_text(
+            "💸 **Withdrawal**\n\n"
+            "To withdraw your winnings, please use the command:\n"
+            "`/withdraw`\n\n"
+            "You will be guided to enter the amount and your phone number.",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Back", callback_data="menu")
+            ]])
+        )
 
     elif data == "help":
         help_text = (
