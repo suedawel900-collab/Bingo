@@ -55,7 +55,7 @@ class Database:
                 )
             ''')
             
-            # Payment methods table (required for deposits)
+            # Payment methods table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS payment_methods (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +68,7 @@ class Database:
                 )
             ''')
             
-            # Payment requests table (required for deposits)
+            # Payment requests table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS payment_requests (
                     request_id TEXT PRIMARY KEY,
@@ -158,7 +158,7 @@ class Database:
             # Insert default game
             cursor.execute("INSERT OR IGNORE INTO games (id, pattern_id, status) VALUES (1, 1, 'waiting')")
             
-            # Insert default payment methods (Telebirr and CBE Birr)
+            # Insert default payment methods
             cursor.execute("SELECT COUNT(*) FROM payment_methods")
             if cursor.fetchone()[0] == 0:
                 methods = [
@@ -207,7 +207,6 @@ class Database:
             
             if row:
                 user = dict(row)
-                # Update phone if provided
                 if phone_number and not user.get('phone_number'):
                     cursor.execute("UPDATE users SET phone_number = ? WHERE user_id = ?", (phone_number, user_id))
                     conn.commit()
@@ -246,26 +245,35 @@ class Database:
     # ==================== BALANCE METHODS ====================
     
     def update_balance(self, user_id: int, amount: int, transaction_type: str, description: str = None) -> Optional[Dict]:
-        """Update user balance and record transaction"""
+        """Atomically update user balance and record transaction.
+        
+        Args:
+            user_id: The user ID.
+            amount: Amount to add (positive) or subtract (negative).
+            transaction_type: 'deposit', 'game_fee', 'game_win', 'bonus', etc.
+            description: Optional description.
+        
+        Returns:
+            Dict with old_balance, new_balance, amount, or None if failed.
+        """
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
             
-            # Get current balance
+            # Atomically update balance using SQL addition
+            cursor.execute("UPDATE users SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", (amount, user_id))
+            if cursor.rowcount == 0:
+                return None
+            
+            # Retrieve new balance
             cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-            row = cursor.fetchone()
-            if not row:
+            new_balance_row = cursor.fetchone()
+            if not new_balance_row:
                 return None
+            new_balance = new_balance_row['balance']
             
-            current_balance = row['balance']
-            new_balance = current_balance + amount
-            
-            if new_balance < 0:
-                return None
-            
-            # Update balance
-            cursor.execute("UPDATE users SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?", 
-                         (new_balance, user_id))
+            # Calculate old balance (new - amount)
+            old_balance = new_balance - amount
             
             # Record transaction
             cursor.execute('''
@@ -275,19 +283,22 @@ class Database:
             
             # Update totals based on transaction type
             if amount > 0 and transaction_type == 'deposit':
-                cursor.execute("UPDATE users SET total_deposits = total_deposits + ? WHERE user_id = ?", 
-                             (amount, user_id))
+                cursor.execute("UPDATE users SET total_deposits = total_deposits + ? WHERE user_id = ?", (amount, user_id))
             elif amount < 0 and transaction_type == 'withdrawal':
-                cursor.execute("UPDATE users SET total_withdrawals = total_withdrawals + ? WHERE user_id = ?", 
-                             (abs(amount), user_id))
+                cursor.execute("UPDATE users SET total_withdrawals = total_withdrawals + ? WHERE user_id = ?", (abs(amount), user_id))
+            # For game wins, we might want to increment games_won, but that's handled elsewhere
             
             conn.commit()
             
             return {
-                'old_balance': current_balance,
+                'old_balance': old_balance,
                 'new_balance': new_balance,
                 'amount': amount
             }
+        except sqlite3.Error as e:
+            logger.error(f"Database error in update_balance: {e}")
+            conn.rollback()
+            return None
         finally:
             conn.close()
     
