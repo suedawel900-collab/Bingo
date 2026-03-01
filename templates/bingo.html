@@ -54,9 +54,7 @@
             background: #f44336;
         }
         
-        /* REMOVED: Pattern Bar - completely removed */
-        
-        /* Info Bar - Round, Prize Pool, Players */
+        /* Info Bar - Round and Players only (Prize Pool removed) */
         .info-bar {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -67,9 +65,6 @@
         .info-item { text-align: center; }
         .info-label { font-size: 12px; opacity: 0.9; }
         .info-value { font-size: 22px; font-weight: bold; }
-        .prize-value { color: #ffd700; }
-        
-        /* REMOVED: House Fee Bar - completely removed */
         
         /* Reconnect Bar */
         .reconnect-bar {
@@ -97,92 +92,7 @@
             gap: 15px;
         }
         
-        /* TOP SECTION: Selected Cards (HORIZONTAL SCROLL) */
-        .selected-section {
-            background: #fff3e0;
-            border-radius: 12px;
-            padding: 15px;
-            border: 2px solid #ffb74d;
-        }
-        .selected-header {
-            display: flex;
-            justify-content: space-between;
-            font-weight: bold;
-            color: #e65100;
-            margin-bottom: 12px;
-            font-size: 16px;
-        }
-        .selected-scroll {
-            display: flex;
-            flex-direction: row !important;
-            gap: 10px;
-            overflow-x: auto;
-            overflow-y: hidden;
-            padding-bottom: 8px;
-            min-height: 100px;
-            white-space: nowrap;
-        }
-        .selected-scroll::-webkit-scrollbar {
-            height: 6px;
-        }
-        .selected-scroll::-webkit-scrollbar-track {
-            background: #fff3e0;
-            border-radius: 10px;
-        }
-        .selected-scroll::-webkit-scrollbar-thumb {
-            background: #ff9800;
-            border-radius: 10px;
-        }
-        .selected-card {
-            flex: 0 0 auto;
-            width: 90px;
-            background: white;
-            border-radius: 10px;
-            padding: 10px 5px;
-            text-align: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            border-left: 3px solid #ff9800;
-            position: relative;
-            display: inline-block;
-        }
-        .selected-card-number {
-            font-size: 18px;
-            font-weight: bold;
-            color: #e65100;
-        }
-        .selected-card-price {
-            font-size: 12px;
-            color: #4CAF50;
-            font-weight: bold;
-        }
-        .selected-card-remove {
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            width: 20px;
-            height: 20px;
-            background: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .selected-card-remove:hover {
-            background: #c82333;
-        }
-        .total-cost {
-            text-align: right;
-            font-weight: bold;
-            color: #e65100;
-            margin-top: 10px;
-            padding-top: 8px;
-            border-top: 1px solid #ffb74d;
-            font-size: 15px;
-        }
+        /* REMOVED: Selected Cards Section (Your Cards) */
         
         /* MIDDLE SECTION: Card Grid 1-1000 */
         .grid-section {
@@ -444,30 +354,7 @@
             color: #4CAF50;
         }
         
-        /* Prize Pool - Shows winner amount only */
-        .prize-display {
-            background: #fff3e0;
-            border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 10px;
-            text-align: center;
-            border: 1px solid #ff9800;
-        }
-        .prize-label {
-            font-size: 12px;
-            color: #e65100;
-        }
-        .prize-amount {
-            font-size: 22px;
-            font-weight: bold;
-            color: #e65100;
-        }
-        .winner-only {
-            font-size: 14px;
-            color: #4CAF50;
-            font-weight: bold;
-            margin-top: 5px;
-        }
+        /* REMOVED: Prize Pool Display */
         
         /* Auto-mark */
         .auto-mark {
@@ -609,25 +496,17 @@
             </div>
         </div>
         
-        <!-- REMOVED: Pattern Bar -->
-        
-        <!-- Info Bar - Round, Prize Pool, Players -->
+        <!-- Info Bar - Round and Players only (Prize Pool removed) -->
         <div class="info-bar">
             <div class="info-item">
                 <div class="info-label">Round</div>
                 <div class="info-value" id="active-game-display">1</div>
             </div>
             <div class="info-item">
-                <div class="info-label">Prize Pool</div>
-                <div class="info-value prize-value" id="prize-pool">0 ETB</div>
-            </div>
-            <div class="info-item">
                 <div class="info-label">Players</div>
                 <div class="info-value" id="player-count">0</div>
             </div>
         </div>
-        
-        <!-- REMOVED: House Fee Bar -->
         
         <!-- Reconnect Bar -->
         <div class="reconnect-bar" id="reconnect-bar">
@@ -636,15 +515,7 @@
         
         <!-- Main Content -->
         <div class="main-content">
-            <!-- TOP SECTION: Selected Cards (HORIZONTAL SCROLL) -->
-            <div class="selected-section">
-                <div class="selected-header">
-                    <span>📋 Your Cards ({{ max_cards }} max)</span>
-                    <span id="selected-count">0/{{ max_cards }}</span>
-                </div>
-                <div id="selected-scroll" class="selected-scroll"></div>
-                <div id="total-cost" class="total-cost">Total: 0 ETB</div>
-            </div>
+            <!-- REMOVED: Selected Cards Section -->
             
             <!-- Card Grid -->
             <div class="grid-section">
@@ -710,12 +581,7 @@
                         <div class="balance-amount" id="game-balance">{{ initial_balance }} ETB</div>
                     </div>
                     
-                    <!-- Prize Pool - Shows winner amount only -->
-                    <div class="prize-display">
-                        <div class="prize-label">🏆 Winner Prize</div>
-                        <div class="prize-amount" id="winner-prize">0 ETB</div>
-                        <div class="winner-only">(90% of pool)</div>
-                    </div>
+                    <!-- REMOVED: Prize Pool Display -->
                     
                     <!-- Auto-mark -->
                     <div class="auto-mark">
@@ -811,20 +677,6 @@
             document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
         }
         
-        // Calculate prize pool - Shows winner amount only
-        function calculatePrizePool() {
-            const totalCards = players.reduce((sum, p) => sum + (p.card_count || 0), 0);
-            const totalPrize = totalCards * pricePerCard;
-            const houseFee = totalPrize * HOUSE_COMMISSION;
-            const winnerPrize = totalPrize - houseFee;
-            
-            document.getElementById('prize-pool').textContent = `${totalPrize.toFixed(2)} ETB`;
-            document.getElementById('winner-prize').textContent = `${winnerPrize.toFixed(2)} ETB`;
-            document.getElementById('player-count').textContent = players.length;
-            
-            return { totalPrize, winnerPrize, houseFee };
-        }
-        
         // Start auto-start timer
         function startAutoStartTimer() {
             if (autoStartTimer) {
@@ -897,7 +749,6 @@
                     
                     document.getElementById('active-game-display').textContent = currentRound;
                     document.getElementById('player-count').textContent = players.length;
-                    calculatePrizePool();
                     updateCardGrid();
                     updatePlayersList();
                     updateCalledNumbers();
@@ -940,7 +791,6 @@
                         showMessage(`✅ ${data.message}`, 'success');
                         if (data.card_ids) {
                             selectedCards = data.card_ids;
-                            updateSelectedDisplay();
                             
                             if (data.new_balance !== undefined && data.new_balance !== null) {
                                 balance = data.new_balance / 100;
@@ -958,7 +808,6 @@
                 }
                 else if (data.type === 'player_ready') {
                     players = data.players || [];
-                    calculatePrizePool();
                     updatePlayersList();
                     document.getElementById('player-count').textContent = players.length;
                 }
@@ -1008,7 +857,6 @@
                     winnerDiv.style.display = 'block';
                     
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
-                    calculatePrizePool();
                     updatePlayersList();
                     fetchBalance();
                     
@@ -1043,14 +891,9 @@
                         clearInterval(autoStartTimer);
                     }
                     
-                    document.getElementById('selected-scroll').innerHTML = '';
-                    document.getElementById('selected-count').textContent = `0/${maxCards}`;
-                    document.getElementById('total-cost').textContent = 'Total: 0 ETB';
-                    
                     currentRound = data.round || currentRound + 1;
                     document.getElementById('active-game-display').textContent = currentRound;
                     
-                    updateSelectedDisplay();
                     updateCardGrid();
                     updateCalledNumbers();
                     updatePlayersList();
@@ -1159,57 +1002,6 @@
             }
             
             selectedCards.sort((a, b) => a - b);
-            updateSelectedDisplay();
-            updateCardGrid();
-        }
-        
-        // Update selected display - HORIZONTAL LAYOUT
-        function updateSelectedDisplay() {
-            const scroll = document.getElementById('selected-scroll');
-            const totalCost = document.getElementById('total-cost');
-            const clearBtn = document.getElementById('clear-btn');
-            const selectedCount = document.getElementById('selected-count');
-            
-            if (selectedCards.length > 0) {
-                scroll.innerHTML = '';
-                selectedCards.forEach(id => {
-                    const cardDiv = document.createElement('div');
-                    cardDiv.className = 'selected-card';
-                    cardDiv.innerHTML = `
-                        <div class="selected-card-number">#${id}</div>
-                        <div class="selected-card-price">${pricePerCard} ETB</div>
-                        <button class="selected-card-remove" onclick="removeCard(${id})">✕</button>
-                    `;
-                    scroll.appendChild(cardDiv);
-                });
-                
-                const cost = selectedCards.length * pricePerCard;
-                totalCost.textContent = `Total: ${cost.toFixed(2)} ETB`;
-                selectedCount.textContent = `${selectedCards.length}/${maxCards}`;
-                
-                clearBtn.disabled = gameStarted || gameEnded || roundLocked;
-            } else {
-                scroll.innerHTML = '';
-                totalCost.textContent = 'Total: 0 ETB';
-                selectedCount.textContent = `0/${maxCards}`;
-                clearBtn.style.display = 'block';
-            }
-        }
-        
-        function removeCard(cardId) {
-            if (gameStarted || gameEnded || roundLocked) return;
-            const index = selectedCards.indexOf(cardId);
-            if (index >= 0) {
-                selectedCards.splice(index, 1);
-                updateSelectedDisplay();
-                updateCardGrid();
-            }
-        }
-        
-        function clearSelection() {
-            if (gameStarted || gameEnded || roundLocked) return;
-            selectedCards = [];
-            updateSelectedDisplay();
             updateCardGrid();
         }
         
@@ -1224,6 +1016,12 @@
                     btn.classList.add('taken');
                 }
             });
+        }
+        
+        function clearSelection() {
+            if (gameStarted || gameEnded || roundLocked) return;
+            selectedCards = [];
+            updateCardGrid();
         }
         
         // Render current card
