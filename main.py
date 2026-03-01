@@ -18,7 +18,6 @@ from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, ContextTypes,
     ConversationHandler, MessageHandler, filters
 )
-from telegram.constants import ParseMode
 
 from models import Database
 
@@ -807,14 +806,16 @@ class IntegratedBingoGame:
                 'called': self.active_games[game_id]['called_numbers']
             })
             
-            # Check for winner
-            winner = await self.check_winner(game_id, n)
+            # Check for winner (ONE ROW COMPLETE)
+            winner = await self.check_winner_row_only(game_id, n)
             if winner:
                 await self.finish_round(game_id, winner)
                 break
     
-    async def check_winner(self, game_id: int, last_number: int):
-        """Check if someone has won"""
+    # ==================== WINNER CHECK - ONE ROW ONLY ====================
+    
+    async def check_winner_row_only(self, game_id: int, last_number: int):
+        """Check if someone has won by completing a single row"""
         if game_id not in self.active_games:
             return None
         
@@ -828,43 +829,42 @@ class IntegratedBingoGame:
                 card_id = player['card_ids'][card_idx]
                 marked = set(player['marked'].get(card_id, []))
                 
+                # Add FREE space to marked if it's the center
                 if card[2][2] == 'FREE':
                     marked.add('FREE')
                 
-                if self.check_card_bingo(card, marked):
-                    logger.info(f"BINGO! User {user_id} with card {card_id} at number {last_number}")
-                    return user_id
+                # Check ONLY rows for winner (not columns or diagonals)
+                for row in range(5):
+                    row_complete = True
+                    for col in range(5):
+                        val = card[col][row]
+                        if val != 'FREE' and val not in called and val not in marked:
+                            row_complete = False
+                            break
+                    if row_complete:
+                        logger.info(f"ROW BINGO! User {user_id} with card {card_id} completed row {row+1} at number {last_number}")
+                        return user_id
         
         return None
     
+    # Keep the original check_winner for backward compatibility
+    async def check_winner(self, game_id: int, last_number: int):
+        """Legacy method - checks all patterns"""
+        return await self.check_winner_row_only(game_id, last_number)
+    
     def check_card_bingo(self, card, marked):
-        # Check rows
+        """Legacy method - checks all patterns"""
+        # Check ONLY rows for winner (one row complete)
         for row in range(5):
-            bingo = True
+            row_complete = True
             for col in range(5):
                 val = card[col][row]
                 if val != 'FREE' and val not in marked:
-                    bingo = False
+                    row_complete = False
                     break
-            if bingo:
+            if row_complete:
                 return True
-        
-        # Check columns
-        for col in range(5):
-            bingo = True
-            for row in range(5):
-                val = card[col][row]
-                if val != 'FREE' and val not in marked:
-                    bingo = False
-                    break
-            if bingo:
-                return True
-        
-        # Check diagonals
-        diag1 = all(card[i][i] == 'FREE' or card[i][i] in marked for i in range(5))
-        diag2 = all(card[4-i][i] == 'FREE' or card[4-i][i] in marked for i in range(5))
-        
-        return diag1 or diag2
+        return False
     
     async def finish_round(self, game_id: int, winner_id: int):
         """Finish the round and distribute prizes"""
@@ -1090,7 +1090,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"🎮 Click to open game\n\n"
             f"⏱️ Game will auto-start {AUTO_START_DELAY} seconds after first card is selected!\n\n"
-            f"💰 Your balance: {user_data['balance']/100:.2f} ETB",
+            f"💰 Your balance: {user_data['balance']/100:.2f} ETB\n\n"
+            f"🏆 WINNING PATTERN: Complete ONE ROW to win!",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🎮 Open Game", web_app={'url': webapp_url})
             ]])
@@ -1159,7 +1160,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "3. Game auto-starts 20 seconds after first card is selected!\n"
             "4. Numbers are called automatically every 3 seconds\n"
             "5. Mark numbers on your cards as they are called\n"
-            "6. Click 'CLAIM BINGO!' when you have a winning pattern\n"
+            "6. Complete ONE ROW to win!\n"
             "7. Winner gets 90% of the prize pool!\n"
             "8. Game resets automatically after 10 seconds for next round\n\n"
             f"Price per Card: {CARD_PRICE/100} ETB\n"
@@ -1470,7 +1471,8 @@ async def root():
         "price_per_card": CARD_PRICE / 100,
         "max_cards_per_player": MAX_CARDS_PER_PLAYER,
         "auto_start_delay": AUTO_START_DELAY,
-        "round_reset_delay": ROUND_RESET_DELAY
+        "round_reset_delay": ROUND_RESET_DELAY,
+        "winning_pattern": "One Complete Row"
     }
 
 @app.get("/health")
@@ -1501,10 +1503,10 @@ async def list_patterns():
         # If no patterns in DB, return defaults
         if not patterns:
             patterns = [
-                {"id": 1, "name": "Full House", "description": "All numbers on card"},
-                {"id": 2, "name": "Four Corners", "description": "All four corners"},
-                {"id": 3, "name": "X Pattern", "description": "Both diagonals"},
-                {"id": 4, "name": "Blackout", "description": "Entire card filled"}
+                {"id": 1, "name": "One Row", "description": "Complete any single row"},
+                {"id": 2, "name": "Full House", "description": "All numbers on card"},
+                {"id": 3, "name": "Four Corners", "description": "All four corners"},
+                {"id": 4, "name": "X Pattern", "description": "Both diagonals"}
             ]
         
         return patterns
@@ -1570,7 +1572,8 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "initial_active_games": db.get_active_games_count(user_id),
         "initial_stake": db.get_total_stake(user_id) / 100,
         "auto_start_delay": AUTO_START_DELAY,
-        "round_reset_delay": ROUND_RESET_DELAY
+        "round_reset_delay": ROUND_RESET_DELAY,
+        "winning_pattern": "Complete ONE ROW to win!"
     })
 
 # ==================== WEBSOCKET ENDPOINT ====================
@@ -1630,7 +1633,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
             elif data['type'] == 'claim_bingo':
                 card_id = data.get('card_id')
                 if card_id:
-                    winner_id = await game_manager.check_winner(game_id, game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0)
+                    # Use the row-only winner check
+                    winner_id = await game_manager.check_winner_row_only(game_id, game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0)
                     if winner_id == user_id:
                         await game_manager.finish_round(game_id, user_id)
                     else:
