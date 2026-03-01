@@ -158,17 +158,13 @@ class Database:
             # Insert default game
             cursor.execute("INSERT OR IGNORE INTO games (id, pattern_id, status) VALUES (1, 1, 'waiting')")
             
-            # Insert default payment methods
-            cursor.execute("SELECT COUNT(*) FROM payment_methods")
-            if cursor.fetchone()[0] == 0:
-                methods = [
+            # Insert default payment methods using INSERT OR IGNORE
+            cursor.execute('''
+                INSERT OR IGNORE INTO payment_methods (name, type, account_number, account_name, is_active)
+                VALUES 
                     ('Telebirr', 'mobile_money', '0953933030', 'Bingo Bot', 1),
                     ('CBE Birr', 'mobile_money', '0953933030', 'Bingo Bot', 1)
-                ]
-                cursor.executemany('''
-                    INSERT INTO payment_methods (name, type, account_number, account_name, is_active)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', methods)
+            ''')
             
             # Create indexes for performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id)")
@@ -245,17 +241,7 @@ class Database:
     # ==================== BALANCE METHODS ====================
     
     def update_balance(self, user_id: int, amount: int, transaction_type: str, description: str = None) -> Optional[Dict]:
-        """Atomically update user balance and record transaction.
-        
-        Args:
-            user_id: The user ID.
-            amount: Amount to add (positive) or subtract (negative).
-            transaction_type: 'deposit', 'game_fee', 'game_win', 'bonus', etc.
-            description: Optional description.
-        
-        Returns:
-            Dict with old_balance, new_balance, amount, or None if failed.
-        """
+        """Atomically update user balance and record transaction."""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
