@@ -286,7 +286,6 @@ class Database:
                 cursor.execute("UPDATE users SET total_deposits = total_deposits + ? WHERE user_id = ?", (amount, user_id))
             elif amount < 0 and transaction_type == 'withdrawal':
                 cursor.execute("UPDATE users SET total_withdrawals = total_withdrawals + ? WHERE user_id = ?", (abs(amount), user_id))
-            # For game wins, we might want to increment games_won, but that's handled elsewhere
             
             conn.commit()
             
