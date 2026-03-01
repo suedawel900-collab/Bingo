@@ -38,7 +38,7 @@ else:
 CARD_PRICE = 1000  # 10 ETB in cents
 MAX_CARDS_PER_PLAYER = 20
 WELCOME_BONUS = 1000  # 10 ETB welcome bonus
-AUTO_START_DELAY = 20  # Auto-start game after 20 seconds
+AUTO_START_DELAY = 30  # Changed from 20 to 30 seconds
 HOUSE_PERCENT = 0.20  # 20% house fee
 ROUND_RESET_DELAY = 10  # Wait 10 seconds before resetting for next round
 
@@ -157,6 +157,9 @@ class IntegratedBingoGame:
         # Flag to stop number generation
         self.stop_number_generation = False
         
+        # Track current game state
+        self.current_game_id = 1
+        
         # Sync with existing game structure
         self.game_id = 1  # Default game ID
     
@@ -164,8 +167,6 @@ class IntegratedBingoGame:
     
     async def show_payment_methods(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show available payment methods"""
-        user_id = update.effective_user.id
-        
         keyboard = [
             [InlineKeyboardButton("📱 Telebirr", callback_data="pay_telebirr")],
             [InlineKeyboardButton("💳 CBE Birr", callback_data="pay_cbebirr")],
@@ -507,7 +508,7 @@ class IntegratedBingoGame:
     # ==================== AUTO-START FUNCTIONALITY ====================
     
     async def start_auto_start_timer(self, game_id: int):
-        """Start a timer to auto-start the game after 20 seconds"""
+        """Start a timer to auto-start the game after 30 seconds"""
         if self.auto_start_timer:
             self.auto_start_timer.cancel()
         
@@ -761,9 +762,11 @@ class IntegratedBingoGame:
     async def start_round(self, game_id: int = 1):
         """Start the round and begin drawing numbers"""
         if self.game_started:
+            logger.warning(f"Game {game_id} already started")
             return
         
         if game_id not in self.active_games:
+            logger.error(f"Game {game_id} not found")
             return
         
         total_cards = self.active_games[game_id]['total_cards_sold']
@@ -771,9 +774,12 @@ class IntegratedBingoGame:
             logger.info("No cards sold, not starting game")
             return
         
+        # CRITICAL: Reset all flags before starting new round
         self.game_started = True
-        self.stop_number_generation = False  # CRITICAL: Reset flag when starting new round
-        logger.info(f"Round {self.round_number} started with {total_cards} cards")
+        self.stop_number_generation = False
+        self.game_winner[game_id] = None
+        
+        logger.info(f"Round {self.round_number} started with {total_cards} cards - stop flag: {self.stop_number_generation}")
         
         # Cancel auto-start timer if it exists
         if self.auto_start_timer:
@@ -786,6 +792,7 @@ class IntegratedBingoGame:
             'round': self.round_number
         })
         
+        # Start number generation
         asyncio.create_task(self.draw_numbers(game_id))
     
     async def draw_numbers(self, game_id: int = 1):
@@ -955,7 +962,7 @@ class IntegratedBingoGame:
         await asyncio.sleep(ROUND_RESET_DELAY)
         await self.reset_round(game_id)
     
-    # FIXED: Reset round properly for next round
+    # FIXED: Complete reset for next round
     async def reset_round(self, game_id: int = 1):
         """Reset for next round - Unlocks all cards"""
         self.round_number += 1
@@ -1096,6 +1103,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await game_manager.handle_payment_approval(update, context)
         return
     
+    # Handle payment method selection
+    if data == "pay_telebirr" or data == "pay_cbebirr":
+        return await game_manager.handle_payment_method(update, context)
+    
     if data == "play":
         user_data = db.get_user(user.id)
         if not user_data or user_data['balance'] < CARD_PRICE:
@@ -1154,14 +1165,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     elif data == "deposit":
+        keyboard = [
+            [InlineKeyboardButton("📱 Telebirr", callback_data="pay_telebirr")],
+            [InlineKeyboardButton("💳 CBE Birr", callback_data="pay_cbebirr")],
+            [InlineKeyboardButton("◀️ Cancel", callback_data="menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await query.edit_message_text(
             "💰 Deposit Methods\n\n"
             "Choose your payment method:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📱 Telebirr", callback_data="pay_telebirr")],
-                [InlineKeyboardButton("💳 CBE Birr", callback_data="pay_cbebirr")],
-                [InlineKeyboardButton("◀️ Cancel", callback_data="menu")]
-            ])
+            reply_markup=reply_markup
         )
         return PAYMENT_METHOD
     
@@ -1182,13 +1196,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "How to Play:\n"
             "1. Click 'Play Bingo' to open the game\n"
             "2. Choose your cards (1-1000) - you can buy up to 20 cards!\n"
-            "3. Game auto-starts 20 seconds after first card is selected!\n"
+            "3. Game auto-starts 30 seconds after first card is selected!\n"
             "4. Numbers are called automatically every 3 seconds\n"
             "5. Mark numbers on your cards as they are called\n"
             "6. Complete ONE ROW to win!\n"
             "7. Numbers stop immediately when someone wins!\n"
             "8. Winner gets 90% of the prize pool!\n"
-            "9. Game resets automatically after 10 seconds for next round\n\n"
+            "9. Game resets automatically after 10 seconds for next round\n"
+            "10. Game continues indefinitely round after round!\n\n"
             f"Price per Card: {CARD_PRICE/100} ETB\n"
             f"House Fee: 20%\n\n"
             "Deposit Methods:\n"
@@ -1272,6 +1287,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎯 Main Menu\n💰 Balance: {balance:.2f} ETB",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+    
+    # Return ConversationHandler.END to prevent state issues
+    return ConversationHandler.END
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle text messages (for payment references)"""
@@ -1311,8 +1329,7 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Create withdrawal request
     request_id = str(uuid.uuid4())[:8].upper()
     
-    # Store in database (you'll need to add a withdrawals table)
-    # For now, store in memory
+    # Store in memory for now
     game_manager.withdraw_requests[request_id] = {
         'user_id': user_id,
         'amount': amount_cents,
@@ -1432,9 +1449,9 @@ async def setup_bot():
     application.add_handler(CommandHandler("withdraw", withdraw_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
     
-    # Add callback query handlers
-    application.add_handler(CallbackQueryHandler(button_callback, pattern="^(?!approve_withdraw_|reject_withdraw_).*$"))
+    # Add callback query handlers - IMPORTANT: Order matters!
     application.add_handler(CallbackQueryHandler(handle_withdraw_approval, pattern="^(approve_withdraw_|reject_withdraw_)"))
+    application.add_handler(CallbackQueryHandler(button_callback))
     
     # Add message handler for non-command messages
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
