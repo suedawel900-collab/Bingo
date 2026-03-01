@@ -627,7 +627,7 @@ class IntegratedBingoGame:
         asyncio.create_task(self.draw_numbers(game_id))
     
     async def draw_numbers(self, game_id: int = 1):
-        """Draw numbers for the game"""
+        """Draw numbers for the game - ONE ROW ONLY win condition"""
         numbers = list(range(1, 76))
         random.shuffle(numbers)
         
@@ -651,7 +651,7 @@ class IntegratedBingoGame:
                 'called': self.active_games[game_id]['called_numbers']
             })
             
-            # Check for winner (one row only)
+            # Check for winner (ONE ROW ONLY)
             winner = await self.check_winner_row_only(game_id, n)
             if winner:
                 logger.info(f"Winner found! Stopping number generation")
@@ -660,7 +660,7 @@ class IntegratedBingoGame:
                 break
     
     async def check_winner_row_only(self, game_id: int, last_number: int):
-        """Check if someone won by completing a row"""
+        """Check if someone won by completing a row (only rows, no columns/diagonals)"""
         if game_id not in self.active_games:
             return None
         
@@ -674,10 +674,11 @@ class IntegratedBingoGame:
                 card_id = player['card_ids'][card_idx]
                 marked = set(player['marked'].get(card_id, []))
                 
+                # Add FREE space if it's the center
                 if card[2][2] == 'FREE':
                     marked.add('FREE')
                 
-                # Check rows only
+                # Check rows only (5 rows)
                 for row in range(5):
                     row_complete = True
                     for col in range(5):
@@ -1085,9 +1086,6 @@ async def setup_bot():
     # Add callback query handler
     application.add_handler(CallbackQueryHandler(button_callback))
     
-    # Add message handler for non-command messages
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
     # Initialize
     await application.initialize()
     await application.start()
@@ -1098,11 +1096,6 @@ async def setup_bot():
     logger.info(f"🤖 Webhook set to {webhook_url}")
     
     return application
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text messages"""
-    # This is handled by conversation handlers
-    pass
 
 # ==================== LIFESPAN MANAGEMENT ====================
 
