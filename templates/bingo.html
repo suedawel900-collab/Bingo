@@ -101,17 +101,21 @@
         .info-label { font-size: 11px; opacity: 0.9; }
         .info-value { font-size: 18px; font-weight: bold; }
         
-        /* Prize Pool Info - Shows calculation */
-        .prize-info {
+        /* Winner Prize Display - Shows only final value */
+        .winner-prize-display {
             background: #fff3e0;
-            padding: 5px 10px;
-            border-radius: 6px;
-            margin-bottom: 8px;
-            font-size: 11px;
-            color: #e65100;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
             text-align: center;
+            border: 1px solid #ff9800;
         }
-        .prize-info span {
+        .winner-prize-label {
+            font-size: 12px;
+            color: #e65100;
+        }
+        .winner-prize-value {
+            font-size: 24px;
             font-weight: bold;
             color: #4CAF50;
         }
@@ -486,18 +490,6 @@
             background: #ffd700;
         }
         
-        /* Total Cards Stats */
-        .total-cards-stats {
-            background: #e8f5e9;
-            border-radius: 6px;
-            padding: 5px 10px;
-            font-size: 12px;
-            color: #2e7d32;
-            font-weight: bold;
-            margin-bottom: 8px;
-            text-align: center;
-        }
-        
         /* Message */
         .message {
             text-align: center;
@@ -562,9 +554,10 @@
             </div>
         </div>
         
-        <!-- Prize Info - Shows calculation -->
-        <div class="prize-info" id="prize-info">
-            Total: 0 cards × 10 ETB = 0 ETB | Winner (80%): 0 ETB
+        <!-- Winner Prize Display - Shows only final value -->
+        <div class="winner-prize-display">
+            <div class="winner-prize-label">🏆 Winner Prize</div>
+            <div class="winner-prize-value" id="winner-prize-value">0 ETB</div>
         </div>
         
         <!-- Reconnect Bar -->
@@ -680,7 +673,6 @@
         let activeGames = {{ initial_active_games }};
         let totalStake = {{ initial_stake }};
         let totalCardsSold = 0; // Track total cards sold in the game
-        let totalPrize = 0;
         let winnerPrize = 0;
         let isReady = false;
         let reconnectAttempts = 0;
@@ -729,15 +721,14 @@
             }, 10000);
         }
         
-        // Calculate prize based on total cards
-        function calculatePrize() {
+        // Calculate winner prize (80% of total)
+        function calculateWinnerPrize() {
             totalCardsSold = players.reduce((sum, player) => sum + (player.card_count || 0), 0);
-            totalPrize = totalCardsSold * pricePerCard;
+            const totalPrize = totalCardsSold * pricePerCard;
             winnerPrize = totalPrize * WINNER_PERCENT;
             
-            // Update prize info display
-            const prizeInfo = document.getElementById('prize-info');
-            prizeInfo.innerHTML = `Total: ${totalCardsSold} cards × ${pricePerCard} ETB = ${totalPrize.toFixed(2)} ETB | Winner (80%): <span>${winnerPrize.toFixed(2)} ETB</span>`;
+            // Update winner prize display with only the final value
+            document.getElementById('winner-prize-value').textContent = winnerPrize.toFixed(2) + ' ETB';
             
             return winnerPrize;
         }
@@ -746,7 +737,7 @@
         function updateTotalCardsSold() {
             totalCardsSold = players.reduce((sum, player) => sum + (player.card_count || 0), 0);
             document.getElementById('total-cards-sold').textContent = totalCardsSold;
-            calculatePrize(); // Update prize calculation whenever cards change
+            calculateWinnerPrize(); // Update winner prize whenever cards change
         }
         
         // Start auto-start timer
@@ -878,7 +869,7 @@
                     currentRound = data.round || 1;
                     
                     document.getElementById('active-game-display').textContent = currentRound;
-                    updateTotalCardsSold(); // Update total cards display
+                    updateTotalCardsSold(); // Update total cards and winner prize
                     updateCardGrid();
                     updatePlayersList();
                     updateCalledNumbers();
@@ -925,7 +916,7 @@
                 }
                 else if (data.type === 'player_ready') {
                     players = data.players || [];
-                    updateTotalCardsSold(); // Update total cards display
+                    updateTotalCardsSold(); // Update total cards and winner prize
                     updatePlayersList();
                 }
                 else if (data.type === 'game_started') {
@@ -972,8 +963,9 @@
                     document.getElementById('winner-amount').textContent = `${data.prize} ETB`;
                     winnerDiv.style.display = 'block';
                     
-                    // Update winner prize in header
+                    // Update winner prize in header and display
                     updateWinnerPrize(data.prize);
+                    document.getElementById('winner-prize-value').textContent = data.prize + ' ETB';
                     
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
                     updatePlayersList();
@@ -1007,6 +999,7 @@
                     document.getElementById('winner-announcement').style.display = 'none';
                     document.getElementById('auto-start-timer').style.display = 'none';
                     document.getElementById('winner-prize-header').textContent = '';
+                    document.getElementById('winner-prize-value').textContent = '0 ETB';
                     
                     if (autoStartTimer) {
                         clearInterval(autoStartTimer);
@@ -1014,7 +1007,7 @@
                     
                     currentRound = data.round || currentRound + 1;
                     document.getElementById('active-game-display').textContent = currentRound;
-                    updateTotalCardsSold(); // Reset total cards display
+                    updateTotalCardsSold(); // Reset total cards and winner prize
                     
                     updateCardGrid();
                     updateCalledNumbers();
@@ -1022,6 +1015,9 @@
                     renderAllCards();
                     
                     showMessage('🔄 New round started!', 'info');
+                }
+                else if (data.type === 'heartbeat') {
+                    console.log('💓 Heartbeat received');
                 }
                 else if (data.type === 'error') {
                     showMessage(`❌ ${data.message}`, 'error');
