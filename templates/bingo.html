@@ -54,21 +54,7 @@
             background: #f44336;
         }
         
-        /* Pattern Bar */
-        .pattern-bar {
-            background: #ffd700;
-            color: #333;
-            padding: 10px 15px;
-            display: flex;
-            justify-content: space-between;
-            font-weight: bold;
-        }
-        .pattern-name {
-            background: #333;
-            color: #ffd700;
-            padding: 4px 12px;
-            border-radius: 20px;
-        }
+        /* REMOVED: Pattern Bar - completely removed */
         
         /* Info Bar - Round, Prize Pool, Players */
         .info-bar {
@@ -83,19 +69,7 @@
         .info-value { font-size: 22px; font-weight: bold; }
         .prize-value { color: #ffd700; }
         
-        /* House Fee Display */
-        .house-fee-bar {
-            background: #9C27B0;
-            color: white;
-            padding: 8px 15px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-        }
-        .house-fee {
-            color: gold;
-            font-weight: bold;
-        }
+        /* REMOVED: House Fee Bar - completely removed */
         
         /* Reconnect Bar */
         .reconnect-bar {
@@ -635,13 +609,7 @@
             </div>
         </div>
         
-        <!-- REMOVED: Status Bar (WALLET, ACTIVE, STAKE) -->
-        
-        <!-- Pattern Bar -->
-        <div class="pattern-bar">
-            <span>🎯 Current Pattern:</span>
-            <span class="pattern-name" id="pattern-name">Full House</span>
-        </div>
+        <!-- REMOVED: Pattern Bar -->
         
         <!-- Info Bar - Round, Prize Pool, Players -->
         <div class="info-bar">
@@ -659,11 +627,7 @@
             </div>
         </div>
         
-        <!-- House Fee Bar -->
-        <div class="house-fee-bar">
-            <span>🏠 House Fee (20%)</span>
-            <span class="house-fee" id="house-fee">0 ETB</span>
-        </div>
+        <!-- REMOVED: House Fee Bar -->
         
         <!-- Reconnect Bar -->
         <div class="reconnect-bar" id="reconnect-bar">
@@ -762,7 +726,7 @@
                     
                     <!-- Auto-start timer display -->
                     <div class="auto-start-timer" id="auto-start-timer">
-                        ⏱️ Game starting in <span id="timer-seconds">20</span>s
+                        ⏱️ Game starting in <span id="timer-seconds">30</span>s
                     </div>
                     
                     <!-- BINGO Button -->
@@ -784,7 +748,7 @@
         const gameId = parseInt('{{ game_id }}');
         const pricePerCard = {{ price_per_card }};
         const maxCards = {{ max_cards }};
-        const AUTO_START_DELAY = {{ auto_start_delay | default(20) }};
+        const AUTO_START_DELAY = {{ auto_start_delay | default(30) }};
         
         // Game settings
         const TOTAL_NUMBERS = 75;
@@ -855,7 +819,6 @@
             const winnerPrize = totalPrize - houseFee;
             
             document.getElementById('prize-pool').textContent = `${totalPrize.toFixed(2)} ETB`;
-            document.getElementById('house-fee').textContent = `${houseFee.toFixed(2)} ETB`;
             document.getElementById('winner-prize').textContent = `${winnerPrize.toFixed(2)} ETB`;
             document.getElementById('player-count').textContent = players.length;
             
@@ -1318,20 +1281,20 @@
             }));
         }
         
-        // Check for BINGO - Winner detection
+        // Check for BINGO - Winner detection (ONE ROW ONLY)
         function checkBingo() {
             if (!gameStarted || !currentCardId) return;
             
-            // Check if current card has bingo
+            // Check if current card has bingo (ONE ROW ONLY)
             const card = myCards[currentCardId];
             const markedNumbers = marked[currentCardId] || [];
             
-            // Check rows
+            // Check ONLY rows for winner
             for (let row = 0; row < 5; row++) {
                 let rowComplete = true;
                 for (let col = 0; col < 5; col++) {
                     const val = card[col][row];
-                    if (val !== 'FREE' && !markedNumbers.includes(val)) {
+                    if (val !== 'FREE' && !markedNumbers.includes(val) && !called.includes(val)) {
                         rowComplete = false;
                         break;
                     }
@@ -1342,39 +1305,7 @@
                 }
             }
             
-            // Check columns
-            for (let col = 0; col < 5; col++) {
-                let colComplete = true;
-                for (let row = 0; row < 5; row++) {
-                    const val = card[col][row];
-                    if (val !== 'FREE' && !markedNumbers.includes(val)) {
-                        colComplete = false;
-                        break;
-                    }
-                }
-                if (colComplete) {
-                    claimBingo(currentCardId);
-                    return;
-                }
-            }
-            
-            // Check diagonals
-            let diag1Complete = true;
-            let diag2Complete = true;
-            for (let i = 0; i < 5; i++) {
-                const val1 = card[i][i];
-                const val2 = card[4-i][i];
-                
-                if (val1 !== 'FREE' && !markedNumbers.includes(val1)) diag1Complete = false;
-                if (val2 !== 'FREE' && !markedNumbers.includes(val2)) diag2Complete = false;
-            }
-            
-            if (diag1Complete || diag2Complete) {
-                claimBingo(currentCardId);
-                return;
-            }
-            
-            showMessage('No bingo on this card yet!', 'error');
+            showMessage('No complete row on this card yet!', 'error');
         }
         
         // Claim BINGO
