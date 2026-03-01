@@ -1000,6 +1000,15 @@ game_manager = IntegratedBingoGame()
 
 # ==================== TELEGRAM BOT SETUP ====================
 
+# Define cancel command first
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel current operation"""
+    await update.message.reply_text(
+        "❌ Operation cancelled.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
 # Payment conversation handler
 payment_conv = ConversationHandler(
     entry_points=[CommandHandler('deposit', game_manager.show_payment_methods)],
@@ -1013,14 +1022,6 @@ payment_conv = ConversationHandler(
     name="payment_conversation",
     allow_reentry=True
 )
-
-async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel current operation"""
-    await update.message.reply_text(
-        "❌ Operation cancelled.",
-        reply_markup=ReplyKeyboardRemove()
-    )
-    return ConversationHandler.END
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command"""
@@ -1149,11 +1150,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❓ **Bingo Bot Help**\n\n"
             "**How to Play:**\n"
             "1. Click 'Play Bingo' to open the game\n"
-            "2. Choose your cards (1-1000)\n"
+            "2. Choose your cards (1-1000) - you can buy up to 20 cards!\n"
             "3. Game auto-starts **20 seconds** after first card is selected!\n"
             "4. Numbers are called automatically every 3 seconds\n"
-            "5. Mark numbers as they are called\n"
-            "6. Click BINGO when you win!\n\n"
+            "5. Mark numbers on your cards as they are called\n"
+            "6. Click 'CLAIM BINGO!' when you have a winning pattern\n"
+            "7. Winner gets 90% of the prize pool!\n\n"
             f"**Price per Card:** {CARD_PRICE/100} ETB\n"
             f"**House Fee:** 20%\n\n"
             "**Deposit Methods:**\n"
@@ -1163,8 +1165,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/start - Main menu\n"
             "/deposit - Add funds\n"
             "/withdraw <amount> - Request withdrawal\n"
-            "/balance - Check balance\n\n"
-            "**Need help?** Contact @{ADMIN_USER_ID}"
+            "/balance - Check balance\n"
+            "/cancel - Cancel current operation\n\n"
+            f"**Need help?** Contact admin"
         )
         await query.edit_message_text(
             help_text,
