@@ -668,7 +668,7 @@
         let gameEnded = false;
         let currentRound = 1;
         let currentWinner = null;
-        let currentWinnerCardId = null;
+        let currentWinnerCardId = null; // <-- store winning card id
         let balance = {{ initial_balance }};
         let activeGames = {{ initial_active_games }};
         let totalStake = {{ initial_stake }};
@@ -953,7 +953,7 @@
                     gameEnded = true;
                     roundLocked = true;
                     currentWinner = data.winner;
-                    currentWinnerCardId = data.winner.card_id;
+                    currentWinnerCardId = data.winner.card_id; // <-- store winning card id
                     
                     document.getElementById('status').textContent = '🏆 WINNER!';
                     document.getElementById('bingo-btn').disabled = true;
