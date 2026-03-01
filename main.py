@@ -40,6 +40,7 @@ MAX_CARDS_PER_PLAYER = 20
 WELCOME_BONUS = 1000  # 10 ETB welcome bonus
 AUTO_START_DELAY = 20  # Auto-start game after 20 seconds
 HOUSE_PERCENT = 0.20  # 20% house fee
+ROUND_RESET_DELAY = 10  # Wait 10 seconds before resetting for next round
 
 # Payment methods
 PAYMENT_METHODS = {
@@ -149,6 +150,9 @@ class IntegratedBingoGame:
         # Auto-start timer
         self.auto_start_timer = None
         self.first_card_time = None
+        
+        # Reset timer for next round
+        self.reset_timer = None
         
         # Sync with existing game structure
         self.game_id = 1  # Default game ID
@@ -934,23 +938,34 @@ class IntegratedBingoGame:
             except:
                 pass
         
-        await asyncio.sleep(5)
-        self.reset_round(game_id)
+        # Cancel any existing reset timer
+        if self.reset_timer:
+            self.reset_timer.cancel()
+        
+        # Start reset timer for next round
+        self.reset_timer = asyncio.create_task(self.delayed_reset(game_id))
     
-    def reset_round(self, game_id: int = 1):
-        """Reset for next round"""
+    async def delayed_reset(self, game_id: int):
+        """Wait and then reset for next round"""
+        await asyncio.sleep(ROUND_RESET_DELAY)
+        await self.reset_round(game_id)
+    
+    async def reset_round(self, game_id: int = 1):
+        """Reset for next round - FIXED: Unlocks all cards"""
         self.round_number += 1
         self.called_numbers = []
         self.game_started = False
         self.auto_start_timer = None
         self.first_card_time = None
+        self.reset_timer = None
         
         if game_id in self.active_games:
+            # Clear called numbers
             self.active_games[game_id]['called_numbers'] = []
             self.active_games[game_id]['prize_pool'] = 0
             self.active_games[game_id]['total_cards_sold'] = 0
             
-            # Reset players
+            # Reset all players - CRITICAL: Clear their cards
             for player in self.active_games[game_id]['players'].values():
                 player['cards'] = []
                 player['card_ids'] = []
@@ -958,10 +973,18 @@ class IntegratedBingoGame:
                 player['ready'] = False
                 player['winner'] = False
             
-            # Clear taken cards
+            # CRITICAL: Clear taken cards to unlock all cards for next round
             self.taken_cards[game_id] = set()
+            
+            logger.info(f"✅ Round {self.round_number} ready to start - All cards unlocked!")
         
-        logger.info(f"Round {self.round_number} ready to start")
+        # Broadcast reset to all players
+        await self.broadcast(game_id, {
+            'type': 'game_reset',
+            'round': self.round_number,
+            'players': self.get_players(game_id),
+            'countdown': 15
+        })
     
     def register_user(self, user_id):
         """Register user for Telegram tracking"""
@@ -1155,7 +1178,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "4. Numbers are called automatically every 3 seconds\n"
             "5. Mark numbers on your cards as they are called\n"
             "6. Click 'CLAIM BINGO!' when you have a winning pattern\n"
-            "7. Winner gets 90% of the prize pool!\n\n"
+            "7. Winner gets 90% of the prize pool!\n"
+            "8. Game resets automatically after 10 seconds for next round\n\n"
             f"**Price per Card:** {CARD_PRICE/100} ETB\n"
             f"**House Fee:** 20%\n\n"
             "**Deposit Methods:**\n"
@@ -1474,7 +1498,8 @@ async def root():
         "cards": len(BINGO_CARDS),
         "price_per_card": CARD_PRICE / 100,
         "max_cards_per_player": MAX_CARDS_PER_PLAYER,
-        "auto_start_delay": AUTO_START_DELAY
+        "auto_start_delay": AUTO_START_DELAY,
+        "round_reset_delay": ROUND_RESET_DELAY
     }
 
 @app.get("/health")
@@ -1573,7 +1598,8 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "initial_balance": user['balance'] / 100,
         "initial_active_games": db.get_active_games_count(user_id),
         "initial_stake": db.get_total_stake(user_id) / 100,
-        "auto_start_delay": AUTO_START_DELAY
+        "auto_start_delay": AUTO_START_DELAY,
+        "round_reset_delay": ROUND_RESET_DELAY
     })
 
 # ==================== WEBSOCKET ENDPOINT ====================
