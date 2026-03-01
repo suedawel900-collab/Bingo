@@ -37,7 +37,7 @@ else:
 
 CARD_PRICE = 1000  # 10 ETB in cents
 MAX_CARDS_PER_PLAYER = 20
-WELCOME_BONUS = 1000  # 10 ETB welcome bonus
+WELCOME_BONUS = 100000  # 1000 ETB welcome bonus
 AUTO_START_DELAY = 30  # 30 seconds
 HOUSE_PERCENT = 0.20  # 20% house fee
 ROUND_RESET_DELAY = 10  # Wait 10 seconds before resetting for next round
