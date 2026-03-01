@@ -175,6 +175,7 @@ async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['payment_method'] = method
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
+    # Try to edit the original message, fallback to sending a new one if editing fails
     try:
         await query.edit_message_text(
             f"💰 **{method_info['name']} Deposit**\n\n"
@@ -186,12 +187,17 @@ async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
     except Exception as e:
-        logger.error(f"Failed to edit deposit method message: {e}")
+        logger.error(f"Failed to edit deposit method message: {e}, sending new message instead")
         await context.bot.send_message(
             chat_id=user_id,
-            text="❌ An error occurred. Please try /deposit again."
+            text=f"💰 **{method_info['name']} Deposit**\n\n"
+                 f"Account: `{method_info['account']}`\n"
+                 f"Account Name: {method_info['account_name']}\n\n"
+                 f"Instructions:\n"
+                 f"{method_info['instructions']}\n\n"
+                 f"📝 **Please enter the amount** (10-1000 ETB):",
+            parse_mode='Markdown'
         )
-        return ConversationHandler.END
 
     return AMOUNT
 
@@ -1114,7 +1120,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "deposit":
-        # Fixed: Now instructs user to use /deposit command
         await query.edit_message_text(
             "💰 **Deposit**\n\n"
             "To add funds to your account, please use the command:\n"
@@ -1127,7 +1132,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "withdraw":
-        # Fixed: Now instructs user to use /withdraw command
         await query.edit_message_text(
             "💸 **Withdrawal**\n\n"
             "To withdraw your winnings, please use the command:\n"
