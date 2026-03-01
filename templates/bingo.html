@@ -88,7 +88,7 @@
             background: #f44336;
         }
         
-        /* Info Bar - Round and Players only */
+        /* Info Bar - Round and Total Cards (instead of Players) */
         .info-bar {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -316,13 +316,13 @@
             animation: none;
         }
         
-        /* Players List */
+        /* Players List - Shows players with their card counts */
         .players-list {
             background: #f8f9fa;
             padding: 8px;
             border-radius: 6px;
             min-height: 50px;
-            max-height: 80px;
+            max-height: 100px;
             overflow-y: auto;
             font-size: 11px;
             border: 1px solid #ddd;
@@ -471,6 +471,16 @@
             background: #ffd700;
         }
         
+        /* Total Cards Stats */
+        .total-cards-stats {
+            background: #e8f5e9;
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 12px;
+            color: #2e7d32;
+            font-weight: bold;
+        }
+        
         /* Message */
         .message {
             text-align: center;
@@ -523,15 +533,15 @@
             </div>
         </div>
         
-        <!-- Info Bar - Round and Players only -->
+        <!-- Info Bar - Round and Total Cards (instead of Players) -->
         <div class="info-bar">
             <div class="info-item">
                 <div class="info-label">Round</div>
                 <div class="info-value" id="active-game-display">1</div>
             </div>
             <div class="info-item">
-                <div class="info-label">Players</div>
-                <div class="info-value" id="player-count">0</div>
+                <div class="info-label">Total Cards</div>
+                <div class="info-value" id="total-cards-sold">0</div>
             </div>
         </div>
         
@@ -595,7 +605,7 @@
                     <!-- BINGO Button -->
                     <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 BINGO!</button>
                     
-                    <!-- Players List -->
+                    <!-- Players List - Shows players with their card counts -->
                     <div class="players-list" id="players-list"></div>
                 </div>
             </div>
@@ -645,6 +655,7 @@
         let balance = {{ initial_balance }};
         let activeGames = {{ initial_active_games }};
         let totalStake = {{ initial_stake }};
+        let totalCardsSold = 0; // Track total cards sold in the game
         let isReady = false;
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
@@ -690,6 +701,13 @@
             setTimeout(() => {
                 winnerPrizeEl.textContent = '';
             }, 10000);
+        }
+        
+        // Update total cards sold display
+        function updateTotalCardsSold() {
+            // Calculate total cards from all players
+            totalCardsSold = players.reduce((sum, player) => sum + (player.card_count || 0), 0);
+            document.getElementById('total-cards-sold').textContent = totalCardsSold;
         }
         
         // Start auto-start timer
@@ -783,8 +801,7 @@
                 // Add click handler to check bingo on this card
                 miniCard.onclick = () => {
                     if (gameStarted) {
-                        currentCardId = cardId;
-                        checkBingo();
+                        checkBingoForCard(cardId);
                     }
                 };
                 
@@ -822,7 +839,7 @@
                     currentRound = data.round || 1;
                     
                     document.getElementById('active-game-display').textContent = currentRound;
-                    document.getElementById('player-count').textContent = players.length;
+                    updateTotalCardsSold(); // Update total cards display
                     updateCardGrid();
                     updatePlayersList();
                     updateCalledNumbers();
@@ -869,8 +886,8 @@
                 }
                 else if (data.type === 'player_ready') {
                     players = data.players || [];
+                    updateTotalCardsSold(); // Update total cards display
                     updatePlayersList();
-                    document.getElementById('player-count').textContent = players.length;
                 }
                 else if (data.type === 'game_started') {
                     gameStarted = true;
@@ -958,6 +975,7 @@
                     
                     currentRound = data.round || currentRound + 1;
                     document.getElementById('active-game-display').textContent = currentRound;
+                    updateTotalCardsSold(); // Reset total cards display
                     
                     updateCardGrid();
                     updateCalledNumbers();
@@ -1099,6 +1117,7 @@
                     }
                 }
                 if (rowComplete) {
+                    claimBingo(cardId);
                     return true;
                 }
             }
@@ -1112,7 +1131,6 @@
             // Check all cards for bingo
             for (let cardId of myCardIds) {
                 if (checkBingoForCard(cardId)) {
-                    claimBingo(cardId);
                     return;
                 }
             }
@@ -1166,7 +1184,7 @@
                     
                     let displayName = p.name;
                     if (p.id == userId) displayName += ' (You)';
-                    if (p.card_count) displayName += ` [${p.card_count}]`;
+                    if (p.card_count) displayName += ` [${p.card_count}]`; // Show card count
                     
                     badge.textContent = displayName;
                     list.appendChild(badge);
