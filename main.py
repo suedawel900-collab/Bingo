@@ -18,7 +18,7 @@ from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, ContextTypes,
     ConversationHandler, MessageHandler, filters
 )
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TelegramError
 
 from models import Database
 
@@ -125,6 +125,7 @@ os.makedirs("static", exist_ok=True)
 
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /deposit command"""
+    logger.info(f"User {update.effective_user.id} started deposit")
     keyboard = [
         [InlineKeyboardButton("📱 Telebirr", callback_data="pay_telebirr")],
         [InlineKeyboardButton("💳 CBE Birr", callback_data="pay_cbebirr")],
@@ -143,18 +144,27 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle deposit button callbacks"""
     query = update.callback_query
+    user_id = update.effective_user.id
+    logger.info(f"Deposit callback from user {user_id}: {query.data}")
+    
     try:
         await query.answer()
     except BadRequest as e:
-        logger.warning(f"Callback query expired: {e}")
+        logger.warning(f"Callback query expired for user {user_id}: {e}")
+        # Even if expired, we can still try to edit the message if needed
+    except Exception as e:
+        logger.error(f"Error answering callback query for user {user_id}: {e}")
     
     if query.data == "cancel_deposit":
-        await query.edit_message_text(
-            "❌ Deposit cancelled.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
-            ]])
-        )
+        try:
+            await query.edit_message_text(
+                "❌ Deposit cancelled.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+                ]])
+            )
+        except Exception as e:
+            logger.error(f"Failed to edit cancel message: {e}")
         return ConversationHandler.END
     
     # Store payment method
@@ -163,21 +173,35 @@ async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
     
-    await query.edit_message_text(
-        f"💰 **{method_info['name']} Deposit**\n\n"
-        f"Account: `{method_info['account']}`\n"
-        f"Account Name: {method_info['account_name']}\n\n"
-        f"Instructions:\n"
-        f"{method_info['instructions']}\n\n"
-        f"📝 **Please enter the amount** (10-1000 ETB):",
-        parse_mode='Markdown'
-    )
+    try:
+        await query.edit_message_text(
+            f"💰 **{method_info['name']} Deposit**\n\n"
+            f"Account: `{method_info['account']}`\n"
+            f"Account Name: {method_info['account_name']}\n\n"
+            f"Instructions:\n"
+            f"{method_info['instructions']}\n\n"
+            f"📝 **Please enter the amount** (10-1000 ETB):",
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Failed to edit deposit method message: {e}")
+        # Fallback: send a new message
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="❌ An error occurred. Please try /deposit again."
+        )
+        return ConversationHandler.END
+    
     return AMOUNT
 
 async def deposit_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle deposit amount input"""
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+    logger.info(f"Deposit amount from user {user_id}: {text}")
+    
     try:
-        amount = float(update.message.text.strip())
+        amount = float(text)
         
         if amount < 10:
             await update.message.reply_text("❌ Minimum deposit is 10 ETB. Please enter a valid amount:")
@@ -231,11 +255,16 @@ async def deposit_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         await update.message.reply_text("❌ Invalid amount. Please enter a number:")
         return AMOUNT
+    except Exception as e:
+        logger.exception(f"Unexpected error in deposit_amount: {e}")
+        await update.message.reply_text("❌ An error occurred. Please try again.")
+        return ConversationHandler.END
 
 async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle payment reference"""
     reference = update.message.text.strip()
     user = update.effective_user
+    logger.info(f"Deposit reference from user {user.id}: {reference}")
     
     request_id = context.user_data.get('payment_request_id')
     amount_etb = context.user_data.get('amount_etb', 0)
@@ -279,23 +308,26 @@ async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("❌ Reject", callback_data=f"reject_payment_{request_id}")
                 ]
             ]
-            admin_message = await context.bot.send_message(
-                chat_id=ADMIN_USER_ID,
-                text=f"💰 **New Payment Request**\n\n"
-                     f"👤 **User:** {user.first_name}\n"
-                     f"🆔 **User ID:** `{user.id}`\n"
-                     f"💰 **Amount:** {amount_etb:.0f} ETB\n"
-                     f"💳 **Method:** {method_info['name']}\n"
-                     f"🆔 **Request ID:** `{request_id}`\n"
-                     f"🔢 **Reference:** `{reference}`",
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            # Store admin message info to remove buttons later
-            context.bot_data[f"admin_msg_{request_id}"] = {
-                'chat_id': ADMIN_USER_ID,
-                'message_id': admin_message.message_id
-            }
+            try:
+                admin_message = await context.bot.send_message(
+                    chat_id=ADMIN_USER_ID,
+                    text=f"💰 **New Payment Request**\n\n"
+                         f"👤 **User:** {user.first_name}\n"
+                         f"🆔 **User ID:** `{user.id}`\n"
+                         f"💰 **Amount:** {amount_etb:.0f} ETB\n"
+                         f"💳 **Method:** {method_info['name']}\n"
+                         f"🆔 **Request ID:** `{request_id}`\n"
+                         f"🔢 **Reference:** `{reference}`",
+                    parse_mode='Markdown',
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                # Store admin message info to remove buttons later
+                context.bot_data[f"admin_msg_{request_id}"] = {
+                    'chat_id': ADMIN_USER_ID,
+                    'message_id': admin_message.message_id
+                }
+            except Exception as e:
+                logger.error(f"Failed to notify admin: {e}")
     else:
         await update.message.reply_text(
             "❌ Failed to save reference. Please try again or contact admin."
@@ -306,6 +338,7 @@ async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel deposit"""
+    logger.info(f"User {update.effective_user.id} cancelled deposit")
     await update.message.reply_text(
         "❌ Deposit cancelled.",
         reply_markup=ReplyKeyboardRemove()
@@ -864,7 +897,7 @@ deposit_conv = ConversationHandler(
     entry_points=[CommandHandler('deposit', deposit_command)],
     states={
         AMOUNT: [
-            CallbackQueryHandler(deposit_callback, pattern='^(pay_telebirr|pay_cbebirr|cancel_deposit)$'),
+            CallbackQueryHandler(deposit_callback, pattern='^(pay_telebirr|pay_cbebirr|cancel_deposit)$', per_message=False),
             MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_amount)
         ],
         REFERENCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_reference)],
@@ -1087,11 +1120,14 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
         # Edit the admin message to remove buttons
         admin_msg_info = context.bot_data.get(f"admin_msg_{request_id}")
         if admin_msg_info:
-            await context.bot.edit_message_reply_markup(
-                chat_id=admin_msg_info['chat_id'],
-                message_id=admin_msg_info['message_id'],
-                reply_markup=None
-            )
+            try:
+                await context.bot.edit_message_reply_markup(
+                    chat_id=admin_msg_info['chat_id'],
+                    message_id=admin_msg_info['message_id'],
+                    reply_markup=None
+                )
+            except Exception as e:
+                logger.error(f"Failed to remove admin buttons: {e}")
         
         await query.edit_message_text(
             f"✅ Payment Approved\n\n"
@@ -1122,11 +1158,14 @@ async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, req
     # Edit the admin message to remove buttons
     admin_msg_info = context.bot_data.get(f"admin_msg_{request_id}")
     if admin_msg_info:
-        await context.bot.edit_message_reply_markup(
-            chat_id=admin_msg_info['chat_id'],
-            message_id=admin_msg_info['message_id'],
-            reply_markup=None
-        )
+        try:
+            await context.bot.edit_message_reply_markup(
+                chat_id=admin_msg_info['chat_id'],
+                message_id=admin_msg_info['message_id'],
+                reply_markup=None
+            )
+        except Exception as e:
+            logger.error(f"Failed to remove admin buttons: {e}")
     
     await query.edit_message_text(
         f"❌ Payment Rejected\n\n"
