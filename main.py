@@ -267,7 +267,7 @@ async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]])
         )
         
-        # Notify admin
+        # Notify admin with approve/reject buttons
         if ADMIN_USER_ID:
             keyboard = [
                 [
@@ -275,7 +275,7 @@ async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("❌ Reject", callback_data=f"reject_payment_{request_id}")
                 ]
             ]
-            await context.bot.send_message(
+            admin_message = await context.bot.send_message(
                 chat_id=ADMIN_USER_ID,
                 text=f"💰 **New Payment Request**\n\n"
                      f"👤 **User:** {user.first_name}\n"
@@ -287,6 +287,11 @@ async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='Markdown',
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
+            # Store admin message info to remove buttons later
+            context.bot_data[f"admin_msg_{request_id}"] = {
+                'chat_id': ADMIN_USER_ID,
+                'message_id': admin_message.message_id
+            }
     else:
         await update.message.reply_text(
             "❌ Failed to save reference. Please try again or contact admin."
@@ -1016,7 +1021,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, request_id: str):
-    """Approve payment"""
+    """Approve payment and remove buttons"""
     query = update.callback_query
     
     request = db.get_payment_request(request_id)
@@ -1041,6 +1046,15 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
                  f"New balance: {result['new_balance']/100:.2f} ETB"
         )
         
+        # Edit the admin message to remove buttons
+        admin_msg_info = context.bot_data.get(f"admin_msg_{request_id}")
+        if admin_msg_info:
+            await context.bot.edit_message_reply_markup(
+                chat_id=admin_msg_info['chat_id'],
+                message_id=admin_msg_info['message_id'],
+                reply_markup=None
+            )
+        
         await query.edit_message_text(
             f"✅ Payment Approved\n\n"
             f"Request ID: {request_id}\n"
@@ -1050,7 +1064,7 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
         await query.edit_message_text("❌ Failed to update balance")
 
 async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, request_id: str):
-    """Reject payment"""
+    """Reject payment and remove buttons"""
     query = update.callback_query
     
     request = db.get_payment_request(request_id)
@@ -1066,6 +1080,15 @@ async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, req
              f"Your payment of {request['amount']/100:.2f} ETB has been rejected.\n"
              f"Please contact admin."
     )
+    
+    # Edit the admin message to remove buttons
+    admin_msg_info = context.bot_data.get(f"admin_msg_{request_id}")
+    if admin_msg_info:
+        await context.bot.edit_message_reply_markup(
+            chat_id=admin_msg_info['chat_id'],
+            message_id=admin_msg_info['message_id'],
+            reply_markup=None
+        )
     
     await query.edit_message_text(
         f"❌ Payment Rejected\n\n"
