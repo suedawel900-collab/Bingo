@@ -433,6 +433,7 @@
         .winning-card-cell.marked {
             background: #4CAF50;
             color: white;
+            animation: markedPulse 0.5s infinite;
         }
         .winning-card-cell.free {
             background: #ffd700;
@@ -488,9 +489,11 @@
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
         .mini-card.winner-card {
-            border-color: gold;
-            box-shadow: 0 0 15px gold;
-            animation: winnerPulse 1s infinite;
+            animation: winnerGlow 1s infinite !important;
+            border: 3px solid gold !important;
+            box-shadow: 0 0 30px gold !important;
+            transform: scale(1.02);
+            z-index: 10;
         }
         .mini-card-header {
             display: flex;
@@ -548,6 +551,7 @@
         .message.error { background: #f8d7da; color: #721c24; display: block; }
         .message.info { background: #d1ecf1; color: #0c5460; display: block; }
         
+        /* Animations */
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.01); }
@@ -555,15 +559,21 @@
         }
         
         @keyframes winnerGlow {
-            0% { box-shadow: 0 0 3px gold; }
-            50% { box-shadow: 0 0 10px gold; }
-            100% { box-shadow: 0 0 3px gold; }
+            0% { border-color: gold; box-shadow: 0 0 10px gold; }
+            50% { border-color: #ffd700; box-shadow: 0 0 30px gold; transform: scale(1.05); }
+            100% { border-color: gold; box-shadow: 0 0 10px gold; }
         }
         
         @keyframes winnerPulse {
             0% { transform: scale(1); border-color: gold; }
             50% { transform: scale(1.02); border-color: #ffd700; box-shadow: 0 0 20px gold; }
             100% { transform: scale(1); border-color: gold; }
+        }
+        
+        @keyframes markedPulse {
+            0% { background-color: #4CAF50; }
+            50% { background-color: #ffd700; }
+            100% { background-color: #4CAF50; }
         }
     </style>
 </head>
@@ -718,7 +728,7 @@
         let gameEnded = false;
         let currentRound = 1;
         let currentWinner = null;
-        let currentWinnerCardId = null; // store winning card id
+        let currentWinnerCardId = null; // store winning card id (as number)
         let balance = {{ initial_balance }};
         let activeGames = {{ initial_active_games }};
         let totalStake = {{ initial_stake }};
@@ -839,8 +849,8 @@
                 const miniCard = document.createElement('div');
                 miniCard.className = 'mini-card';
                 
-                // Highlight if this is the winning card
-                if (currentWinnerCardId === cardId) {
+                // Highlight if this is the winning card (convert to number for safety)
+                if (currentWinnerCardId && parseInt(cardId) === parseInt(currentWinnerCardId)) {
                     miniCard.classList.add('winner-card');
                 }
                 
@@ -1042,7 +1052,8 @@
                     gameEnded = true;
                     roundLocked = true;
                     currentWinner = data.winner;
-                    currentWinnerCardId = data.winner.card_id;
+                    // Ensure card_id is stored as number
+                    currentWinnerCardId = parseInt(data.winner.card_id);
                     
                     document.getElementById('status').textContent = '🏆 WINNER!';
                     document.getElementById('bingo-btn').disabled = true;
