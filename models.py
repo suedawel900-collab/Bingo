@@ -12,12 +12,13 @@ class Database:
         self.init_db()
     
     def get_connection(self):
-        """Simple connection - no pooling to avoid threading issues"""
-        conn = sqlite3.connect(self.db_path, timeout=30)
+        """Get database connection"""
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
     
     def init_db(self):
+        """Initialize database tables"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -54,7 +55,7 @@ class Database:
                 )
             ''')
             
-            # Payment methods table
+            # Payment methods table (required for deposits)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS payment_methods (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,7 +68,7 @@ class Database:
                 )
             ''')
             
-            # Payment requests table
+            # Payment requests table (required for deposits)
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS payment_requests (
                     request_id TEXT PRIMARY KEY,
@@ -96,7 +97,7 @@ class Database:
                 )
             ''')
             
-            # User cards table (tracks cards per game)
+            # User cards table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS user_cards (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,16 +158,19 @@ class Database:
             # Insert default game
             cursor.execute("INSERT OR IGNORE INTO games (id, pattern_id, status) VALUES (1, 1, 'waiting')")
             
-            # Insert default payment methods
+            # Insert default payment methods (Telebirr and CBE Birr)
             cursor.execute("SELECT COUNT(*) FROM payment_methods")
             if cursor.fetchone()[0] == 0:
                 methods = [
                     ('Telebirr', 'mobile_money', '0953933030', 'Bingo Bot', 1),
                     ('CBE Birr', 'mobile_money', '0953933030', 'Bingo Bot', 1)
                 ]
-                cursor.executemany("INSERT INTO payment_methods (name, type, account_number, account_name, is_active) VALUES (?,?,?,?,?)", methods)
+                cursor.executemany('''
+                    INSERT INTO payment_methods (name, type, account_number, account_name, is_active)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', methods)
             
-            # Create indexes
+            # Create indexes for performance
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_payment_requests_user ON payment_requests(user_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status)")
@@ -174,11 +178,14 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_active_games_user ON active_games(user_id)")
             
             conn.commit()
-            logger.info("✅ Database initialized")
+            logger.info("✅ Database initialized successfully")
         finally:
             conn.close()
     
+    # ==================== USER METHODS ====================
+    
     def get_user(self, user_id: int) -> Optional[Dict]:
+        """Get user by ID"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -191,6 +198,7 @@ class Database:
             conn.close()
     
     def get_or_create_user(self, user_id: int, username=None, first_name=None, last_name=None, phone_number=None) -> Dict:
+        """Get existing user or create new one with welcome bonus"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -199,13 +207,11 @@ class Database:
             
             if row:
                 user = dict(row)
-                
                 # Update phone if provided
                 if phone_number and not user.get('phone_number'):
                     cursor.execute("UPDATE users SET phone_number = ? WHERE user_id = ?", (phone_number, user_id))
                     conn.commit()
                     user['phone_number'] = phone_number
-                
                 return user
             else:
                 # Create new user with welcome bonus
@@ -227,6 +233,7 @@ class Database:
             conn.close()
     
     def update_user_phone(self, user_id: int, phone_number: str) -> bool:
+        """Update user phone number"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -236,7 +243,10 @@ class Database:
         finally:
             conn.close()
     
+    # ==================== BALANCE METHODS ====================
+    
     def update_balance(self, user_id: int, amount: int, transaction_type: str, description: str = None) -> Optional[Dict]:
+        """Update user balance and record transaction"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -281,7 +291,10 @@ class Database:
         finally:
             conn.close()
     
+    # ==================== GAME METHODS ====================
+    
     def add_active_game(self, user_id: int, game_id: int, card_ids: List[int], stake: int) -> bool:
+        """Add active game for user"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -295,6 +308,7 @@ class Database:
             conn.close()
     
     def get_active_games_count(self, user_id: int) -> int:
+        """Get count of active games for user"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -304,6 +318,7 @@ class Database:
             conn.close()
     
     def get_total_stake(self, user_id: int) -> int:
+        """Get total stake for user"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -313,22 +328,10 @@ class Database:
         finally:
             conn.close()
     
-    def get_user_transactions(self, user_id: int, limit: int = 20) -> List[Dict]:
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT * FROM transactions 
-                WHERE user_id = ? 
-                ORDER BY created_at DESC 
-                LIMIT ?
-            ''', (user_id, limit))
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
-        finally:
-            conn.close()
+    # ==================== PAYMENT METHODS ====================
     
     def get_payment_methods(self, type: str = None, active_only: bool = True) -> List[Dict]:
+        """Get payment methods"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -349,6 +352,7 @@ class Database:
             conn.close()
     
     def create_payment_request(self, user_id: int, method_id: int, amount: int, sender_phone: str) -> str:
+        """Create a payment request"""
         import uuid
         request_id = str(uuid.uuid4())[:8].upper()
         
@@ -365,6 +369,7 @@ class Database:
             conn.close()
     
     def get_payment_request(self, request_id: str) -> Optional[Dict]:
+        """Get payment request by ID"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -382,6 +387,7 @@ class Database:
             conn.close()
     
     def get_user_payment_requests(self, user_id: int, limit: int = 10) -> List[Dict]:
+        """Get payment requests for a user"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -397,6 +403,7 @@ class Database:
             conn.close()
     
     def get_pending_payment_requests(self, limit: int = 20) -> List[Dict]:
+        """Get all pending payment requests"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -414,6 +421,7 @@ class Database:
             conn.close()
     
     def update_payment_request_status(self, request_id: str, status: str, admin_notes: str = None) -> bool:
+        """Update payment request status"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -428,6 +436,7 @@ class Database:
             conn.close()
     
     def add_payment_proof(self, request_id: str, proof_type: str, proof_data: str) -> bool:
+        """Add payment proof"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -440,28 +449,26 @@ class Database:
         finally:
             conn.close()
     
+    # ==================== SYSTEM STATS ====================
+    
     def get_system_stats(self) -> Dict:
+        """Get system statistics"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
             
-            # Total users
             cursor.execute("SELECT COUNT(*) FROM users")
             total_users = cursor.fetchone()[0]
             
-            # Total balance
             cursor.execute("SELECT SUM(balance) FROM users")
             total_balance = cursor.fetchone()[0] or 0
             
-            # Total deposits
             cursor.execute("SELECT SUM(amount) FROM transactions WHERE amount > 0 AND type = 'deposit'")
             total_deposits = cursor.fetchone()[0] or 0
             
-            # Total withdrawals
             cursor.execute("SELECT SUM(amount) FROM transactions WHERE amount < 0 AND type = 'withdrawal'")
             total_withdrawals = abs(cursor.fetchone()[0] or 0)
             
-            # Active games
             cursor.execute("SELECT COUNT(DISTINCT game_id) FROM active_games")
             active_games = cursor.fetchone()[0]
             
