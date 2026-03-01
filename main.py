@@ -151,7 +151,6 @@ async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
     except BadRequest as e:
         logger.warning(f"Callback query expired for user {user_id}: {e}")
-        # Even if expired, we can still try to edit the message if needed
     except Exception as e:
         logger.error(f"Error answering callback query for user {user_id}: {e}")
     
