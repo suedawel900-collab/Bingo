@@ -83,7 +83,6 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # Ensure admin exists with some balance (optional)
         conn.execute("INSERT OR IGNORE INTO users (user_id, username, balance) VALUES (?, ?, ?)",
                      (ADMIN_ID, "admin", 0))
         conn.commit()
@@ -156,11 +155,10 @@ async def update_withdrawal_status(withdrawal_id: int, status: str):
         conn.commit()
 
 # -------------------- GLOBAL GAME STATE --------------------
-# For simplicity, we keep in memory; for production, store in DB.
 current_round = 1
 game_active = False
 drawn_numbers = []
-players_cards = {}  # user_id -> list of cards (each card is list of 15 numbers)
+players_cards = {}
 pool_amount = 0
 line_winner = None
 full_winner = None
@@ -191,14 +189,12 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update_balance(user_id, -CARD_PRICE, "buy", "Purchased bingo card")
     pool_amount += CARD_PRICE
 
-    # Generate a random card: 15 unique numbers from 1-90
     card = sorted(random.sample(range(1, 91), 15))
 
     if user_id not in players_cards:
         players_cards[user_id] = []
     players_cards[user_id].append(card)
 
-    # Format card for display (grid 3x5)
     rows = [card[i:i+5] for i in range(0, 15, 5)]
     card_text = "\n".join(" ".join(f"{num:2d}" for num in row) for row in rows)
 
@@ -275,7 +271,6 @@ async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Admin will verify it shortly."
     )
 
-    # Notify admin
     keyboard = [[
         InlineKeyboardButton("✅ Approve", callback_data=f"approve_payment_{request_id}"),
         InlineKeyboardButton("❌ Reject", callback_data=f"reject_payment_{request_id}")
@@ -333,7 +328,6 @@ async def withdraw_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
     amount = context.user_data["withdraw_amount"]
     user_id = update.effective_user.id
 
-    # Deduct balance immediately (or hold? we deduct now and refund if rejected)
     await update_balance(user_id, -amount, "withdrawal_hold", f"Withdrawal request of {amount}")
 
     withdrawal_id = await create_withdrawal(user_id, amount, address)
@@ -343,7 +337,6 @@ async def withdraw_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Admin will process it shortly."
     )
 
-    # Notify admin
     keyboard = [[
         InlineKeyboardButton("✅ Approve", callback_data=f"approve_withdraw_{withdrawal_id}"),
         InlineKeyboardButton("❌ Reject", callback_data=f"reject_withdraw_{withdrawal_id}")
@@ -378,7 +371,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = query.data
 
-    # Payment approval
     if data.startswith("approve_payment_"):
         request_id = data.replace("approve_payment_", "")
         req = await get_payment_request(request_id)
@@ -406,7 +398,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ Your deposit was rejected. Please contact admin."
         )
 
-    # Withdrawal approval
     elif data.startswith("approve_withdraw_"):
         withdrawal_id = int(data.replace("approve_withdraw_", ""))
         wd = await get_withdrawal(withdrawal_id)
@@ -426,7 +417,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not wd:
             await query.edit_message_text("❌ Withdrawal not found")
             return
-        # Refund the held amount
         await update_balance(wd["user_id"], wd["amount"], "withdrawal_refund", f"Withdrawal {withdrawal_id} rejected")
         await update_withdrawal_status(withdrawal_id, "rejected")
         await query.edit_message_text("❌ Withdrawal rejected")
@@ -447,12 +437,10 @@ async def auto_draw(context: ContextTypes.DEFAULT_TYPE):
         await end_round(context)
         return
 
-    # Pick a number not yet drawn
     available = [n for n in range(1, 91) if n not in drawn_numbers]
     number = random.choice(available)
     drawn_numbers.append(number)
 
-    # Notify admin (optional: you could also broadcast to players)
     await context.bot.send_message(
         chat_id=ADMIN_ID,
         text=f"🎱 Number Drawn: {number}"
@@ -467,17 +455,14 @@ async def check_winners(context: ContextTypes.DEFAULT_TYPE):
         for card in cards:
             matched = [n for n in card if n in drawn_numbers]
 
-            # Line win (5 numbers)
             if len(matched) >= 5 and not line_winner:
                 line_winner = user_id
                 prize = pool_amount * 0.3
                 await update_balance(user_id, prize, "line_win", "Line win prize")
                 await context.bot.send_message(user_id, f"🏆 LINE WIN! You won {prize:.2f} ETB")
 
-            # Full house (15 numbers)
             if len(matched) == 15 and not full_winner:
                 full_winner = user_id
-                # 70% of pool goes to full house, minus house cut
                 full_prize = pool_amount * 0.7 * (1 - HOUSE_PERCENT / 100)
                 house_cut = pool_amount * 0.7 * (HOUSE_PERCENT / 100)
 
@@ -501,14 +486,13 @@ async def end_round(context: ContextTypes.DEFAULT_TYPE):
         f"🔄 Round {current_round} ended."
     )
 
-    # Reset for next round
     current_round += 1
     drawn_numbers = []
     players_cards = {}
     pool_amount = 0
     line_winner = None
     full_winner = None
-    game_active = True  # auto-start next round
+    game_active = True
 
     await context.bot.send_message(
         ADMIN_ID,
@@ -527,6 +511,13 @@ async def main():
     init_db()
 
     app = ApplicationBuilder().token(TOKEN).build()
+
+    # Check if job_queue is available (requires python-telegram-bot[job-queue])
+    if app.job_queue is None:
+        raise RuntimeError(
+            "JobQueue is not available. Please install PTB with job-queue support:\n"
+            "pip install 'python-telegram-bot[job-queue]'"
+        )
 
     # Conversation handlers
     deposit_conv = ConversationHandler(
@@ -550,14 +541,12 @@ async def main():
         fallbacks=[CommandHandler("cancel", withdraw_cancel)],
     )
 
-    # Add handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("buy", buy))
     app.add_handler(deposit_conv)
     app.add_handler(withdraw_conv)
     app.add_handler(CallbackQueryHandler(admin_callback, pattern="^(approve_|reject_)"))
 
-    # Job queue for game automation
     job_queue = app.job_queue
     job_queue.run_repeating(auto_draw, interval=DRAW_INTERVAL, first=10)
     job_queue.run_once(auto_start, when=5)
