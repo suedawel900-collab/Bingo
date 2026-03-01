@@ -18,6 +18,7 @@ from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, ContextTypes,
     ConversationHandler, MessageHandler, filters
 )
+from telegram.error import BadRequest
 
 from models import Database
 
@@ -37,7 +38,7 @@ else:
 
 CARD_PRICE = 1000  # 10 ETB in cents
 MAX_CARDS_PER_PLAYER = 20
-WELCOME_BONUS = 100000  # 1000 ETB welcome bonus
+WELCOME_BONUS = 1000  # 10 ETB welcome bonus
 AUTO_START_DELAY = 30  # 30 seconds
 HOUSE_PERCENT = 0.20  # 20% house fee
 ROUND_RESET_DELAY = 10  # Wait 10 seconds before resetting for next round
@@ -120,10 +121,10 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# ==================== SIMPLIFIED DEPOSIT HANDLERS ====================
+# ==================== DEPOSIT HANDLERS ====================
 
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /deposit command - SIMPLIFIED"""
+    """Handle /deposit command"""
     keyboard = [
         [InlineKeyboardButton("📱 Telebirr", callback_data="pay_telebirr")],
         [InlineKeyboardButton("💳 CBE Birr", callback_data="pay_cbebirr")],
@@ -142,7 +143,10 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle deposit button callbacks"""
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except BadRequest as e:
+        logger.warning(f"Callback query expired: {e}")
     
     if query.data == "cancel_deposit":
         await query.edit_message_text(
@@ -328,6 +332,9 @@ class IntegratedBingoGame:
         self.number_tasks = {}
         self.countdown_timers = {}
         
+        # Locks for shared data structures
+        self.game_locks = {}  # per game lock
+        
         # Connection tracking
         self.bot_app = None
         self.user_connections = {}
@@ -342,6 +349,12 @@ class IntegratedBingoGame:
         
         # Heartbeat task
         self.heartbeat_task = None
+    
+    def get_lock(self, game_id: int) -> asyncio.Lock:
+        """Get or create a lock for a specific game"""
+        if game_id not in self.game_locks:
+            self.game_locks[game_id] = asyncio.Lock()
+        return self.game_locks[game_id]
     
     async def start_heartbeat(self):
         """Send heartbeat to keep WebSocket connections alive"""
@@ -358,10 +371,11 @@ class IntegratedBingoGame:
     
     async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
         """Handle new WebSocket connection"""
-        # Check connection limit
+        # Check connection limit - reject early without accepting
         if self.user_connections.get(user_id, 0) >= self.MAX_CONNECTIONS_PER_USER:
+            logger.warning(f"User {user_id} exceeded max connections, rejecting")
             await websocket.close(code=1008, reason="Too many connections")
-            return
+            return False
         
         await websocket.accept()
         logger.info(f"User {user_id} connected to game {game_id}")
@@ -372,41 +386,42 @@ class IntegratedBingoGame:
         # Get user from database
         user = db.get_or_create_user(user_id)
         
-        # Initialize game if not exists
-        if game_id not in self.game_connections:
-            self.game_connections[game_id] = []
-            self.taken_cards[game_id] = set()
-            self.game_started = False
-            self.game_winner[game_id] = None
-            self.number_tasks[game_id] = None
-            self.countdown_timers[game_id] = 15
-            self.active_games[game_id] = {
-                'called_numbers': [],
-                'players': {},
-                'prize_pool': 0,
-                'total_cards_sold': 0,
-                'last_winner': None,
-                'countdown': 15,
-                'next_number_time': None
-            }
-        
-        self.game_connections[game_id].append(websocket)
-        
-        # Get or create player
-        player_name = user.get('first_name', f"Player{user_id}")
-        if user_id not in self.active_games[game_id]['players']:
-            self.active_games[game_id]['players'][user_id] = {
-                'name': player_name,
-                'cards': [],
-                'card_ids': [],
-                'marked': {},
-                'ready': False,
-                'winner': False,
-                'total_spent': 0,
-                'cards_won': 0,
-                'balance': user['balance']
-            }
-            logger.info(f"Created new player {user_id} in game {game_id}")
+        # Initialize game if not exists (with lock)
+        async with self.get_lock(game_id):
+            if game_id not in self.game_connections:
+                self.game_connections[game_id] = []
+                self.taken_cards[game_id] = set()
+                self.game_started = False
+                self.game_winner[game_id] = None
+                self.number_tasks[game_id] = None
+                self.countdown_timers[game_id] = 15
+                self.active_games[game_id] = {
+                    'called_numbers': [],
+                    'players': {},
+                    'prize_pool': 0,
+                    'total_cards_sold': 0,
+                    'last_winner': None,
+                    'countdown': 15,
+                    'next_number_time': None
+                }
+            
+            self.game_connections[game_id].append(websocket)
+            
+            # Get or create player
+            player_name = user.get('first_name', f"Player{user_id}")
+            if user_id not in self.active_games[game_id]['players']:
+                self.active_games[game_id]['players'][user_id] = {
+                    'name': player_name,
+                    'cards': [],
+                    'card_ids': [],
+                    'marked': {},
+                    'ready': False,
+                    'winner': False,
+                    'total_spent': 0,
+                    'cards_won': 0,
+                    'balance': user['balance']
+                }
+                logger.info(f"Created new player {user_id} in game {game_id}")
         
         # Get user stats
         active_games_count = db.get_active_games_count(user_id)
@@ -449,12 +464,15 @@ class IntegratedBingoGame:
             'type': 'player_joined',
             'players': self.get_players(game_id)
         })
+        
+        return True
     
     async def disconnect(self, game_id: int, websocket: WebSocket, user_id: int):
         """Handle WebSocket disconnection"""
-        if game_id in self.game_connections:
-            if websocket in self.game_connections[game_id]:
-                self.game_connections[game_id].remove(websocket)
+        async with self.get_lock(game_id):
+            if game_id in self.game_connections:
+                if websocket in self.game_connections[game_id]:
+                    self.game_connections[game_id].remove(websocket)
             
             # Decrement connection count
             if user_id in self.user_connections:
@@ -512,75 +530,81 @@ class IntegratedBingoGame:
         """Handle card selection"""
         logger.info(f"select_cards called - game:{game_id}, user:{user_id}, cards:{card_ids}")
         
-        if game_id not in self.active_games:
-            return False, "Game not found", 0, None
-        
-        if self.game_started:
-            return False, "Game already started", 0, None
-        
-        if user_id not in self.active_games[game_id]['players']:
-            return False, "Player not found", 0, None
-        
-        player = self.active_games[game_id]['players'][user_id]
-        
-        if len(player['card_ids']) + len(card_ids) > MAX_CARDS_PER_PLAYER:
-            return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0, None
-        
-        # Check card availability
-        for card_id in card_ids:
-            if card_id in self.taken_cards[game_id]:
-                return False, f"Card {card_id} already taken", 0, None
+        async with self.get_lock(game_id):
+            if game_id not in self.active_games:
+                return False, "Game not found", 0, None
             
-            card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-            if not card_data:
-                return False, f"Card {card_id} not found", 0, None
-        
-        total_cost = len(card_ids) * CARD_PRICE
-        
-        # Check balance
-        if player['balance'] < total_cost:
-            return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
-        
-        # Check if this is first card
-        was_empty = len(self.active_games[game_id]['players']) == 0 or all(len(p['card_ids']) == 0 for p in self.active_games[game_id]['players'].values())
-        
-        # Add cards and deduct balance
-        for card_id in card_ids:
-            self.taken_cards[game_id].add(card_id)
-            card_data = next(c for c in BINGO_CARDS if c['id'] == card_id)
-            player['cards'].append(card_data['card'])
-            player['card_ids'].append(card_id)
-            player['marked'][card_id] = []
-        
-        player['total_spent'] += total_cost
-        player['balance'] -= total_cost
-        player['ready'] = True
-        self.active_games[game_id]['total_cards_sold'] += len(card_ids)
-        self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * CARD_PRICE
-        self.total_pool = self.active_games[game_id]['prize_pool']
-        
-        logger.info(f"User {user_id} selected {len(card_ids)} cards, cost: {total_cost}, new balance: {player['balance']}")
-        
-        # Start auto-start timer if this is the first card
-        if was_empty and not self.game_started:
-            await self.start_auto_start_timer(game_id)
-        
-        # Update database
-        db.update_balance(
-            user_id=user_id,
-            amount=-total_cost,
-            transaction_type='game_fee',
-            description=f'Selected cards for game #{game_id}'
-        )
-        
-        # Broadcast player ready
-        await self.broadcast(game_id, {
-            'type': 'player_ready',
-            'players': self.get_players(game_id),
-            'user_id': user_id
-        })
-        
-        return True, f"Selected {len(card_ids)} cards", total_cost, player['balance']
+            if self.game_started:
+                return False, "Game already started", 0, None
+            
+            if user_id not in self.active_games[game_id]['players']:
+                return False, "Player not found", 0, None
+            
+            player = self.active_games[game_id]['players'][user_id]
+            
+            if len(player['card_ids']) + len(card_ids) > MAX_CARDS_PER_PLAYER:
+                return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0, None
+            
+            # Check card availability
+            for card_id in card_ids:
+                if card_id in self.taken_cards[game_id]:
+                    return False, f"Card {card_id} already taken", 0, None
+                
+                card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+                if not card_data:
+                    return False, f"Card {card_id} not found", 0, None
+            
+            total_cost = len(card_ids) * CARD_PRICE
+            
+            # Check balance using database (atomic)
+            user = db.get_user(user_id)
+            if not user or user['balance'] < total_cost:
+                return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
+            
+            # Check if this is first card
+            was_empty = len(self.active_games[game_id]['players']) == 0 or all(len(p['card_ids']) == 0 for p in self.active_games[game_id]['players'].values())
+            
+            # Deduct balance from database (atomic)
+            update_result = db.update_balance(
+                user_id=user_id,
+                amount=-total_cost,
+                transaction_type='game_fee',
+                description=f'Selected cards for game #{game_id}'
+            )
+            if not update_result:
+                return False, "Failed to deduct balance", total_cost, None
+            
+            new_balance = update_result['new_balance']
+            
+            # Add cards and update player state
+            for card_id in card_ids:
+                self.taken_cards[game_id].add(card_id)
+                card_data = next(c for c in BINGO_CARDS if c['id'] == card_id)
+                player['cards'].append(card_data['card'])
+                player['card_ids'].append(card_id)
+                player['marked'][card_id] = []
+            
+            player['total_spent'] += total_cost
+            player['balance'] = new_balance  # update in-memory balance
+            player['ready'] = True
+            self.active_games[game_id]['total_cards_sold'] += len(card_ids)
+            self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * CARD_PRICE
+            self.total_pool = self.active_games[game_id]['prize_pool']
+            
+            logger.info(f"User {user_id} selected {len(card_ids)} cards, cost: {total_cost}, new balance: {player['balance']}")
+            
+            # Start auto-start timer if this is the first card
+            if was_empty and not self.game_started:
+                asyncio.create_task(self.start_auto_start_timer(game_id))
+            
+            # Broadcast player ready
+            await self.broadcast(game_id, {
+                'type': 'player_ready',
+                'players': self.get_players(game_id),
+                'user_id': user_id
+            })
+            
+            return True, f"Selected {len(card_ids)} cards", total_cost, new_balance
     
     async def start_auto_start_timer(self, game_id: int):
         """Start auto-start timer"""
@@ -593,13 +617,14 @@ class IntegratedBingoGame:
         async def auto_start():
             await asyncio.sleep(AUTO_START_DELAY)
             
-            if not self.game_started and game_id in self.active_games:
-                players = self.active_games[game_id]['players']
-                if len(players) > 0:
-                    logger.info(f"Auto-starting game {game_id} after {AUTO_START_DELAY} seconds")
-                    await self.start_round(game_id)
-                else:
-                    logger.info("No players, not auto-starting")
+            async with self.get_lock(game_id):
+                if not self.game_started and game_id in self.active_games:
+                    players = self.active_games[game_id]['players']
+                    if len(players) > 0:
+                        logger.info(f"Auto-starting game {game_id} after {AUTO_START_DELAY} seconds")
+                        await self.start_round(game_id)
+                    else:
+                        logger.info("No players, not auto-starting")
         
         self.auto_start_timer = asyncio.create_task(auto_start())
     
@@ -643,26 +668,27 @@ class IntegratedBingoGame:
             
             await asyncio.sleep(3)
             
-            if not self.game_started or self.game_winner.get(game_id) or self.stop_number_generation:
-                break
-            
-            self.called_numbers.append(n)
-            self.active_games[game_id]['called_numbers'].append(n)
-            logger.info(f"Number called: {n}")
-            
-            await self.broadcast(game_id, {
-                'type': 'number_called',
-                'number': n,
-                'called': self.active_games[game_id]['called_numbers']
-            })
-            
-            # Check for winner (ONE ROW ONLY)
-            winner = await self.check_winner_row_only(game_id, n)
-            if winner:
-                logger.info(f"Winner found! Stopping number generation")
-                self.stop_number_generation = True
-                await self.finish_round(game_id, winner)
-                break
+            async with self.get_lock(game_id):
+                if not self.game_started or self.game_winner.get(game_id) or self.stop_number_generation:
+                    break
+                
+                self.called_numbers.append(n)
+                self.active_games[game_id]['called_numbers'].append(n)
+                logger.info(f"Number called: {n}")
+                
+                await self.broadcast(game_id, {
+                    'type': 'number_called',
+                    'number': n,
+                    'called': self.active_games[game_id]['called_numbers']
+                })
+                
+                # Check for winner (ONE ROW ONLY)
+                winner = await self.check_winner_row_only(game_id, n)
+                if winner:
+                    logger.info(f"Winner found! Stopping number generation")
+                    self.stop_number_generation = True
+                    await self.finish_round(game_id, winner)
+                    break
     
     async def check_winner_row_only(self, game_id: int, last_number: int):
         """Check if someone won by completing a row (only rows, no columns/diagonals)"""
@@ -736,23 +762,32 @@ class IntegratedBingoGame:
         
         self.house_profit += house_cut
         
-        # Update winner's balance
+        # Find the winning card ID (optional but useful)
+        winning_card_id = None
         if winner_id in self.active_games[game_id]['players']:
             player = self.active_games[game_id]['players'][winner_id]
-            player['balance'] += winner_prize
-            player['winner'] = True
+            # In row-only mode, we don't know which card won, but we can pick any (or none)
+            # For now, set to None or first card
+            winning_card_id = player['card_ids'][0] if player['card_ids'] else None
+        
+        # Update winner's balance in database
+        if winner_id in self.active_games[game_id]['players']:
+            player = self.active_games[game_id]['players'][winner_id]
             
-            db.update_balance(
+            update_result = db.update_balance(
                 user_id=winner_id,
                 amount=winner_prize,
                 transaction_type='game_win',
                 description=f'Won round {self.round_number} in game #{game_id}'
             )
+            if update_result:
+                player['balance'] = update_result['new_balance']
+            player['winner'] = True
         
         self.game_winner[game_id] = {
             'user_id': winner_id,
             'name': self.active_games[game_id]['players'][winner_id]['name'],
-            'card_id': None,
+            'card_id': winning_card_id,
             'winning_number': self.active_games[game_id]['called_numbers'][-1] if self.active_games[game_id]['called_numbers'] else 0,
             'round': self.round_number
         }
@@ -868,7 +903,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle button callbacks"""
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except BadRequest as e:
+        logger.warning(f"Callback query expired: {e}")
     
     user = update.effective_user
     data = query.data
@@ -1096,8 +1134,13 @@ async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, req
     )
 
 async def setup_bot():
-    """Initialize bot with webhook mode"""
-    application = Application.builder().token(BOT_TOKEN).build()
+    """Initialize bot with webhook mode and concurrent updates"""
+    application = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .concurrent_updates(True)  # Enable concurrent processing of updates
+        .build()
+    )
     
     # Add conversation handler
     application.add_handler(deposit_conv)
@@ -1214,7 +1257,9 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
 
 @app.websocket("/ws/{game_id}/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
-    await game_manager.connect(game_id, websocket, user_id)
+    connected = await game_manager.connect(game_id, websocket, user_id)
+    if not connected:
+        return  # connection already closed/rejected
     
     try:
         while True:
@@ -1285,11 +1330,11 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 await websocket.send_json({'type': 'pong'})
     
     except WebSocketDisconnect:
-        game_manager.disconnect(game_id, websocket, user_id)
+        await game_manager.disconnect(game_id, websocket, user_id)
         logger.info(f"User {user_id} disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        game_manager.disconnect(game_id, websocket, user_id)
+        await game_manager.disconnect(game_id, websocket, user_id)
 
 if __name__ == "__main__":
     import uvicorn
