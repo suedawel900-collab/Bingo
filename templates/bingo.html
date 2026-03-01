@@ -54,21 +54,6 @@
             background: #f44336;
         }
         
-        /* Status Bar */
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            background: #2c3e50;
-            color: white;
-            padding: 10px 15px;
-        }
-        .status-item { text-align: center; }
-        .status-label { font-size: 11px; opacity: 0.7; }
-        .status-value { font-weight: bold; font-size: 18px; }
-        .status-value.green { color: #4CAF50; }
-        .status-value.blue { color: #64b5f6; }
-        .status-value.orange { color: #ff9800; }
-        
         /* Pattern Bar */
         .pattern-bar {
             background: #ffd700;
@@ -85,7 +70,7 @@
             border-radius: 20px;
         }
         
-        /* Info Bar */
+        /* Info Bar - Round, Prize Pool, Players */
         .info-bar {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -94,6 +79,7 @@
             justify-content: space-between;
         }
         .info-item { text-align: center; }
+        .info-label { font-size: 12px; opacity: 0.9; }
         .info-value { font-size: 22px; font-weight: bold; }
         .prize-value { color: #ffd700; }
         
@@ -137,7 +123,7 @@
             gap: 15px;
         }
         
-        /* TOP SECTION: Selected Cards (HORIZONTAL SCROLL) - Support multiple cards */
+        /* TOP SECTION: Selected Cards (HORIZONTAL SCROLL) */
         .selected-section {
             background: #fff3e0;
             border-radius: 12px;
@@ -484,7 +470,7 @@
             color: #4CAF50;
         }
         
-        /* Prize Pool - FIXED: Shows only winner amount */
+        /* Prize Pool - Shows winner amount only */
         .prize-display {
             background: #fff3e0;
             border-radius: 8px;
@@ -539,7 +525,6 @@
             font-weight: bold;
             cursor: pointer;
             margin-bottom: 10px;
-            transition: all 0.2s;
             animation: pulse 1.5s infinite;
         }
         .bingo-btn:hover:not(:disabled) {
@@ -650,21 +635,7 @@
             </div>
         </div>
         
-        <!-- Status Bar -->
-        <div class="status-bar">
-            <div class="status-item">
-                <div class="status-label">WALLET</div>
-                <div class="status-value green" id="wallet-balance">{{ initial_balance }} ETB</div>
-            </div>
-            <div class="status-item">
-                <div class="status-label">ACTIVE</div>
-                <div class="status-value blue" id="active-games">{{ initial_active_games }}</div>
-            </div>
-            <div class="status-item">
-                <div class="status-label">STAKE</div>
-                <div class="status-value orange" id="total-stake">{{ initial_stake }} ETB</div>
-            </div>
-        </div>
+        <!-- REMOVED: Status Bar (WALLET, ACTIVE, STAKE) -->
         
         <!-- Pattern Bar -->
         <div class="pattern-bar">
@@ -672,18 +643,18 @@
             <span class="pattern-name" id="pattern-name">Full House</span>
         </div>
         
-        <!-- Info Bar -->
+        <!-- Info Bar - Round, Prize Pool, Players -->
         <div class="info-bar">
             <div class="info-item">
-                <div>Round</div>
+                <div class="info-label">Round</div>
                 <div class="info-value" id="active-game-display">1</div>
             </div>
             <div class="info-item">
-                <div>Prize Pool</div>
+                <div class="info-label">Prize Pool</div>
                 <div class="info-value prize-value" id="prize-pool">0 ETB</div>
             </div>
             <div class="info-item">
-                <div>Players</div>
+                <div class="info-label">Players</div>
                 <div class="info-value" id="player-count">0</div>
             </div>
         </div>
@@ -701,7 +672,7 @@
         
         <!-- Main Content -->
         <div class="main-content">
-            <!-- Selected Cards - Support multiple cards -->
+            <!-- TOP SECTION: Selected Cards (HORIZONTAL SCROLL) -->
             <div class="selected-section">
                 <div class="selected-header">
                     <span>📋 Your Cards ({{ max_cards }} max)</span>
@@ -775,7 +746,7 @@
                         <div class="balance-amount" id="game-balance">{{ initial_balance }} ETB</div>
                     </div>
                     
-                    <!-- Prize Pool - FIXED: Shows only winner amount -->
+                    <!-- Prize Pool - Shows winner amount only -->
                     <div class="prize-display">
                         <div class="prize-label">🏆 Winner Prize</div>
                         <div class="prize-amount" id="winner-prize">0 ETB</div>
@@ -794,7 +765,7 @@
                         ⏱️ Game starting in <span id="timer-seconds">20</span>s
                     </div>
                     
-                    <!-- BINGO Button - Enhanced for winner detection -->
+                    <!-- BINGO Button -->
                     <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 CLAIM BINGO!</button>
                     
                     <!-- Players List -->
@@ -873,13 +844,10 @@
         }
         
         function updateWallet() {
-            document.getElementById('wallet-balance').textContent = `${balance.toFixed(2)} ETB`;
-            document.getElementById('active-games').textContent = activeGames;
-            document.getElementById('total-stake').textContent = `${totalStake.toFixed(2)} ETB`;
             document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
         }
         
-        // Calculate prize pool - FIXED: Shows only winner amount
+        // Calculate prize pool - Shows winner amount only
         function calculatePrizePool() {
             const totalCards = players.reduce((sum, p) => sum + (p.card_count || 0), 0);
             const totalPrize = totalCards * pricePerCard;
@@ -889,6 +857,7 @@
             document.getElementById('prize-pool').textContent = `${totalPrize.toFixed(2)} ETB`;
             document.getElementById('house-fee').textContent = `${houseFee.toFixed(2)} ETB`;
             document.getElementById('winner-prize').textContent = `${winnerPrize.toFixed(2)} ETB`;
+            document.getElementById('player-count').textContent = players.length;
             
             return { totalPrize, winnerPrize, houseFee };
         }
@@ -1231,6 +1200,7 @@
             updateCardGrid();
         }
         
+        // Update selected display - HORIZONTAL LAYOUT
         function updateSelectedDisplay() {
             const scroll = document.getElementById('selected-scroll');
             const totalCost = document.getElementById('total-cost');
