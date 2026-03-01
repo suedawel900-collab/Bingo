@@ -15,7 +15,7 @@
             padding: 10px;
         }
         .game-container {
-            max-width: 950px;
+            max-width: 1200px;
             width: 100%;
             background: white;
             border-radius: 20px;
@@ -216,7 +216,7 @@
             margin-top: 5px;
         }
         
-        /* Left Game Column - Called Numbers & Card */
+        /* Left Game Column - Called Numbers */
         .game-left {
             flex: 1;
         }
@@ -266,82 +266,6 @@
             border-radius: 8px;
             margin-bottom: 8px;
             box-shadow: 0 2px 5px rgba(76,175,80,0.3);
-        }
-        
-        /* Current Card - MINIMIZED, NO NAVIGATION BUTTONS */
-        .current-card-section {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 8px;
-            border: 2px solid #667eea;
-        }
-        .card-title {
-            font-size: 13px;
-            font-weight: bold;
-            margin-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .card-title span {
-            background: #667eea;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 20px;
-            font-size: 12px;
-        }
-        
-        /* REMOVED: Card navigation buttons */
-        
-        /* BINGO Grid - MINIMIZED */
-        .bingo-header {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 3px;
-            margin-bottom: 3px;
-            font-weight: bold;
-            text-align: center;
-            font-size: 11px;
-        }
-        .bingo-header div {
-            background: #667eea;
-            color: white;
-            padding: 2px;
-            border-radius: 3px;
-        }
-        .bingo-grid {
-            display: grid !important;
-            grid-template-columns: repeat(5, 1fr) !important;
-            gap: 3px;
-            background: white;
-            padding: 4px;
-            border-radius: 5px;
-        }
-        .bingo-cell {
-            aspect-ratio: 1;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .bingo-cell:hover {
-            transform: scale(1.02);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .bingo-cell.marked {
-            background: #4CAF50;
-            border-color: #4CAF50;
-            color: white;
-        }
-        .bingo-cell.free {
-            background: #ffd700;
-            border-color: #ffd700;
         }
         
         /* Right Game Column */
@@ -451,6 +375,102 @@
             margin-top: 5px;
         }
         
+        /* Cards Grid - Display all player cards */
+        .player-cards-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 12px;
+            border: 2px solid #667eea;
+            margin-top: 10px;
+        }
+        .player-cards-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .player-cards-count {
+            background: #667eea;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        .cards-grid-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        .mini-card {
+            background: #f0f0f0;
+            border-radius: 8px;
+            padding: 8px;
+            width: 160px;
+            border: 2px solid #667eea;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .mini-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .mini-card.winner-card {
+            border-color: gold;
+            box-shadow: 0 0 15px gold;
+            animation: winnerPulse 1s infinite;
+        }
+        .mini-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 12px;
+            color: #333;
+        }
+        .mini-card-id {
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+        .mini-bingo-grid {
+            display: grid !important;
+            grid-template-columns: repeat(5, 1fr) !important;
+            gap: 2px;
+            background: white;
+            padding: 3px;
+            border-radius: 4px;
+        }
+        .mini-bingo-cell {
+            aspect-ratio: 1;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: bold;
+        }
+        .mini-bingo-cell.marked {
+            background: #4CAF50;
+            color: white;
+        }
+        .mini-bingo-cell.free {
+            background: #ffd700;
+        }
+        
         /* Message */
         .message {
             text-align: center;
@@ -475,6 +495,12 @@
             0% { box-shadow: 0 0 3px gold; }
             50% { box-shadow: 0 0 10px gold; }
             100% { box-shadow: 0 0 3px gold; }
+        }
+        
+        @keyframes winnerPulse {
+            0% { transform: scale(1); border-color: gold; }
+            50% { transform: scale(1.02); border-color: #ffd700; box-shadow: 0 0 20px gold; }
+            100% { transform: scale(1); border-color: gold; }
         }
     </style>
 </head>
@@ -550,21 +576,6 @@
                     
                     <!-- Last Number -->
                     <div class="last-number" id="last-number">🎲 Ready</div>
-                    
-                    <!-- Current Card - MINIMIZED, NO NAVIGATION BUTTONS -->
-                    <div class="current-card-section">
-                        <div class="card-title">
-                            Your Card: <span id="current-card-id">#0</span>
-                        </div>
-                        <div class="bingo-header">
-                            <div>B</div>
-                            <div>I</div>
-                            <div>N</div>
-                            <div>G</div>
-                            <div>O</div>
-                        </div>
-                        <div id="card-display" class="bingo-grid"></div>
-                    </div>
                 </div>
                 
                 <!-- Right Column -->
@@ -588,6 +599,17 @@
                     <div class="players-list" id="players-list"></div>
                 </div>
             </div>
+            
+            <!-- Player Cards Grid - Shows all cards -->
+            <div class="player-cards-section" id="player-cards-section" style="display: none;">
+                <div class="player-cards-title">
+                    <span>🎴 Your Cards</span>
+                    <span class="player-cards-count" id="player-cards-count">0</span>
+                </div>
+                <div class="cards-grid-container" id="cards-grid-container">
+                    <!-- Cards will be dynamically added here -->
+                </div>
+            </div>
         </div>
         
         <!-- Message Area -->
@@ -609,9 +631,9 @@
         // State
         let ws = null;
         let selectedCards = [];
-        let myCards = {};
-        let myCardIds = [];
-        let marked = {};
+        let myCards = {}; // card_id -> card data
+        let myCardIds = []; // array of card IDs
+        let marked = {}; // card_id -> array of marked numbers
         let called = [];
         let players = [];
         let takenCards = new Set();
@@ -619,8 +641,7 @@
         let gameEnded = false;
         let currentRound = 1;
         let currentWinner = null;
-        let currentCardIndex = 0;
-        let currentCardId = null;
+        let currentWinnerCardId = null;
         let balance = {{ initial_balance }};
         let activeGames = {{ initial_active_games }};
         let totalStake = {{ initial_stake }};
@@ -632,9 +653,6 @@
         let roundLocked = false;
         let autoStartTimer = null;
         let autoStartSeconds = AUTO_START_DELAY;
-        
-        // Track multiple cards
-        let playerCards = []; // Array of card IDs for this player
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -698,6 +716,82 @@
             }, 1000);
         }
         
+        // Render all player cards in grid
+        function renderAllCards() {
+            const container = document.getElementById('cards-grid-container');
+            const section = document.getElementById('player-cards-section');
+            const countEl = document.getElementById('player-cards-count');
+            
+            if (myCardIds.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            
+            section.style.display = 'block';
+            countEl.textContent = myCardIds.length;
+            container.innerHTML = '';
+            
+            myCardIds.forEach(cardId => {
+                const card = myCards[cardId];
+                const markedNumbers = marked[cardId] || [];
+                
+                if (!card) return;
+                
+                const miniCard = document.createElement('div');
+                miniCard.className = 'mini-card';
+                
+                // Highlight if this is the winning card
+                if (currentWinnerCardId === cardId) {
+                    miniCard.classList.add('winner-card');
+                }
+                
+                // Card header
+                const header = document.createElement('div');
+                header.className = 'mini-card-header';
+                header.innerHTML = `
+                    <span>Card</span>
+                    <span class="mini-card-id">#${cardId}</span>
+                `;
+                miniCard.appendChild(header);
+                
+                // BINGO grid
+                const grid = document.createElement('div');
+                grid.className = 'mini-bingo-grid';
+                
+                for (let row = 0; row < 5; row++) {
+                    for (let col = 0; col < 5; col++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'mini-bingo-cell';
+                        
+                        let num = card[col]?.[row] || '?';
+                        cell.textContent = num;
+                        
+                        if (row === 2 && col === 2 || num === 'FREE') {
+                            cell.classList.add('free');
+                        }
+                        
+                        if (called.includes(parseInt(num)) || markedNumbers.includes(parseInt(num))) {
+                            cell.classList.add('marked');
+                        }
+                        
+                        grid.appendChild(cell);
+                    }
+                }
+                
+                miniCard.appendChild(grid);
+                
+                // Add click handler to check bingo on this card
+                miniCard.onclick = () => {
+                    if (gameStarted) {
+                        currentCardId = cardId;
+                        checkBingo();
+                    }
+                };
+                
+                container.appendChild(miniCard);
+            });
+        }
+        
         // WebSocket connection
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -732,6 +826,7 @@
                     updateCardGrid();
                     updatePlayersList();
                     updateCalledNumbers();
+                    renderAllCards();
                     
                     if (gameStarted) {
                         document.getElementById('status').textContent = '🎮 PLAYING';
@@ -750,16 +845,9 @@
                     // Add to card IDs array if not already present
                     if (!myCardIds.includes(data.card_id)) {
                         myCardIds.push(data.card_id);
-                        playerCards.push(data.card_id);
                     }
                     
-                    // For single card display, just show the first/most recent card
-                    if (myCardIds.length > 0) {
-                        currentCardId = myCardIds[myCardIds.length - 1]; // Show most recent card
-                        document.getElementById('current-card-id').textContent = currentCardId;
-                    }
-                    
-                    renderCurrentCard();
+                    renderAllCards();
                 }
                 else if (data.type === 'cards_selected') {
                     if (data.success) {
@@ -801,7 +889,7 @@
                     called = data.called || [];
                     document.getElementById('last-number').textContent = `🎲 ${data.number}`;
                     updateCalledNumbers();
-                    renderCurrentCard();
+                    renderAllCards();
                     
                     if (document.getElementById('autoDaub').checked) {
                         autoMarkNumber(data.number);
@@ -811,15 +899,14 @@
                     if (marked[data.card_id]) {
                         marked[data.card_id].push(data.number);
                     }
-                    if (currentCardId == data.card_id) {
-                        renderCurrentCard();
-                    }
+                    renderAllCards();
                 }
                 else if (data.type === 'game_won') {
                     gameStarted = false;
                     gameEnded = true;
                     roundLocked = true;
                     currentWinner = data.winner;
+                    currentWinnerCardId = data.winner.card_id;
                     
                     document.getElementById('status').textContent = '🏆 WINNER!';
                     document.getElementById('bingo-btn').disabled = true;
@@ -835,9 +922,12 @@
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
                     updatePlayersList();
                     fetchBalance();
+                    renderAllCards(); // Re-render to highlight winning card
                     
                     setTimeout(() => {
                         winnerDiv.style.display = 'none';
+                        currentWinnerCardId = null;
+                        renderAllCards();
                     }, 10000);
                 }
                 else if (data.type === 'game_reset') {
@@ -846,16 +936,14 @@
                     roundLocked = false;
                     called = [];
                     currentWinner = null;
+                    currentWinnerCardId = null;
                     
                     selectedCards = [];
                     myCards = {};
                     myCardIds = [];
-                    playerCards = [];
                     marked = {};
                     isReady = false;
                     takenCards.clear();
-                    currentCardIndex = 0;
-                    currentCardId = null;
                     
                     document.getElementById('status').textContent = '⏳ WAITING';
                     document.getElementById('bingo-btn').disabled = true;
@@ -874,8 +962,7 @@
                     updateCardGrid();
                     updateCalledNumbers();
                     updatePlayersList();
-                    document.getElementById('current-card-id').textContent = '#0';
-                    document.getElementById('card-display').innerHTML = '';
+                    renderAllCards();
                     
                     showMessage('🔄 New round started!', 'info');
                 }
@@ -995,65 +1082,12 @@
             updateCardGrid();
         }
         
-        // Render current card
-        function renderCurrentCard() {
-            if (!currentCardId || !myCards[currentCardId]) {
-                return;
-            }
+        // Check for BINGO on a specific card
+        function checkBingoForCard(cardId) {
+            if (!gameStarted) return false;
             
-            const card = myCards[currentCardId];
-            const markedNumbers = marked[currentCardId] || [];
-            const grid = document.getElementById('card-display');
-            
-            grid.innerHTML = '';
-            
-            for (let row = 0; row < 5; row++) {
-                for (let col = 0; col < 5; col++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'bingo-cell';
-                    
-                    let num = card[col]?.[row] || '?';
-                    cell.textContent = num;
-                    
-                    if (row === 2 && col === 2 || num === 'FREE') {
-                        cell.classList.add('free');
-                        cell.textContent = 'FREE';
-                    }
-                    
-                    if (called.includes(parseInt(num)) && num !== 'FREE') {
-                        cell.classList.add('marked');
-                    }
-                    
-                    if (markedNumbers.includes(parseInt(num))) {
-                        cell.classList.add('marked');
-                    }
-                    
-                    cell.onclick = () => markNumber(currentCardId, num);
-                    grid.appendChild(cell);
-                }
-            }
-        }
-        
-        function markNumber(cardId, num) {
-            if (!gameStarted || num === 'FREE') return;
-            const numInt = parseInt(num);
-            if (!called.includes(numInt)) {
-                showMessage(`Number ${num} not called yet`, 'error');
-                return;
-            }
-            
-            ws.send(JSON.stringify({
-                type: 'mark_number',
-                card_id: cardId,
-                number: numInt
-            }));
-        }
-        
-        function checkBingo() {
-            if (!gameStarted || !currentCardId) return;
-            
-            const card = myCards[currentCardId];
-            const markedNumbers = marked[currentCardId] || [];
+            const card = myCards[cardId];
+            const markedNumbers = marked[cardId] || [];
             
             for (let row = 0; row < 5; row++) {
                 let rowComplete = true;
@@ -1065,14 +1099,28 @@
                     }
                 }
                 if (rowComplete) {
-                    claimBingo(currentCardId);
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // Check BINGO (called from button click)
+        function checkBingo() {
+            if (!gameStarted) return;
+            
+            // Check all cards for bingo
+            for (let cardId of myCardIds) {
+                if (checkBingoForCard(cardId)) {
+                    claimBingo(cardId);
                     return;
                 }
             }
             
-            showMessage('No complete row on this card yet!', 'error');
+            showMessage('No complete row on any of your cards!', 'error');
         }
         
+        // Claim BINGO
         function claimBingo(cardId) {
             showMessage('🎯 BINGO claimed! Verifying...', 'info');
             ws.send(JSON.stringify({
