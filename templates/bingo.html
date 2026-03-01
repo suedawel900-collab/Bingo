@@ -23,103 +23,137 @@
             overflow: hidden;
         }
         
-        /* Header */
+        /* Header - UPDATED with balance display */
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 15px;
-            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
         }
-        .header h1 { font-size: 32px; }
-        .header p { font-size: 14px; opacity: 0.9; }
+        .header-left {
+            text-align: left;
+        }
+        .header-left h1 { 
+            font-size: 28px; 
+            margin-bottom: 5px;
+        }
+        .header-left p { 
+            font-size: 12px; 
+            opacity: 0.9; 
+        }
+        .header-right {
+            text-align: right;
+            background: rgba(255,255,255,0.1);
+            padding: 8px 15px;
+            border-radius: 30px;
+        }
+        .balance-label {
+            font-size: 11px;
+            opacity: 0.8;
+        }
+        .balance-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .winner-balance {
+            font-size: 14px;
+            color: gold;
+            margin-top: 2px;
+        }
         #status { 
             display: inline-block;
-            padding: 5px 15px;
+            padding: 3px 10px;
             background: rgba(255,255,255,0.2);
             border-radius: 20px;
-            margin-top: 5px;
+            margin-left: 10px;
+            font-size: 12px;
         }
         
         /* Connection Status */
         .connection-status {
             background: #4CAF50;
             color: white;
-            padding: 5px 10px;
+            padding: 3px 8px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 11px;
             display: inline-block;
-            margin-left: 10px;
+            margin-left: 5px;
         }
         .connection-status.error {
             background: #f44336;
         }
         
-        /* Info Bar - Round and Players only (Prize Pool removed) */
+        /* Info Bar - Round and Players only */
         .info-bar {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 12px 15px;
+            padding: 8px 15px;
             display: flex;
             justify-content: space-between;
+            border-top: 1px solid rgba(255,255,255,0.2);
         }
         .info-item { text-align: center; }
-        .info-label { font-size: 12px; opacity: 0.9; }
-        .info-value { font-size: 22px; font-weight: bold; }
+        .info-label { font-size: 11px; opacity: 0.9; }
+        .info-value { font-size: 18px; font-weight: bold; }
         
         /* Reconnect Bar */
         .reconnect-bar {
             background: #ff9800;
             color: white;
-            padding: 10px;
+            padding: 8px;
             text-align: center;
             display: none;
+            font-size: 13px;
         }
         .reconnect-bar button {
             background: white;
             color: #ff9800;
             border: none;
-            padding: 5px 15px;
+            padding: 3px 10px;
             border-radius: 20px;
             cursor: pointer;
             margin-left: 10px;
+            font-size: 12px;
         }
         
         /* Main Content - Stacked Layout */
         .main-content {
             display: flex;
             flex-direction: column;
-            padding: 15px;
-            gap: 15px;
+            padding: 12px;
+            gap: 12px;
         }
-        
-        /* REMOVED: Selected Cards Section (Your Cards) */
         
         /* MIDDLE SECTION: Card Grid 1-1000 */
         .grid-section {
             background: #f5f5f5;
             border-radius: 10px;
-            padding: 12px;
+            padding: 10px;
             border: 1px solid #ddd;
         }
         .grid-title {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 8px;
-            font-size: 14px;
+            margin-bottom: 6px;
+            font-size: 13px;
             font-weight: bold;
             color: #333;
         }
         .card-grid-container {
-            max-height: 200px;
+            max-height: 160px;
             overflow-y: auto;
             background: white;
-            border-radius: 8px;
-            padding: 8px;
+            border-radius: 6px;
+            padding: 5px;
         }
         .card-grid {
             display: grid;
             grid-template-columns: repeat(20, 1fr);
-            gap: 2px;
+            gap: 1px;
         }
         .card-btn {
             aspect-ratio: 1;
@@ -127,7 +161,7 @@
             color: white;
             border: none;
             border-radius: 2px;
-            font-size: 8px;
+            font-size: 7px;
             cursor: pointer;
             font-weight: bold;
             transition: all 0.2s;
@@ -148,17 +182,17 @@
         /* Action Buttons */
         .action-buttons {
             display: flex;
-            gap: 10px;
-            margin-top: 10px;
+            gap: 8px;
+            margin-top: 8px;
         }
         .action-btn {
             flex: 1;
-            padding: 10px;
+            padding: 8px;
             border: none;
-            border-radius: 6px;
+            border-radius: 5px;
             font-weight: bold;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
             transition: all 0.2s;
         }
         .clear-btn {
@@ -167,7 +201,7 @@
         }
         .clear-btn:hover:not(:disabled) {
             background: #c82333;
-            transform: translateY(-2px);
+            transform: translateY(-1px);
         }
         .clear-btn:disabled {
             opacity: 0.5;
@@ -177,7 +211,7 @@
         /* BOTTOM SECTION: Game Area (Two Columns) */
         .game-section {
             display: flex;
-            gap: 15px;
+            gap: 12px;
             margin-top: 5px;
         }
         
@@ -190,23 +224,23 @@
         .called-numbers-section {
             background: #f0f0f0;
             border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 10px;
+            padding: 8px;
+            margin-bottom: 8px;
         }
         .called-title {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: bold;
             color: #333;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
         }
         .called-list {
             display: flex;
             flex-wrap: wrap;
-            gap: 5px;
-            min-height: 40px;
-            max-height: 100px;
+            gap: 4px;
+            min-height: 30px;
+            max-height: 70px;
             overflow-y: auto;
-            padding: 8px;
+            padding: 5px;
             background: white;
             border-radius: 4px;
             border: 1px solid #ddd;
@@ -214,9 +248,9 @@
         .called-badge {
             background: #4CAF50;
             color: white;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 12px;
+            padding: 3px 6px;
+            border-radius: 15px;
+            font-size: 10px;
             font-weight: bold;
         }
         
@@ -224,53 +258,53 @@
         .last-number {
             background: #4CAF50;
             color: white;
-            padding: 15px;
+            padding: 8px;
             text-align: center;
-            font-size: 32px;
+            font-size: 24px;
             font-weight: bold;
             border-radius: 8px;
-            margin-bottom: 10px;
-            box-shadow: 0 2px 8px rgba(76,175,80,0.3);
+            margin-bottom: 8px;
+            box-shadow: 0 2px 5px rgba(76,175,80,0.3);
         }
         
-        /* Current Card */
+        /* Current Card - MINIMIZED */
         .current-card-section {
             background: #f8f9fa;
-            border-radius: 10px;
-            padding: 12px;
+            border-radius: 8px;
+            padding: 8px;
             border: 2px solid #667eea;
         }
         .card-title {
-            font-size: 16px;
+            font-size: 13px;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
         .card-title span {
             background: #667eea;
             color: white;
-            padding: 3px 10px;
+            padding: 2px 8px;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 12px;
         }
         
-        /* Card navigation for multiple cards */
+        /* Card navigation for multiple cards - MINIMIZED */
         .card-navigation {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }
         .card-nav-btn {
             background: #667eea;
             color: white;
             border: none;
-            border-radius: 20px;
-            padding: 5px 15px;
+            border-radius: 15px;
+            padding: 3px 10px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 11px;
         }
         .card-nav-btn:hover {
             background: #5a67d8;
@@ -280,49 +314,50 @@
             cursor: not-allowed;
         }
         .card-counter {
-            font-size: 14px;
+            font-size: 12px;
             color: #666;
         }
         
-        /* BINGO Grid */
+        /* BINGO Grid - MINIMIZED */
         .bingo-header {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: 6px;
-            margin-bottom: 5px;
+            gap: 3px;
+            margin-bottom: 3px;
             font-weight: bold;
             text-align: center;
+            font-size: 11px;
         }
         .bingo-header div {
             background: #667eea;
             color: white;
-            padding: 5px;
-            border-radius: 4px;
+            padding: 2px;
+            border-radius: 3px;
         }
         .bingo-grid {
             display: grid !important;
             grid-template-columns: repeat(5, 1fr) !important;
-            gap: 6px;
+            gap: 3px;
             background: white;
-            padding: 8px;
-            border-radius: 8px;
+            padding: 4px;
+            border-radius: 5px;
         }
         .bingo-cell {
             aspect-ratio: 1;
             background: white;
-            border: 2px solid #ddd;
-            border-radius: 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 15px;
+            font-size: 12px;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.2s;
         }
         .bingo-cell:hover {
-            transform: scale(1.03);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transform: scale(1.02);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         .bingo-cell.marked {
             background: #4CAF50;
@@ -336,61 +371,47 @@
         
         /* Right Game Column */
         .game-right {
-            width: 220px;
+            width: 180px;
         }
         
-        /* Balance Display */
-        .balance-display {
-            background: #e8f5e9;
-            border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 10px;
-            text-align: center;
-            font-weight: bold;
-            border: 1px solid #4CAF50;
-        }
-        .balance-amount {
-            font-size: 20px;
-            color: #4CAF50;
-        }
-        
-        /* REMOVED: Prize Pool Display */
+        /* REMOVED: Balance Display from right column (moved to header) */
         
         /* Auto-mark */
         .auto-mark {
-            margin-bottom: 10px;
-            font-size: 13px;
+            margin-bottom: 8px;
+            font-size: 12px;
         }
         
         /* Auto-start timer display */
         .auto-start-timer {
             background: #ff9800;
             color: white;
-            padding: 8px;
-            border-radius: 8px;
+            padding: 6px;
+            border-radius: 6px;
             text-align: center;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             display: none;
+            font-size: 12px;
         }
         
         /* BINGO Button */
         .bingo-btn {
             width: 100%;
-            padding: 12px;
+            padding: 10px;
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: white;
             border: none;
             border-radius: 20px;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             animation: pulse 1.5s infinite;
         }
         .bingo-btn:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(245,87,108,0.4);
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(245,87,108,0.4);
         }
         .bingo-btn:disabled {
             opacity: 0.5;
@@ -401,22 +422,22 @@
         /* Players List */
         .players-list {
             background: #f8f9fa;
-            padding: 10px;
-            border-radius: 8px;
-            min-height: 60px;
-            max-height: 100px;
+            padding: 8px;
+            border-radius: 6px;
+            min-height: 50px;
+            max-height: 80px;
             overflow-y: auto;
-            font-size: 12px;
+            font-size: 11px;
             border: 1px solid #ddd;
         }
         .player-badge {
             display: inline-block;
-            padding: 4px 10px;
+            padding: 3px 8px;
             background: #e0e0e0;
             color: #333;
-            border-radius: 20px;
-            margin: 3px;
-            font-size: 12px;
+            border-radius: 15px;
+            margin: 2px;
+            font-size: 10px;
             font-weight: bold;
             border: 1px solid #ccc;
         }
@@ -436,35 +457,35 @@
         .winner-announcement {
             background: linear-gradient(45deg, gold, #ffd700, #ffb347, #ff8c00);
             color: #333;
-            padding: 15px;
+            padding: 10px;
             text-align: center;
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
-            border-radius: 12px;
-            margin-bottom: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
             animation: pulse 1.5s infinite;
-            border: 3px solid white;
-            box-shadow: 0 0 20px gold;
+            border: 2px solid white;
+            box-shadow: 0 0 15px gold;
             display: none;
         }
         .winner-amount {
-            font-size: 24px;
+            font-size: 20px;
             color: #4CAF50;
             background: white;
-            padding: 5px 15px;
+            padding: 3px 12px;
             border-radius: 20px;
             display: inline-block;
-            margin-top: 10px;
+            margin-top: 5px;
         }
         
         /* Message */
         .message {
             text-align: center;
-            padding: 8px;
-            margin: 10px;
+            padding: 6px;
+            margin: 8px;
             border-radius: 5px;
             display: none;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: bold;
         }
         .message.success { background: #d4edda; color: #155724; display: block; }
@@ -473,30 +494,37 @@
         
         @keyframes pulse {
             0% { transform: scale(1); }
-            50% { transform: scale(1.02); }
+            50% { transform: scale(1.01); }
             100% { transform: scale(1); }
         }
         
         @keyframes winnerGlow {
-            0% { box-shadow: 0 0 5px gold; }
-            50% { box-shadow: 0 0 15px gold; }
-            100% { box-shadow: 0 0 5px gold; }
+            0% { box-shadow: 0 0 3px gold; }
+            50% { box-shadow: 0 0 10px gold; }
+            100% { box-shadow: 0 0 3px gold; }
         }
     </style>
 </head>
 <body>
     <div class="game-container">
-        <!-- Header -->
+        <!-- Header - UPDATED with balance display -->
         <div class="header">
-            <h1>🎯 BINGO</h1>
-            <p>Game #<span id="game-id">{{ game_id }}</span> | Player: <span id="player-id">{{ user_id }}</span></p>
-            <div>
-                <span id="status">⏳ WAITING</span>
-                <span id="connection-status" class="connection-status">✅ Connected</span>
+            <div class="header-left">
+                <h1>🎯 BINGO</h1>
+                <p>Game #<span id="game-id">{{ game_id }}</span> | Player: <span id="player-id">{{ user_id }}</span></p>
+                <div>
+                    <span id="status">⏳ WAITING</span>
+                    <span id="connection-status" class="connection-status">✅ Connected</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="balance-label">Your Balance</div>
+                <div class="balance-value" id="game-balance">{{ initial_balance }} ETB</div>
+                <div class="winner-balance" id="winner-balance-display"></div>
             </div>
         </div>
         
-        <!-- Info Bar - Round and Players only (Prize Pool removed) -->
+        <!-- Info Bar - Round and Players only -->
         <div class="info-bar">
             <div class="info-item">
                 <div class="info-label">Round</div>
@@ -515,8 +543,6 @@
         
         <!-- Main Content -->
         <div class="main-content">
-            <!-- REMOVED: Selected Cards Section -->
-            
             <!-- Card Grid -->
             <div class="grid-section">
                 <div class="grid-title">
@@ -552,12 +578,12 @@
                     <!-- Last Number -->
                     <div class="last-number" id="last-number">🎲 Ready</div>
                     
-                    <!-- Current Card with Navigation for multiple cards -->
+                    <!-- Current Card - MINIMIZED -->
                     <div class="current-card-section">
                         <div class="card-navigation">
-                            <button class="card-nav-btn" id="prev-card" onclick="navigateCard(-1)">◀ Prev</button>
-                            <span class="card-counter" id="card-counter">Card <span id="current-card-index">1</span>/<span id="total-cards-count">0</span></span>
-                            <button class="card-nav-btn" id="next-card" onclick="navigateCard(1)">Next ▶</button>
+                            <button class="card-nav-btn" id="prev-card" onclick="navigateCard(-1)">◀</button>
+                            <span class="card-counter" id="card-counter"><span id="current-card-index">1</span>/<span id="total-cards-count">0</span></span>
+                            <button class="card-nav-btn" id="next-card" onclick="navigateCard(1)">▶</button>
                         </div>
                         <div class="card-title">
                             Card #<span id="current-card-id">0</span>
@@ -575,14 +601,6 @@
                 
                 <!-- Right Column -->
                 <div class="game-right">
-                    <!-- Balance Display -->
-                    <div class="balance-display">
-                        <div>Your Balance</div>
-                        <div class="balance-amount" id="game-balance">{{ initial_balance }} ETB</div>
-                    </div>
-                    
-                    <!-- REMOVED: Prize Pool Display -->
-                    
                     <!-- Auto-mark -->
                     <div class="auto-mark">
                         <label>
@@ -592,11 +610,11 @@
                     
                     <!-- Auto-start timer display -->
                     <div class="auto-start-timer" id="auto-start-timer">
-                        ⏱️ Game starting in <span id="timer-seconds">30</span>s
+                        ⏱️ Starting in <span id="timer-seconds">30</span>s
                     </div>
                     
                     <!-- BINGO Button -->
-                    <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 CLAIM BINGO!</button>
+                    <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 BINGO!</button>
                     
                     <!-- Players List -->
                     <div class="players-list" id="players-list"></div>
@@ -619,14 +637,13 @@
         // Game settings
         const TOTAL_NUMBERS = 75;
         const TOTAL_CARDS = 1000;
-        const HOUSE_COMMISSION = 0.2; // 20% house fee
         
         // State
         let ws = null;
         let selectedCards = [];
-        let myCards = {}; // card_id -> card data
-        let myCardIds = []; // array of card IDs for navigation
-        let marked = {}; // card_id -> array of marked numbers
+        let myCards = {};
+        let myCardIds = [];
+        let marked = {};
         let called = [];
         let players = [];
         let takenCards = new Set();
@@ -634,7 +651,7 @@
         let gameEnded = false;
         let currentRound = 1;
         let currentWinner = null;
-        let currentCardIndex = 0; // Index in myCardIds array
+        let currentCardIndex = 0;
         let currentCardId = null;
         let balance = {{ initial_balance }};
         let activeGames = {{ initial_active_games }};
@@ -677,6 +694,15 @@
             document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
         }
         
+        // Update winner balance display
+        function updateWinnerBalance(amount) {
+            const winnerBalanceEl = document.getElementById('winner-balance-display');
+            winnerBalanceEl.textContent = `🏆 Winner: ${amount} ETB`;
+            setTimeout(() => {
+                winnerBalanceEl.textContent = '';
+            }, 10000);
+        }
+        
         // Start auto-start timer
         function startAutoStartTimer() {
             if (autoStartTimer) {
@@ -711,7 +737,6 @@
             document.getElementById('current-card-id').textContent = currentCardId;
             document.getElementById('current-card-index').textContent = currentCardIndex + 1;
             
-            // Update navigation buttons
             document.getElementById('prev-card').disabled = myCardIds.length <= 1;
             document.getElementById('next-card').disabled = myCardIds.length <= 1;
             
@@ -759,7 +784,6 @@
                         document.getElementById('auto-start-timer').style.display = 'none';
                     }
                     
-                    // Start auto-start timer if game hasn't started and there are cards
                     if (!gameStarted && data.auto_start_active) {
                         startAutoStartTimer();
                     }
@@ -768,15 +792,12 @@
                     myCards[data.card_id] = data.card;
                     marked[data.card_id] = data.marked || [];
                     
-                    // Add to card IDs array if not already present
                     if (!myCardIds.includes(data.card_id)) {
                         myCardIds.push(data.card_id);
                     }
                     
-                    // Update card counter
                     document.getElementById('total-cards-count').textContent = myCardIds.length;
                     
-                    // Set current card if this is the first one
                     if (myCardIds.length === 1) {
                         currentCardId = data.card_id;
                         currentCardIndex = 0;
@@ -795,11 +816,9 @@
                             if (data.new_balance !== undefined && data.new_balance !== null) {
                                 balance = data.new_balance / 100;
                                 updateWallet();
-                                console.log('Balance updated to:', balance);
                             }
                         }
                         
-                        // Start auto-start timer on first card selection
                         startAutoStartTimer();
                     } else {
                         showMessage(`❌ ${data.message}`, 'error');
@@ -856,6 +875,9 @@
                     document.getElementById('winner-amount').textContent = `${data.prize} ETB`;
                     winnerDiv.style.display = 'block';
                     
+                    // Update winner balance in header
+                    updateWinnerBalance(data.prize);
+                    
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
                     updatePlayersList();
                     fetchBalance();
@@ -886,6 +908,7 @@
                     document.getElementById('winner-announcement').style.display = 'none';
                     document.getElementById('auto-start-timer').style.display = 'none';
                     document.getElementById('total-cards-count').textContent = '0';
+                    document.getElementById('winner-balance-display').textContent = '';
                     
                     if (autoStartTimer) {
                         clearInterval(autoStartTimer);
@@ -946,10 +969,8 @@
             console.log(`✅ Loaded ${TOTAL_CARDS} cards`);
         }
         
-        // Toggle card selection - Support multiple cards
+        // Toggle card selection
         function toggleCardSelection(cardId) {
-            console.log('Toggling card:', cardId);
-            
             if (gameStarted) {
                 showMessage('Game already started!', 'error');
                 return;
@@ -967,17 +988,13 @@
             
             const index = selectedCards.indexOf(cardId);
             if (index >= 0) {
-                // Deselect card
                 selectedCards.splice(index, 1);
-                console.log('Deselected card:', cardId, 'Remaining:', selectedCards.length);
             } else {
-                // Select card
                 if (selectedCards.length >= maxCards) {
                     showMessage(`Maximum ${maxCards} cards allowed`, 'error');
                     return;
                 }
                 
-                // Check balance before allowing selection
                 const totalCost = (selectedCards.length + 1) * pricePerCard;
                 if (totalCost > balance) {
                     showMessage('Insufficient balance! Please deposit.', 'error');
@@ -985,14 +1002,12 @@
                 }
                 
                 if (takenCards.has(cardId)) {
-                    showMessage(`Card #${cardId} is already taken by another player`, 'error');
+                    showMessage(`Card #${cardId} is already taken`, 'error');
                     return;
                 }
                 
                 selectedCards.push(cardId);
-                console.log('Selected card:', cardId, 'Total:', selectedCards.length);
                 
-                // Auto-send selection to server
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ 
                         type: 'select_cards',
@@ -1026,9 +1041,7 @@
         
         // Render current card
         function renderCurrentCard() {
-            if (!currentCardId || !myCards[currentCardId]) {
-                return;
-            }
+            if (!currentCardId || !myCards[currentCardId]) return;
             
             const card = myCards[currentCardId];
             const markedNumbers = marked[currentCardId] || [];
@@ -1063,7 +1076,6 @@
             }
         }
         
-        // Mark number on card
         function markNumber(cardId, num) {
             if (!gameStarted || num === 'FREE') return;
             const numInt = parseInt(num);
@@ -1079,15 +1091,12 @@
             }));
         }
         
-        // Check for BINGO - Winner detection (ONE ROW ONLY)
         function checkBingo() {
             if (!gameStarted || !currentCardId) return;
             
-            // Check if current card has bingo (ONE ROW ONLY)
             const card = myCards[currentCardId];
             const markedNumbers = marked[currentCardId] || [];
             
-            // Check ONLY rows for winner
             for (let row = 0; row < 5; row++) {
                 let rowComplete = true;
                 for (let col = 0; col < 5; col++) {
@@ -1106,7 +1115,6 @@
             showMessage('No complete row on this card yet!', 'error');
         }
         
-        // Claim BINGO
         function claimBingo(cardId) {
             showMessage('🎯 BINGO claimed! Verifying...', 'info');
             ws.send(JSON.stringify({
