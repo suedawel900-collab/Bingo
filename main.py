@@ -772,7 +772,7 @@ class IntegratedBingoGame:
             return
         
         self.game_started = True
-        self.stop_number_generation = False
+        self.stop_number_generation = False  # CRITICAL: Reset flag when starting new round
         logger.info(f"Round {self.round_number} started with {total_cards} cards")
         
         # Cancel auto-start timer if it exists
@@ -795,8 +795,12 @@ class IntegratedBingoGame:
         
         for n in numbers:
             # Check if we should stop number generation (winner found)
-            if self.stop_number_generation or self.game_winner.get(game_id):
-                logger.info(f"Stopping number generation for game {game_id} - winner already found")
+            if self.stop_number_generation:
+                logger.info(f"Stopping number generation for game {game_id} - stop flag set")
+                break
+            
+            if self.game_winner.get(game_id):
+                logger.info(f"Stopping number generation for game {game_id} - winner already exists")
                 break
             
             await asyncio.sleep(3)
@@ -951,15 +955,19 @@ class IntegratedBingoGame:
         await asyncio.sleep(ROUND_RESET_DELAY)
         await self.reset_round(game_id)
     
+    # FIXED: Reset round properly for next round
     async def reset_round(self, game_id: int = 1):
         """Reset for next round - Unlocks all cards"""
         self.round_number += 1
         self.called_numbers = []
         self.game_started = False
-        self.stop_number_generation = False
+        self.stop_number_generation = False  # CRITICAL: Reset this flag!
         self.auto_start_timer = None
         self.first_card_time = None
         self.reset_timer = None
+        
+        # Clear the game winner
+        self.game_winner[game_id] = None
         
         if game_id in self.active_games:
             # Clear called numbers
@@ -978,7 +986,7 @@ class IntegratedBingoGame:
             # CRITICAL: Clear taken cards to unlock all cards for next round
             self.taken_cards[game_id] = set()
             
-            logger.info(f"✅ Round {self.round_number} ready to start - All cards unlocked!")
+            logger.info(f"✅ Round {self.round_number} ready to start - All cards unlocked! Stop flag reset to {self.stop_number_generation}")
         
         # Broadcast reset to all players
         await self.broadcast(game_id, {
