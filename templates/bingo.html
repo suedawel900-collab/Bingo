@@ -23,7 +23,7 @@
             overflow: hidden;
         }
         
-        /* Header - UPDATED with balance display */
+        /* Header - with balance and winner prize */
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -59,10 +59,11 @@
             font-weight: bold;
             color: #4CAF50;
         }
-        .winner-balance {
+        .winner-prize-header {
             font-size: 14px;
             color: gold;
             margin-top: 2px;
+            font-weight: bold;
         }
         #status { 
             display: inline-block;
@@ -267,7 +268,7 @@
             box-shadow: 0 2px 5px rgba(76,175,80,0.3);
         }
         
-        /* Current Card - MINIMIZED */
+        /* Current Card - MINIMIZED, NO NAVIGATION BUTTONS */
         .current-card-section {
             background: #f8f9fa;
             border-radius: 8px;
@@ -290,33 +291,7 @@
             font-size: 12px;
         }
         
-        /* Card navigation for multiple cards - MINIMIZED */
-        .card-navigation {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 6px;
-        }
-        .card-nav-btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 15px;
-            padding: 3px 10px;
-            cursor: pointer;
-            font-size: 11px;
-        }
-        .card-nav-btn:hover {
-            background: #5a67d8;
-        }
-        .card-nav-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .card-counter {
-            font-size: 12px;
-            color: #666;
-        }
+        /* REMOVED: Card navigation buttons */
         
         /* BINGO Grid - MINIMIZED */
         .bingo-header {
@@ -373,8 +348,6 @@
         .game-right {
             width: 180px;
         }
-        
-        /* REMOVED: Balance Display from right column (moved to header) */
         
         /* Auto-mark */
         .auto-mark {
@@ -507,7 +480,7 @@
 </head>
 <body>
     <div class="game-container">
-        <!-- Header - UPDATED with balance display -->
+        <!-- Header - with balance and winner prize -->
         <div class="header">
             <div class="header-left">
                 <h1>🎯 BINGO</h1>
@@ -520,7 +493,7 @@
             <div class="header-right">
                 <div class="balance-label">Your Balance</div>
                 <div class="balance-value" id="game-balance">{{ initial_balance }} ETB</div>
-                <div class="winner-balance" id="winner-balance-display"></div>
+                <div class="winner-prize-header" id="winner-prize-header"></div>
             </div>
         </div>
         
@@ -578,15 +551,10 @@
                     <!-- Last Number -->
                     <div class="last-number" id="last-number">🎲 Ready</div>
                     
-                    <!-- Current Card - MINIMIZED -->
+                    <!-- Current Card - MINIMIZED, NO NAVIGATION BUTTONS -->
                     <div class="current-card-section">
-                        <div class="card-navigation">
-                            <button class="card-nav-btn" id="prev-card" onclick="navigateCard(-1)">◀</button>
-                            <span class="card-counter" id="card-counter"><span id="current-card-index">1</span>/<span id="total-cards-count">0</span></span>
-                            <button class="card-nav-btn" id="next-card" onclick="navigateCard(1)">▶</button>
-                        </div>
                         <div class="card-title">
-                            Card #<span id="current-card-id">0</span>
+                            Your Card: <span id="current-card-id">#0</span>
                         </div>
                         <div class="bingo-header">
                             <div>B</div>
@@ -665,6 +633,9 @@
         let autoStartTimer = null;
         let autoStartSeconds = AUTO_START_DELAY;
         
+        // Track multiple cards
+        let playerCards = []; // Array of card IDs for this player
+        
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             loadCards();
@@ -694,12 +665,12 @@
             document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
         }
         
-        // Update winner balance display
-        function updateWinnerBalance(amount) {
-            const winnerBalanceEl = document.getElementById('winner-balance-display');
-            winnerBalanceEl.textContent = `🏆 Winner: ${amount} ETB`;
+        // Update winner prize in header
+        function updateWinnerPrize(amount) {
+            const winnerPrizeEl = document.getElementById('winner-prize-header');
+            winnerPrizeEl.textContent = `🏆 Winner: ${amount} ETB`;
             setTimeout(() => {
-                winnerBalanceEl.textContent = '';
+                winnerPrizeEl.textContent = '';
             }, 10000);
         }
         
@@ -725,22 +696,6 @@
                     timerDisplay.style.display = 'none';
                 }
             }, 1000);
-        }
-        
-        // Navigate between multiple cards
-        function navigateCard(direction) {
-            if (myCardIds.length === 0) return;
-            
-            currentCardIndex = (currentCardIndex + direction + myCardIds.length) % myCardIds.length;
-            currentCardId = myCardIds[currentCardIndex];
-            
-            document.getElementById('current-card-id').textContent = currentCardId;
-            document.getElementById('current-card-index').textContent = currentCardIndex + 1;
-            
-            document.getElementById('prev-card').disabled = myCardIds.length <= 1;
-            document.getElementById('next-card').disabled = myCardIds.length <= 1;
-            
-            renderCurrentCard();
         }
         
         // WebSocket connection
@@ -792,17 +747,16 @@
                     myCards[data.card_id] = data.card;
                     marked[data.card_id] = data.marked || [];
                     
+                    // Add to card IDs array if not already present
                     if (!myCardIds.includes(data.card_id)) {
                         myCardIds.push(data.card_id);
+                        playerCards.push(data.card_id);
                     }
                     
-                    document.getElementById('total-cards-count').textContent = myCardIds.length;
-                    
-                    if (myCardIds.length === 1) {
-                        currentCardId = data.card_id;
-                        currentCardIndex = 0;
+                    // For single card display, just show the first/most recent card
+                    if (myCardIds.length > 0) {
+                        currentCardId = myCardIds[myCardIds.length - 1]; // Show most recent card
                         document.getElementById('current-card-id').textContent = currentCardId;
-                        document.getElementById('current-card-index').textContent = 1;
                     }
                     
                     renderCurrentCard();
@@ -875,8 +829,8 @@
                     document.getElementById('winner-amount').textContent = `${data.prize} ETB`;
                     winnerDiv.style.display = 'block';
                     
-                    // Update winner balance in header
-                    updateWinnerBalance(data.prize);
+                    // Update winner prize in header
+                    updateWinnerPrize(data.prize);
                     
                     showMessage(`🏆 ${data.winner.name} won!`, 'success');
                     updatePlayersList();
@@ -896,6 +850,7 @@
                     selectedCards = [];
                     myCards = {};
                     myCardIds = [];
+                    playerCards = [];
                     marked = {};
                     isReady = false;
                     takenCards.clear();
@@ -907,8 +862,7 @@
                     document.getElementById('last-number').textContent = '🎲 Ready';
                     document.getElementById('winner-announcement').style.display = 'none';
                     document.getElementById('auto-start-timer').style.display = 'none';
-                    document.getElementById('total-cards-count').textContent = '0';
-                    document.getElementById('winner-balance-display').textContent = '';
+                    document.getElementById('winner-prize-header').textContent = '';
                     
                     if (autoStartTimer) {
                         clearInterval(autoStartTimer);
@@ -988,8 +942,10 @@
             
             const index = selectedCards.indexOf(cardId);
             if (index >= 0) {
+                // Deselect card
                 selectedCards.splice(index, 1);
             } else {
+                // Select card
                 if (selectedCards.length >= maxCards) {
                     showMessage(`Maximum ${maxCards} cards allowed`, 'error');
                     return;
@@ -1041,7 +997,9 @@
         
         // Render current card
         function renderCurrentCard() {
-            if (!currentCardId || !myCards[currentCardId]) return;
+            if (!currentCardId || !myCards[currentCardId]) {
+                return;
+            }
             
             const card = myCards[currentCardId];
             const markedNumbers = marked[currentCardId] || [];
