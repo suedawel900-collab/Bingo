@@ -797,11 +797,16 @@ class IntegratedBingoGame:
         
         # Find the winning card ID (optional but useful)
         winning_card_id = None
+        winning_card_data = None
         if winner_id in self.active_games[game_id]['players']:
             player = self.active_games[game_id]['players'][winner_id]
             # In row-only mode, we don't know which card won, but we can pick any (or none)
             # For now, set to None or first card
             winning_card_id = player['card_ids'][0] if player['card_ids'] else None
+            if winning_card_id:
+                card = next((c for c in BINGO_CARDS if c['id'] == winning_card_id), None)
+                if card:
+                    winning_card_data = card['card']
         
         # Update winner's balance in database
         if winner_id in self.active_games[game_id]['players']:
@@ -831,7 +836,9 @@ class IntegratedBingoGame:
             'type': 'game_won',
             'winner': self.game_winner[game_id],
             'prize': winner_prize / 100,
-            'house_fee': house_cut / 100
+            'house_fee': house_cut / 100,
+            'winning_card': winning_card_data,       # Send winning card to all players
+            'winning_card_id': winning_card_id
         })
         
         # Send Telegram notification
@@ -897,14 +904,15 @@ deposit_conv = ConversationHandler(
     entry_points=[CommandHandler('deposit', deposit_command)],
     states={
         AMOUNT: [
-            CallbackQueryHandler(deposit_callback, pattern='^(pay_telebirr|pay_cbebirr|cancel_deposit)$', per_message=False),
+            CallbackQueryHandler(deposit_callback, pattern='^(pay_telebirr|pay_cbebirr|cancel_deposit)$'),  # removed per_message=False
             MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_amount)
         ],
         REFERENCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_reference)],
     },
     fallbacks=[CommandHandler('cancel', deposit_cancel)],
     name="deposit_conversation",
-    allow_reentry=True
+    allow_reentry=True,
+    per_message=False  # Add this to suppress the PTBUserWarning
 )
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
