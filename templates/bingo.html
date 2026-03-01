@@ -88,7 +88,7 @@
             background: #f44336;
         }
         
-        /* Info Bar - Round and Total Cards (instead of Players) */
+        /* Info Bar - Round and Total Cards */
         .info-bar {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -100,6 +100,21 @@
         .info-item { text-align: center; }
         .info-label { font-size: 11px; opacity: 0.9; }
         .info-value { font-size: 18px; font-weight: bold; }
+        
+        /* Prize Pool Info - Shows calculation */
+        .prize-info {
+            background: #fff3e0;
+            padding: 5px 10px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 11px;
+            color: #e65100;
+            text-align: center;
+        }
+        .prize-info span {
+            font-weight: bold;
+            color: #4CAF50;
+        }
         
         /* Reconnect Bar */
         .reconnect-bar {
@@ -479,6 +494,8 @@
             font-size: 12px;
             color: #2e7d32;
             font-weight: bold;
+            margin-bottom: 8px;
+            text-align: center;
         }
         
         /* Message */
@@ -533,7 +550,7 @@
             </div>
         </div>
         
-        <!-- Info Bar - Round and Total Cards (instead of Players) -->
+        <!-- Info Bar - Round and Total Cards -->
         <div class="info-bar">
             <div class="info-item">
                 <div class="info-label">Round</div>
@@ -543,6 +560,11 @@
                 <div class="info-label">Total Cards</div>
                 <div class="info-value" id="total-cards-sold">0</div>
             </div>
+        </div>
+        
+        <!-- Prize Info - Shows calculation -->
+        <div class="prize-info" id="prize-info">
+            Total: 0 cards × 10 ETB = 0 ETB | Winner (80%): 0 ETB
         </div>
         
         <!-- Reconnect Bar -->
@@ -637,6 +659,8 @@
         // Game settings
         const TOTAL_NUMBERS = 75;
         const TOTAL_CARDS = 1000;
+        const HOUSE_COMMISSION = 0.20; // 20% house fee
+        const WINNER_PERCENT = 0.80; // 80% to winner
         
         // State
         let ws = null;
@@ -656,6 +680,8 @@
         let activeGames = {{ initial_active_games }};
         let totalStake = {{ initial_stake }};
         let totalCardsSold = 0; // Track total cards sold in the game
+        let totalPrize = 0;
+        let winnerPrize = 0;
         let isReady = false;
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
@@ -703,11 +729,24 @@
             }, 10000);
         }
         
+        // Calculate prize based on total cards
+        function calculatePrize() {
+            totalCardsSold = players.reduce((sum, player) => sum + (player.card_count || 0), 0);
+            totalPrize = totalCardsSold * pricePerCard;
+            winnerPrize = totalPrize * WINNER_PERCENT;
+            
+            // Update prize info display
+            const prizeInfo = document.getElementById('prize-info');
+            prizeInfo.innerHTML = `Total: ${totalCardsSold} cards × ${pricePerCard} ETB = ${totalPrize.toFixed(2)} ETB | Winner (80%): <span>${winnerPrize.toFixed(2)} ETB</span>`;
+            
+            return winnerPrize;
+        }
+        
         // Update total cards sold display
         function updateTotalCardsSold() {
-            // Calculate total cards from all players
             totalCardsSold = players.reduce((sum, player) => sum + (player.card_count || 0), 0);
             document.getElementById('total-cards-sold').textContent = totalCardsSold;
+            calculatePrize(); // Update prize calculation whenever cards change
         }
         
         // Start auto-start timer
