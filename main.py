@@ -154,6 +154,9 @@ class IntegratedBingoGame:
         # Reset timer for next round
         self.reset_timer = None
         
+        # Flag to stop number generation
+        self.stop_number_generation = False
+        
         # Sync with existing game structure
         self.game_id = 1  # Default game ID
     
@@ -769,6 +772,7 @@ class IntegratedBingoGame:
             return
         
         self.game_started = True
+        self.stop_number_generation = False
         logger.info(f"Round {self.round_number} started with {total_cards} cards")
         
         # Cancel auto-start timer if it exists
@@ -785,14 +789,19 @@ class IntegratedBingoGame:
         asyncio.create_task(self.draw_numbers(game_id))
     
     async def draw_numbers(self, game_id: int = 1):
-        """Draw numbers every 3 seconds"""
+        """Draw numbers every 3 seconds - Stops when winner is found"""
         numbers = list(range(1, 76))
         random.shuffle(numbers)
         
         for n in numbers:
+            # Check if we should stop number generation (winner found)
+            if self.stop_number_generation or self.game_winner.get(game_id):
+                logger.info(f"Stopping number generation for game {game_id} - winner already found")
+                break
+            
             await asyncio.sleep(3)
             
-            if not self.game_started or self.game_winner.get(game_id):
+            if not self.game_started or self.game_winner.get(game_id) or self.stop_number_generation:
                 break
             
             self.called_numbers.append(n)
@@ -809,6 +818,8 @@ class IntegratedBingoGame:
             # Check for winner (ONE ROW COMPLETE)
             winner = await self.check_winner_row_only(game_id, n)
             if winner:
+                logger.info(f"Winner found! Stopping number generation for game {game_id}")
+                self.stop_number_generation = True
                 await self.finish_round(game_id, winner)
                 break
     
@@ -870,6 +881,10 @@ class IntegratedBingoGame:
         """Finish the round and distribute prizes"""
         if game_id not in self.active_games:
             return
+        
+        # Stop number generation
+        self.stop_number_generation = True
+        logger.info(f"Finishing round {game_id} - stopping number generation")
         
         prize_pool = self.active_games[game_id]['prize_pool']
         house_cut = prize_pool * HOUSE_PERCENT
@@ -941,6 +956,7 @@ class IntegratedBingoGame:
         self.round_number += 1
         self.called_numbers = []
         self.game_started = False
+        self.stop_number_generation = False
         self.auto_start_timer = None
         self.first_card_time = None
         self.reset_timer = None
@@ -1091,7 +1107,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎮 Click to open game\n\n"
             f"⏱️ Game will auto-start {AUTO_START_DELAY} seconds after first card is selected!\n\n"
             f"💰 Your balance: {user_data['balance']/100:.2f} ETB\n\n"
-            f"🏆 WINNING PATTERN: Complete ONE ROW to win!",
+            f"🏆 WINNING PATTERN: Complete ONE ROW to win!\n"
+            f"⏹️ Numbers stop automatically when someone wins!",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🎮 Open Game", web_app={'url': webapp_url})
             ]])
@@ -1161,8 +1178,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "4. Numbers are called automatically every 3 seconds\n"
             "5. Mark numbers on your cards as they are called\n"
             "6. Complete ONE ROW to win!\n"
-            "7. Winner gets 90% of the prize pool!\n"
-            "8. Game resets automatically after 10 seconds for next round\n\n"
+            "7. Numbers stop immediately when someone wins!\n"
+            "8. Winner gets 90% of the prize pool!\n"
+            "9. Game resets automatically after 10 seconds for next round\n\n"
             f"Price per Card: {CARD_PRICE/100} ETB\n"
             f"House Fee: 20%\n\n"
             "Deposit Methods:\n"
@@ -1573,7 +1591,7 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "initial_stake": db.get_total_stake(user_id) / 100,
         "auto_start_delay": AUTO_START_DELAY,
         "round_reset_delay": ROUND_RESET_DELAY,
-        "winning_pattern": "Complete ONE ROW to win!"
+        "winning_pattern": "Complete ONE ROW to win! Numbers stop automatically!"
     })
 
 # ==================== WEBSOCKET ENDPOINT ====================
@@ -1636,6 +1654,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     # Use the row-only winner check
                     winner_id = await game_manager.check_winner_row_only(game_id, game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0)
                     if winner_id == user_id:
+                        # Stop number generation immediately
+                        game_manager.stop_number_generation = True
                         await game_manager.finish_round(game_id, user_id)
                     else:
                         await websocket.send_json({
