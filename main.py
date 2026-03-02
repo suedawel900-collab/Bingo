@@ -298,7 +298,7 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>Instructions:</b>\n"
             f"{method_info['instructions']}\n\n"
             f"✅ After sending the money, please <b>send the transaction ID</b> here.\n\n"
-            f"<i>Example: <code>TRX123456</code></i>")
+            f"<i>Example: <code>TRX123456 OR screenshot</code></i>")
     await context.bot.send_message(
         chat_id=user_id,
         text=text,
