@@ -57,13 +57,13 @@ ROUND_RESET_DELAY = 10
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
-        "account": "0983994214",  # Updated account number
+        "account": "0983994214",
         "account_name": "Bingo Bot",
         "instructions": "Dial *127# and send money to 0983994214"
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "0983994214",  # Updated account number
+        "account": "0983994214",
         "account_name": "Bingo Bot",
         "instructions": "Dial *847# and send money to 0983994214"
     }
@@ -228,7 +228,7 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SELECT_AMOUNT
 
 async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle amount selection."""
+    """Handle amount selection with fallback if edit fails."""
     query = update.callback_query
     user_id = update.effective_user.id
     logger.info(f"Amount callback from user {user_id}: {query.data}")
@@ -236,7 +236,7 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await query.answer()
     except BadRequest as e:
-        logger.warning(f"Callback query expired: {e}")
+        logger.warning(f"Callback query answer failed: {e}")
 
     if query.data == "cancel_deposit":
         try:
@@ -269,17 +269,35 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
     # Show account details and ask for transaction ID
-    await query.edit_message_text(
-        f"💰 **{method_info['name']} Deposit**\n\n"
-        f"💵 Amount: **{amount} ETB**\n"
-        f"🏦 Account: `{method_info['account']}`\n"
-        f"Account Name: {method_info['account_name']}\n\n"
-        f"**Instructions:**\n"
-        f"{method_info['instructions']}\n\n"
-        f"✅ After sending the money, please **send the transaction ID** here.\n\n"
-        f"_(Example: `TRX123456`)_",
-        parse_mode='Markdown'
-    )
+    try:
+        # Try to edit the current message
+        await query.edit_message_text(
+            f"💰 **{method_info['name']} Deposit**\n\n"
+            f"💵 Amount: **{amount} ETB**\n"
+            f"🏦 Account: `{method_info['account']}`\n"
+            f"Account Name: {method_info['account_name']}\n\n"
+            f"**Instructions:**\n"
+            f"{method_info['instructions']}\n\n"
+            f"✅ After sending the money, please **send the transaction ID** here.\n\n"
+            f"_(Example: `TRX123456`)_",
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        # If editing fails, send a new message instead
+        logger.error(f"Failed to edit message for amount {amount}: {e}. Sending new message.")
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=f"💰 **{method_info['name']} Deposit**\n\n"
+                 f"💵 Amount: **{amount} ETB**\n"
+                 f"🏦 Account: `{method_info['account']}`\n"
+                 f"Account Name: {method_info['account_name']}\n\n"
+                 f"**Instructions:**\n"
+                 f"{method_info['instructions']}\n\n"
+                 f"✅ After sending the money, please **send the transaction ID** here.\n\n"
+                 f"_(Example: `TRX123456`)_",
+            parse_mode='Markdown'
+        )
+
     return WAIT_TRANSACTION
 
 async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -376,7 +394,7 @@ async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# ==================== Withdrawal Handlers (unchanged) ====================
+# ==================== Withdrawal Handlers ====================
 async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_user(user.id) or db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
@@ -507,7 +525,7 @@ async def withdraw_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Withdrawal cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# ==================== Game Class (unchanged) ====================
+# ==================== Game Class ====================
 class IntegratedBingoGame:
     def __init__(self):
         self.round_number = 1
