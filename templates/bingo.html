@@ -49,6 +49,9 @@
             background: rgba(255,255,255,0.1);
             padding: 8px 15px;
             border-radius: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         .balance-label {
             font-size: 11px;
@@ -64,6 +67,20 @@
             color: gold;
             margin-top: 2px;
             font-weight: bold;
+        }
+        .back-to-rooms-btn {
+            background: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 5px 15px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .back-to-rooms-btn:hover {
+            background: #f57c00;
         }
         #status { 
             display: inline-block;
@@ -599,7 +616,7 @@
         <div class="header">
             <div class="header-left">
                 <h1>🎯 MK-BINGO</h1>
-                <p>Game #<span id="game-id">{{ game_id }}</span> | Player: <span id="player-id">{{ user_id }}</span></p>
+                <p>Game #<span id="game-id">{{ game_id }}</span> | Player: <span id="player-id">{{ user_id }}</span> | Room: {{ game_id }} ({{ pattern }})</p>
                 <div>
                     <span id="status">⏳ WAITING</span>
                     <span id="connection-status" class="connection-status">✅ Connected</span>
@@ -609,6 +626,7 @@
                 <div class="balance-label">Your Balance</div>
                 <div class="balance-value" id="game-balance">{{ initial_balance }} ETB</div>
                 <div class="winner-prize-header" id="winner-prize-header"></div>
+                <button class="back-to-rooms-btn" onclick="goBackToRooms()" title="Back to Room Selection">🚪 Rooms</button>
             </div>
         </div>
         
@@ -767,6 +785,11 @@
             connectWebSocket();
             fetchBalance();
         });
+        
+        // Go back to rooms
+        function goBackToRooms() {
+            window.location.href = `/rooms?user_id=${userId}`;
+        }
         
         // Fetch balance
         async function fetchBalance() {
@@ -1184,6 +1207,9 @@
                     if (isProcessing) {
                         isProcessing = false;
                     }
+                }
+                else if (data.type === 'auto_start_timer') {
+                    startAutoStartTimer();
                 }
             };
             
