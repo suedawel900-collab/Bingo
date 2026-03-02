@@ -118,7 +118,7 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# ==================== Deposit Handlers (Robust Version) ====================
+# ==================== Deposit Handlers (HTML version, robust) ====================
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"User {user_id} started deposit via /deposit")
@@ -130,8 +130,8 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "💰 **Deposit Menu**\n\nChoose your payment method:",
-        parse_mode='Markdown',
+        "💰 <b>Deposit Menu</b>\n\nChoose your payment method:",
+        parse_mode='HTML',
         reply_markup=reply_markup
     )
     return SELECT_METHOD
@@ -155,16 +155,16 @@ async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         await query.edit_message_text(
-            "💰 **Deposit Menu**\n\nChoose your payment method:",
-            parse_mode='Markdown',
+            "💰 <b>Deposit Menu</b>\n\nChoose your payment method:",
+            parse_mode='HTML',
             reply_markup=reply_markup
         )
     except Exception as e:
         logger.error(f"Failed to edit message: {e}, sending new")
         await context.bot.send_message(
             chat_id=user_id,
-            text="💰 **Deposit Menu**\n\nChoose your payment method:",
-            parse_mode='Markdown',
+            text="💰 <b>Deposit Menu</b>\n\nChoose your payment method:",
+            parse_mode='HTML',
             reply_markup=reply_markup
         )
     return SELECT_METHOD
@@ -211,17 +211,17 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         await query.edit_message_text(
-            f"💰 **{method_info['name']} Deposit**\n\n"
-            f"**Choose an amount:**",
-            parse_mode='Markdown',
+            f"💰 <b>{method_info['name']} Deposit</b>\n\n"
+            f"<b>Choose an amount:</b>",
+            parse_mode='HTML',
             reply_markup=reply_markup
         )
     except Exception as e:
         logger.error(f"Edit failed, sending new: {e}")
         await context.bot.send_message(
             chat_id=user_id,
-            text=f"💰 **{method_info['name']} Deposit**\n\n**Choose an amount:**",
-            parse_mode='Markdown',
+            text=f"💰 <b>{method_info['name']} Deposit</b>\n\n<b>Choose an amount:</b>",
+            parse_mode='HTML',
             reply_markup=reply_markup
         )
     return SELECT_AMOUNT
@@ -286,18 +286,19 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Failed to delete old message: {e}")
 
-    # Send a brand new message with account instructions
+    # Send a brand new message with account instructions – using HTML
+    text = (f"💰 <b>{method_info['name']} Deposit</b>\n\n"
+            f"💵 Amount: <b>{amount} ETB</b>\n"
+            f"🏦 Account: <code>{method_info['account']}</code>\n"
+            f"Account Name: {method_info['account_name']}\n\n"
+            f"<b>Instructions:</b>\n"
+            f"{method_info['instructions']}\n\n"
+            f"✅ After sending the money, please <b>send the transaction ID</b> here.\n\n"
+            f"<i>Example: <code>TRX123456</code></i>")
     await context.bot.send_message(
         chat_id=user_id,
-        text=f"💰 **{method_info['name']} Deposit**\n\n"
-             f"💵 Amount: **{amount} ETB**\n"
-             f"🏦 Account: `{method_info['account']}`\n"
-             f"Account Name: {method_info['account_name']}\n\n"
-             f"**Instructions:**\n"
-             f"{method_info['instructions']}\n\n"
-             f"✅ After sending the money, please **send the transaction ID** here.\n\n"
-             f"_(Example: `TRX123456`)_",
-        parse_mode='Markdown'
+        text=text,
+        parse_mode='HTML'
     )
     logger.info(f"Sent new instructions for amount {amount} to user {user_id}")
 
@@ -352,16 +353,16 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Failed to add payment proof: {e}")
         # Non-critical, continue
 
-    # Notify user
+    # Notify user – using HTML
     await update.message.reply_text(
-        f"✅ **Payment Report Submitted!**\n\n"
-        f"💰 **Amount:** {amount} ETB\n"
-        f"💳 **Method:** {method_info['name']}\n"
-        f"🆔 **Request ID:** `{request_id}`\n"
-        f"🔢 **Transaction ID:** `{trx_id}`\n\n"
+        f"✅ <b>Payment Report Submitted!</b>\n\n"
+        f"💰 <b>Amount:</b> {amount} ETB\n"
+        f"💳 <b>Method:</b> {method_info['name']}\n"
+        f"🆔 <b>Request ID:</b> <code>{request_id}</code>\n"
+        f"🔢 <b>Transaction ID:</b> <code>{trx_id}</code>\n\n"
         f"⏳ Admin will verify your payment shortly.\n"
         f"You'll be notified once your balance is updated.",
-        parse_mode='Markdown',
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
         ]])
@@ -377,14 +378,14 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         admin_message = await context.bot.send_message(
             chat_id=ADMIN_USER_ID,
-            text=f"💰 **New Payment Request**\n\n"
-                 f"👤 **User:** {update.effective_user.first_name}\n"
-                 f"🆔 **User ID:** `{user_id}`\n"
-                 f"💰 **Amount:** {amount} ETB\n"
-                 f"💳 **Method:** {method_info['name']}\n"
-                 f"🆔 **Request ID:** `{request_id}`\n"
-                 f"🔢 **Transaction ID:** `{trx_id}`",
-            parse_mode='Markdown',
+            text=f"💰 <b>New Payment Request</b>\n\n"
+                 f"👤 <b>User:</b> {update.effective_user.first_name}\n"
+                 f"🆔 <b>User ID:</b> <code>{user_id}</code>\n"
+                 f"💰 <b>Amount:</b> {amount} ETB\n"
+                 f"💳 <b>Method:</b> {method_info['name']}\n"
+                 f"🆔 <b>Request ID:</b> <code>{request_id}</code>\n"
+                 f"🔢 <b>Transaction ID:</b> <code>{trx_id}</code>",
+            parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         context.bot_data[f"admin_msg_{request_id}"] = {
@@ -406,15 +407,15 @@ async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# ==================== Withdrawal Handlers (unchanged) ====================
+# ==================== Withdrawal Handlers (unchanged, but ensure they don't use Markdown that fails) ====================
 async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_user(user.id) or db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
     balance = user_data['balance'] / 100
     await update.message.reply_text(
-        f"💸 **Withdrawal**\n\nYour current balance: **{balance:.2f} ETB**\n"
-        f"Minimum withdrawal: **10 ETB**\n\nPlease enter the amount you want to withdraw (10-{balance:.2f} ETB):",
-        parse_mode='Markdown'
+        f"💸 <b>Withdrawal</b>\n\nYour current balance: <b>{balance:.2f} ETB</b>\n"
+        f"Minimum withdrawal: <b>10 ETB</b>\n\nPlease enter the amount you want to withdraw (10-{balance:.2f} ETB):",
+        parse_mode='HTML'
     )
     return WITHDRAW_AMOUNT
 
@@ -433,17 +434,17 @@ async def withdraw_start_callback(update: Update, context: ContextTypes.DEFAULT_
 
     try:
         await query.edit_message_text(
-            f"💸 **Withdrawal**\n\nYour current balance: **{balance:.2f} ETB**\n"
-            f"Minimum withdrawal: **10 ETB**\n\nPlease enter the amount you want to withdraw (10-{balance:.2f} ETB):",
-            parse_mode='Markdown'
+            f"💸 <b>Withdrawal</b>\n\nYour current balance: <b>{balance:.2f} ETB</b>\n"
+            f"Minimum withdrawal: <b>10 ETB</b>\n\nPlease enter the amount you want to withdraw (10-{balance:.2f} ETB):",
+            parse_mode='HTML'
         )
     except Exception as e:
         logger.error(f"Edit failed, sending new: {e}")
         await context.bot.send_message(
             chat_id=user.id,
-            text=f"💸 **Withdrawal**\n\nYour current balance: **{balance:.2f} ETB**\n"
-                 f"Minimum withdrawal: **10 ETB**\n\nPlease enter the amount you want to withdraw (10-{balance:.2f} ETB):",
-            parse_mode='Markdown'
+            text=f"💸 <b>Withdrawal</b>\n\nYour current balance: <b>{balance:.2f} ETB</b>\n"
+                 f"Minimum withdrawal: <b>10 ETB</b>\n\nPlease enter the amount you want to withdraw (10-{balance:.2f} ETB):",
+            parse_mode='HTML'
         )
     return WITHDRAW_AMOUNT
 
@@ -470,8 +471,8 @@ async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['withdraw_amount_etb'] = amount
 
         await update.message.reply_text(
-            "📱 **Enter your phone number** (the one registered with your mobile money):\nExample: `0983994214`",
-            parse_mode='Markdown'
+            "📱 <b>Enter your phone number</b> (the one registered with your mobile money):\nExample: <code>0983994214</code>",
+            parse_mode='HTML'
         )
         return WITHDRAW_PHONE
     except ValueError:
@@ -502,13 +503,13 @@ async def withdraw_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         admin_message = await context.bot.send_message(
             chat_id=ADMIN_USER_ID,
-            text=f"💸 **New Withdrawal Request**\n\n"
-                 f"👤 **User:** {user.first_name}\n"
-                 f"🆔 **User ID:** `{user.id}`\n"
-                 f"💰 **Amount:** {amount_etb:.2f} ETB\n"
-                 f"📱 **Phone:** {phone}\n"
-                 f"🆔 **Request ID:** `{request_id}`",
-            parse_mode='Markdown',
+            text=f"💸 <b>New Withdrawal Request</b>\n\n"
+                 f"👤 <b>User:</b> {user.first_name}\n"
+                 f"🆔 <b>User ID:</b> <code>{user.id}</code>\n"
+                 f"💰 <b>Amount:</b> {amount_etb:.2f} ETB\n"
+                 f"📱 <b>Phone:</b> {phone}\n"
+                 f"🆔 <b>Request ID:</b> <code>{request_id}</code>",
+            parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         context.bot_data[f"admin_withdraw_msg_{request_id}"] = {
@@ -519,12 +520,12 @@ async def withdraw_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Failed to notify admin about withdrawal: {e}")
 
     await update.message.reply_text(
-        f"✅ **Withdrawal Request Submitted!**\n\n"
+        f"✅ <b>Withdrawal Request Submitted!</b>\n\n"
         f"💰 Amount: {amount_etb:.2f} ETB\n"
         f"📱 Phone: {phone}\n"
-        f"🆔 Request ID: `{request_id}`\n\n"
+        f"🆔 Request ID: <code>{request_id}</code>\n\n"
         f"⏳ Admin will process your request shortly.",
-        parse_mode='Markdown',
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
         ]])
