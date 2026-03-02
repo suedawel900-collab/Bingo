@@ -181,14 +181,16 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "cancel_deposit":
         try:
-            await query.edit_message_text(
-                "❌ Deposit cancelled.",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
-                ]])
-            )
+            await query.delete_message()
         except Exception as e:
-            logger.error(f"Failed to edit cancel message: {e}")
+            logger.error(f"Failed to delete cancel message: {e}")
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="❌ Deposit cancelled.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+            ]])
+        )
         return ConversationHandler.END
 
     # Store payment method
@@ -236,14 +238,16 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "cancel_deposit":
         try:
-            await query.edit_message_text(
-                "❌ Deposit cancelled.",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
-                ]])
-            )
+            await query.delete_message()
         except Exception as e:
-            logger.error(f"Failed to edit cancel message: {e}")
+            logger.error(f"Failed to delete cancel message: {e}")
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="❌ Deposit cancelled.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+            ]])
+        )
         return ConversationHandler.END
 
     # Parse amount
@@ -259,7 +263,7 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Amount must be between 10 and 1000 ETB. Please choose again.")
         return SELECT_AMOUNT
 
-    # Retrieve payment method from user_data (if missing, restart)
+    # Retrieve payment method from user_data
     method = context.user_data.get('payment_method')
     if not method:
         logger.warning(f"User {user_id} had no payment_method in user_data – restarting")
@@ -275,38 +279,29 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['deposit_amount'] = amount
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
-    # Try to edit the current message
+    # Delete the old message with buttons (clean up)
     try:
-        await query.edit_message_text(
-            f"💰 **{method_info['name']} Deposit**\n\n"
-            f"💵 Amount: **{amount} ETB**\n"
-            f"🏦 Account: `{method_info['account']}`\n"
-            f"Account Name: {method_info['account_name']}\n\n"
-            f"**Instructions:**\n"
-            f"{method_info['instructions']}\n\n"
-            f"✅ After sending the money, please **send the transaction ID** here.\n\n"
-            f"_(Example: `TRX123456`)_",
-            parse_mode='Markdown'
-        )
-        logger.info(f"Successfully edited message for amount {amount}")
+        await query.delete_message()
+        logger.info(f"Deleted old amount selection message for user {user_id}")
     except Exception as e:
-        # If editing fails, send a new message
-        logger.error(f"Failed to edit message for amount {amount}: {e}. Sending new message.")
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"💰 **{method_info['name']} Deposit**\n\n"
-                 f"💵 Amount: **{amount} ETB**\n"
-                 f"🏦 Account: `{method_info['account']}`\n"
-                 f"Account Name: {method_info['account_name']}\n\n"
-                 f"**Instructions:**\n"
-                 f"{method_info['instructions']}\n\n"
-                 f"✅ After sending the money, please **send the transaction ID** here.\n\n"
-                 f"_(Example: `TRX123456`)_",
-            parse_mode='Markdown'
-        )
-        logger.info(f"Sent new message for amount {amount}")
+        logger.error(f"Failed to delete old message: {e}")
 
-    # Important: return the next state
+    # Send a brand new message with account instructions
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=f"💰 **{method_info['name']} Deposit**\n\n"
+             f"💵 Amount: **{amount} ETB**\n"
+             f"🏦 Account: `{method_info['account']}`\n"
+             f"Account Name: {method_info['account_name']}\n\n"
+             f"**Instructions:**\n"
+             f"{method_info['instructions']}\n\n"
+             f"✅ After sending the money, please **send the transaction ID** here.\n\n"
+             f"_(Example: `TRX123456`)_",
+        parse_mode='Markdown'
+    )
+    logger.info(f"Sent new instructions for amount {amount} to user {user_id}")
+
+    # Move to waiting for transaction ID
     return WAIT_TRANSACTION
 
 async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
