@@ -39,7 +39,7 @@ try:
 except ValueError:
     raise ValueError("ADMIN_USER_ID must be an integer")
 
-BOT_USERNAME = os.getenv('BOT_USERNAME', 'MK_BINGO_bot')  # Add this to Railway variables
+BOT_USERNAME = os.getenv('BOT_USERNAME', 'MK_BINGO_bot')
 RAILWAY_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'bingo-production-a078.up.railway.app')
 
 if not RAILWAY_URL.startswith('http'):
@@ -48,8 +48,9 @@ else:
     BASE_URL = RAILWAY_URL
 
 # Card prices (in cents)
-CARD_PRICE_DEFAULT = 1000      # 10.00 ETB for rooms 1 & 3
-CARD_PRICE_ROOM2 = 10000       # 100.00 ETB for room 2
+CARD_PRICE_ROOM1 = 1000        # 10.00 ETB for room 1 (Any Line)
+CARD_PRICE_ROOM2 = 10000       # 100.00 ETB for room 2 (Full House)
+CARD_PRICE_ROOM3 = 2000        # 20.00 ETB for room 3 (Full House)
 MAX_CARDS_PER_PLAYER = 20
 WELCOME_BONUS = 1000
 AUTO_START_DELAY = 30
@@ -656,10 +657,10 @@ class IntegratedBingoGame:
                     'last_winner': None,
                 }
                 # Set pattern based on room number
-                if game_id == 2:
-                    self.game_patterns[game_id] = "full_house"
-                else:
+                if game_id == 1:
                     self.game_patterns[game_id] = "any_line"
+                else:  # rooms 2 and 3 are full house
+                    self.game_patterns[game_id] = "full_house"
 
             self.game_connections[game_id].append(websocket)
             if user_id not in self.active_games[game_id]['players']:
@@ -676,6 +677,7 @@ class IntegratedBingoGame:
             active_games_count = db.get_active_games_count(user_id)
             total_stake = db.get_total_stake(user_id)
 
+            pattern_display = "አንድ መስመር" if game_id == 1 else "ፉል ሃውስ"
             await websocket.send_json({
                 'type': 'connected',
                 'taken_cards': list(self.taken_cards[game_id]),
@@ -690,7 +692,7 @@ class IntegratedBingoGame:
                 'total_stake': total_stake / 100,
                 'auto_start_delay': AUTO_START_DELAY,
                 'auto_start_active': game_id in self.auto_start_timers,
-                'pattern': self.game_patterns.get(game_id, "any_line")
+                'pattern': pattern_display
             })
 
             player = self.active_games[game_id]['players'][user_id]
@@ -769,10 +771,12 @@ class IntegratedBingoGame:
                     return False, f"Card {card_id} not found", 0, None
 
             # Determine card price based on room
-            if game_id == 2:
+            if game_id == 1:
+                price_per_card = CARD_PRICE_ROOM1
+            elif game_id == 2:
                 price_per_card = CARD_PRICE_ROOM2
-            else:
-                price_per_card = CARD_PRICE_DEFAULT
+            else:  # room 3
+                price_per_card = CARD_PRICE_ROOM3
 
             total_cost = len(card_ids) * price_per_card
             user = db.get_user(user_id)
@@ -977,6 +981,7 @@ class IntegratedBingoGame:
             if card:
                 winning_card_data = card['card']
 
+        pattern_display = "አንድ መስመር" if game_id == 1 else "ፉል ሃውስ"
         await self.broadcast(game_id, {
             'type': 'game_won',
             'winners': [
@@ -990,7 +995,8 @@ class IntegratedBingoGame:
             'total_prize': total_prize / 100,
             'house_fee': house_cut / 100,
             'winning_card': winning_card_data,
-            'winning_card_id': winners[0][1] if winners else None
+            'winning_card_id': winners[0][1] if winners else None,
+            'pattern': pattern_display
         })
 
         if self.bot_app:
@@ -1037,12 +1043,14 @@ class IntegratedBingoGame:
                 player['winner'] = False
 
         self.taken_cards[game_id] = set()
+        pattern_display = "አንድ መስመር" if game_id == 1 else "ፉል ሃውስ"
         logger.info(f"✅ Room {game_id} round {self.round_numbers[game_id]} ready - all cards unlocked")
         await self.broadcast(game_id, {
             'type': 'game_reset',
             'round': self.round_numbers[game_id],
             'players': self.get_players(game_id),
-            'countdown': 15
+            'countdown': 15,
+            'pattern': pattern_display
         })
 
 game_manager = IntegratedBingoGame()
@@ -1121,9 +1129,9 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "play":
         user_data = db.get_user(user.id)
-        if not user_data or user_data['balance'] < CARD_PRICE_DEFAULT:
+        if not user_data or user_data['balance'] < CARD_PRICE_ROOM1:
             await query.edit_message_text(
-                f"❌ Insufficient balance. Need {CARD_PRICE_DEFAULT/100} ETB minimum.",
+                f"❌ Insufficient balance. Need {CARD_PRICE_ROOM1/100} ETB minimum.",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("💳 Deposit", callback_data="deposit_start"),
                     InlineKeyboardButton("◀️ Back", callback_data="menu")
@@ -1154,15 +1162,21 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif data == "help":
         help_text = (
-            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose a room in the web app\n"
-            "   - Room 1 & 3: Win by completing any line (row, column, diagonal) – 10 ETB/card\n"
-            "   - Room 2: Win by covering all numbers on your card (Full House) – 100 ETB/card, manual start by admin\n"
-            "3. Choose cards (1-1000)\n4. Game auto-starts 30s after 5 cards are purchased (rooms 1&3) or admin starts (room2)\n"
-            "5. Numbers called every 3 seconds\n6. If multiple players win on the same number, the prize is split equally!\n\n"
-            f"Price (rooms 1&3): {CARD_PRICE_DEFAULT/100} ETB per card\n"
-            f"Price (room 2): {CARD_PRICE_ROOM2/100} ETB per card\n\n"
-            "Deposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Choose an amount (50–10000 ETB)\n• Send the money and provide the transaction ID\n\n"
-            "Withdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
+            "❓ የቢንጎ ሮቦት እገዛ\n\nእንዴት እንደሚጫወት:\n"
+            "1. 'Play Bingo' ን ይጫኑ\n"
+            "2. በድረ-ገጹ ላይ ክፍል ይምረጡ\n"
+            "   - ክፍል 1: አንድ መስመር – 10 ብር/ካርድ (ራስ-ሰር ይጀምራል)\n"
+            "   - ክፍል 2: ፉል ሃውስ – 100 ብር/ካርድ (በአስተዳዳሪ ይጀምራል)\n"
+            "   - ክፍል 3: ፉል ሃውስ – 20 ብር/ካርድ (ራስ-ሰር ይጀምራል)\n"
+            "3. ካርዶችን ይምረጡ (1-1000)\n"
+            "4. ጨዋታው 5 ካርዶች ከተሸጡ በኋላ በ30 ሰከንድ ይጀምራል (ክፍል 1 እና 3)\n"
+            "5. ቁጥሮች በየ3 ሰከንድ ይጠራሉ\n"
+            "6. በተመሳሳይ ቁጥር ብዙ ተጫዋቾች ካሸነፉ ሽልማቱ በእኩል ይከፈላል!\n\n"
+            f"ዋጋ (ክፍል 1): {CARD_PRICE_ROOM1/100} ብር በካርድ\n"
+            f"ዋጋ (ክፍል 2): {CARD_PRICE_ROOM2/100} ብር በካርድ\n"
+            f"ዋጋ (ክፍል 3): {CARD_PRICE_ROOM3/100} ብር በካርድ\n\n"
+            "ተቀማጭ:\n• 'Deposit' ቁልፍን ይጫኑ\n• Telebirr ወይም CBE Birr ይምረጡ\n• መጠን ይምረጡ (50–10000 ብር)\n• ገንዘቡን ይላኩ እና የግብይት መለያውን ይላኩ\n\n"
+            "ማውጣት:\n• 'Withdraw' ቁልፍን ይጫኑ\n• መጠን እና ስልክ ቁጥር ያስገቡ\n• አስተዳዳሪው ያረጋግጣል እና ገንዘቡን ይልካል"
         )
         await query.edit_message_text(
             help_text,
@@ -1333,7 +1347,7 @@ async def setup_bot():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("cancel", deposit_cancel))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
-    application.add_handler(CommandHandler("startroom2", start_room2_command))  # new admin command
+    application.add_handler(CommandHandler("startroom2", start_room2_command))
     application.add_handler(CallbackQueryHandler(button_callback))
     await application.initialize()
     await application.start()
@@ -1371,21 +1385,24 @@ async def rooms_page(request: Request, user_id: int):
         "request": request,
         "user_id": user_id,
         "balance": user['balance'] / 100,
-        "price_room1": CARD_PRICE_DEFAULT / 100,
+        "price_room1": CARD_PRICE_ROOM1 / 100,
         "price_room2": CARD_PRICE_ROOM2 / 100,
-        "price_room3": CARD_PRICE_DEFAULT / 100,
+        "price_room3": CARD_PRICE_ROOM3 / 100,
         "bot_username": BOT_USERNAME
     })
 
 @app.get("/game", response_class=HTMLResponse)
 async def game_page(request: Request, user_id: int, game_id: int = 1):
     user = db.get_or_create_user(user_id)
-    if game_id == 2:
-        pattern = "Full House"
+    if game_id == 1:
+        pattern = "አንድ መስመር"
+        price = CARD_PRICE_ROOM1 / 100
+    elif game_id == 2:
+        pattern = "ፉል ሃውስ"
         price = CARD_PRICE_ROOM2 / 100
     else:
-        pattern = "Any Line"
-        price = CARD_PRICE_DEFAULT / 100
+        pattern = "ፉል ሃውስ"
+        price = CARD_PRICE_ROOM3 / 100
     return templates.TemplateResponse("bingo.html", {
         "request": request,
         "user_id": user_id,
@@ -1409,7 +1426,7 @@ async def webhook(request: Request):
 
 @app.get("/")
 async def root():
-    return {"status": "online", "cards": len(BINGO_CARDS), "price_per_card": CARD_PRICE_DEFAULT / 100, "max_cards_per_player": MAX_CARDS_PER_PLAYER}
+    return {"status": "online", "cards": len(BINGO_CARDS), "price_per_card": CARD_PRICE_ROOM1 / 100, "max_cards_per_player": MAX_CARDS_PER_PLAYER}
 
 @app.get("/health")
 async def health():
