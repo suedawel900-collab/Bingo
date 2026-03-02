@@ -61,15 +61,15 @@ ROUND_RESET_DELAY = 10
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
-        "account": "0947330067",
-        "account_name": "sued awel",
-        "instructions": "Dial *127# and send money to 0947330067"
+        "account": "0983994214",
+        "account_name": "Bingo Bot",
+        "instructions": "Dial *127# and send money to 0983994214"
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "0947330067",
-        "account_name": "suedawel",
-        "instructions": "Dial *847# and send money to 0947330067"
+        "account": "0983994214",
+        "account_name": "Bingo Bot",
+        "instructions": "Dial *847# and send money to 0983994214"
     }
 }
 
@@ -587,7 +587,233 @@ async def start_room2_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     await game_manager.start_round(game_id)
     await update.message.reply_text(f"✅ Room 2 started manually.")
 
-# ==================== Game Class (Multi‑Room with Patterns) ====================
+# ==================== REFERRAL SYSTEM ====================
+
+async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user's referral link and stats"""
+    user_id = update.effective_user.id
+    user = db.get_user(user_id)
+    
+    if not user:
+        await update.message.reply_text("❌ ተጠቃሚ አልተገኘም። እባክዎ በመጀመሪያ ቦቱን ይጀምሩ።")
+        return
+    
+    # Get or create referral code
+    referral_code = user.get('referral_code')
+    if not referral_code:
+        referral_code = db.generate_referral_code(user_id)
+        conn = db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET referral_code = ? WHERE user_id = ?", (referral_code, user_id))
+            conn.commit()
+        finally:
+            conn.close()
+    
+    # Get referral stats
+    stats = db.get_referral_stats(user_id)
+    
+    # Create referral link
+    bot_username = context.bot.username
+    referral_link = f"https://t.me/{bot_username}?start=ref_{referral_code}"
+    
+    # Build message
+    message = (
+        f"🎁 **የማስተዋወቂያ ስርዓት** 🎁\n\n"
+        f"🔗 **የእርስዎ ማስተዋወቂያ ሊንክ:**\n"
+        f"`{referral_link}`\n\n"
+        f"📊 **ስታቲስቲክስ:**\n"
+        f"• የተመዘገቡ ጓደኞች: {stats['total_referrals']}\n"
+        f"• በመጠባበቅ ላይ ያሉ: {stats['pending_bonuses']}\n"
+        f"• ጠቅላላ የተከፈለ: {stats['total_earnings']/100:.2f} ብር\n\n"
+        f"💡 **እንዴት እንደሚሰራ:**\n"
+        f"1. ከላይ ያለውን ሊንክ ለጓደኛዎ ይላኩ\n"
+        f"2. ጓደኛዎ ሊንኩን ጠቅ አድርጎ ቦቱን ይጀምር\n"
+        f"3. ጓደኛዎ ቢያንስ አንድ ጊዜ ገንዘብ ይሙላ\n"
+        f"4. እርስዎ **5 ብር** ያገኛሉ!\n\n"
+        f"🚀 ብዙ ጓደኞችዎን ይጋብዙ እና ገንዘብ ያግኙ!"
+    )
+    
+    # Add recent referrals if any
+    if stats['recent_referrals']:
+        message += "\n\n**የቅርብ ጊዜ መጋበዣዎች:**\n"
+        for ref in stats['recent_referrals'][:5]:
+            name = ref['first_name'] or f"User {ref['user_id']}"
+            date = datetime.fromisoformat(ref['created_at']).strftime("%Y-%m-%d")
+            status = "✅ ተከፍሏል" if ref.get('has_deposited') else "⏳ በመጠባበቅ ላይ"
+            message += f"• {name} - {date} - {status}\n"
+    
+    # Create keyboard
+    keyboard = [
+        [InlineKeyboardButton("📋 ሊንክ ቅዳ", callback_data="copy_link")],
+        [InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")]
+    ]
+    
+    await update.message.reply_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        disable_web_page_preview=True
+    )
+
+async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle referral button callbacks"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "copy_link":
+        user_id = update.effective_user.id
+        user = db.get_user(user_id)
+        referral_code = user.get('referral_code')
+        
+        if not referral_code:
+            referral_code = db.generate_referral_code(user_id)
+            conn = db.get_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE users SET referral_code = ? WHERE user_id = ?", (referral_code, user_id))
+                conn.commit()
+            finally:
+                conn.close()
+        
+        bot_username = context.bot.username
+        link = f"https://t.me/{bot_username}?start=ref_{referral_code}"
+        
+        # Copy to clipboard (show message)
+        await query.edit_message_text(
+            f"✅ ሊንክዎ ተዘጋጅቷል! ይህን ሊንክ ለጓደኛዎ ይላኩ:\n\n`{link}`\n\n"
+            f"ሊንኩን ለመቅዳት በላዩ ላይ ይንኩና Copy ይምረጡ።",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ ወደ ማስተዋወቂያ ተመለስ", callback_data="back_to_referral")
+            ]])
+        )
+    
+    elif query.data == "back_to_referral":
+        # Show referral stats again
+        user_id = update.effective_user.id
+        user = db.get_user(user_id)
+        stats = db.get_referral_stats(user_id)
+        bot_username = context.bot.username
+        referral_link = f"https://t.me/{bot_username}?start=ref_{user['referral_code']}"
+        
+        message = (
+            f"🎁 **የማስተዋወቂያ ስርዓት** 🎁\n\n"
+            f"🔗 **የእርስዎ ማስተዋወቂያ ሊንክ:**\n"
+            f"`{referral_link}`\n\n"
+            f"📊 **ስታቲስቲክስ:**\n"
+            f"• የተመዘገቡ ጓደኞች: {stats['total_referrals']}\n"
+            f"• በመጠባበቅ ላይ ያሉ: {stats['pending_bonuses']}\n"
+            f"• ጠቅላላ የተከፈለ: {stats['total_earnings']/100:.2f} ብር"
+        )
+        
+        keyboard = [
+            [InlineKeyboardButton("📋 ሊንክ ቅዳ", callback_data="copy_link")],
+            [InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")]
+        ]
+        
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+async def start_with_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command with referral code"""
+    user = update.effective_user
+    args = context.args
+    
+    referred_by = None
+    if args and args[0].startswith('ref_'):
+        referral_code = args[0][4:]  # Remove 'ref_' prefix
+        referrer = db.get_user_by_referral_code(referral_code)
+        if referrer and referrer['user_id'] != user.id:
+            referred_by = referrer['user_id']
+            logger.info(f"User {user.id} was referred by {referred_by}")
+    
+    # Create or get user with referred_by
+    user_data = db.get_or_create_user(
+        user_id=user.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        referred_by=referred_by
+    )
+    
+    balance = user_data['balance'] / 100
+    
+    # Custom welcome message based on whether they were referred
+    if referred_by:
+        referrer = db.get_user(referred_by)
+        referrer_name = referrer.get('first_name') or f"User {referred_by}"
+        welcome_text = (
+            f"🎉 እንኳን ደስ አለዎት! 🎉\n"
+            f"👤 በ {referrer_name} ተጋብዘዋል\n"
+            f"💰 {balance:.2f} ብር ተጠቃሚ ሁነዋል!\n"
+            f"📝 ማስታወሻ: አንዴ ገንዘብ ሲሞሉ የሚጋብዝዎ ሰው 5 ብር ያገኛል\n\n"
+            f"እድልዎ ተሳክቷል 🎯\n"
+            f"ቀጣዩ ዙር ይበልጥ ትልቅ ሊሆን ይችላል!\n"
+            f"👉 ካርድዎን እንደገና ይያዙ\n"
+            f"👉 ትልቅ ሽልማት ይሞክሩ\n"
+            f"👑 MK BINGO – እድል የሚቀይር ጨዋታ!"
+        )
+    else:
+        welcome_text = (
+            f"🎉 እንኳን ደስ አለዎት! 🎉\n"
+            f"💰 {balance:.2f} ብር ተጠቃሚ ሁነዋል!\n"
+            f"እድልዎ ተሳክቷል 🎯\n"
+            f"ቀጣዩ ዙር ይበልጥ ትልቅ ሊሆን ይችላል!\n"
+            f"👉 ካርድዎን እንደገና ይያዙ\n"
+            f"👉 ትልቅ ሽልማት ይሞክሩ\n\n"
+            f"💡 ጓደኞችዎን ይጋብዙ እና እያንዳንዳቸው ገንዘብ ሲሞሉ 5 ብር ያግኙ!\n"
+            f"ዝርዝር መረጃ ለማግኘት /refer ይጠቀሙ\n\n"
+            f"👑 MK BINGO – እድል የሚቀይር ጨዋታ!"
+        )
+    
+    keyboard = [
+        [InlineKeyboardButton("🎮 Play Bingo", callback_data="play")],
+        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
+        [InlineKeyboardButton("💳 Deposit", callback_data="deposit_start")],
+        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw_start")],
+        [InlineKeyboardButton("🎁 Referral", callback_data="referral")],
+        [InlineKeyboardButton("❓ Help", callback_data="help")]
+    ]
+    if str(user.id) == str(ADMIN_USER_ID):
+        keyboard.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
+    
+    await update.message.reply_text(
+        welcome_text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user's balance including referral earnings"""
+    user_id = update.effective_user.id
+    user_data = db.get_user(user_id)
+    
+    if not user_data:
+        user_data = db.get_or_create_user(user_id, update.effective_user.username, update.effective_user.first_name, update.effective_user.last_name)
+    
+    balance = user_data['balance'] / 100
+    referral_earnings = user_data.get('referral_earnings', 0) / 100
+    games_won = user_data.get('games_won', 0)
+    
+    # Get referral stats
+    stats = db.get_referral_stats(user_id)
+    
+    message = (
+        f"💰 **የእርስዎ ቀሪ ሂሳብ**\n\n"
+        f"ጠቅላላ ቀሪ: **{balance:.2f} ብር**\n"
+        f"ከጨዋታ ያገኙት: **{(balance - referral_earnings):.2f} ብር**\n"
+        f"ከማስተዋወቂያ ያገኙት: **{referral_earnings:.2f} ብር**\n"
+        f"ያሸነፉባቸው ጨዋታዎች: **{games_won}**\n\n"
+        f"👥 የተመዘገቡ ጓደኞች: **{stats['total_referrals']}**\n"
+        f"⏳ በመጠባበቅ ላይ ያሉ: **{stats['pending_bonuses']}**"
+    )
+    
+    await update.message.reply_text(message, parse_mode='Markdown')
+
+# ==================== Game Class ====================
 class IntegratedBingoGame:
     def __init__(self):
         # Per‑room data dictionaries
@@ -800,7 +1026,7 @@ class IntegratedBingoGame:
             self.active_games[game_id]['total_cards_sold'] += len(card_ids)
             self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * price_per_card
 
-            # 🔁 Auto‑start only for rooms 1 and 3 when total cards sold reaches 5
+            # Auto‑start only for rooms 1 and 3 when total cards sold reaches 5
             if game_id != 2 and not self.game_started.get(game_id, False) and self.active_games[game_id]['total_cards_sold'] >= 5:
                 if game_id not in self.auto_start_timers:
                     asyncio.create_task(self.start_auto_start_timer(game_id))
@@ -1093,29 +1319,8 @@ withdraw_conv = ConversationHandler(
 
 # ==================== Menu and Navigation ====================
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_data = db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
-    balance = user_data['balance'] / 100
-    keyboard = [
-        [InlineKeyboardButton("🎮 Play Bingo", callback_data="play")],
-        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
-        [InlineKeyboardButton("💳 Deposit", callback_data="deposit_start")],
-        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw_start")],
-        [InlineKeyboardButton("❓ Help", callback_data="help")]
-    ]
-    if str(user.id) == str(ADMIN_USER_ID):
-        keyboard.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
-
-    await update.message.reply_text(
-        f"🎉 እንኳን ደስ አለዎት! 🎉\n"
-        f"💰 {balance:.2f} ብር ተጠቃሚ ሁነዋል!\n"
-        f"እድልዎ ተሳክቷል 🎯\n"
-        f"ቀጣዩ ዙር ይበልጥ ትልቅ ሊሆን ይችላል!\n"
-        f"👉 ካርድዎን እንደገና ይያዙ\n"
-        f"👉 ትልቅ ሽልማት ይሞክሩ\n"
-        f"👑 MK BINGO – እድል የሚቀይር ጨዋታ!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    # This is kept for backward compatibility but we'll use start_with_referral as the main handler
+    await start_with_referral(update, context)
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1148,18 +1353,9 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]])
         )
     elif data == "balance":
-        user_data = db.get_user(user.id)
-        balance = user_data['balance'] / 100 if user_data else 0
-        active_games = db.get_active_games_count(user.id)
-        total_stake = db.get_total_stake(user.id) / 100
-        await query.edit_message_text(
-            f"💰 Your Balance\n\nCurrent: {balance:.2f} ETB\nActive Games: {active_games}\nTotal Stake: {total_stake:.2f} ETB",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("💳 Deposit", callback_data="deposit_start"),
-                InlineKeyboardButton("💸 Withdraw", callback_data="withdraw_start"),
-                InlineKeyboardButton("◀️ Back", callback_data="menu")
-            ]])
-        )
+        await balance_command(update, context)
+    elif data == "referral":
+        await referral_callback(update, context)
     elif data == "help":
         help_text = (
             "❓ የቢንጎ ሮቦት እገዛ\n\nእንዴት እንደሚጫወት:\n"
@@ -1176,7 +1372,8 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"ዋጋ (ክፍል 2): {CARD_PRICE_ROOM2/100} ብር በካርድ\n"
             f"ዋጋ (ክፍል 3): {CARD_PRICE_ROOM3/100} ብር በካርድ\n\n"
             "ተቀማጭ:\n• 'Deposit' ቁልፍን ይጫኑ\n• Telebirr ወይም CBE Birr ይምረጡ\n• መጠን ይምረጡ (50–10000 ብር)\n• ገንዘቡን ይላኩ እና የግብይት መለያውን ይላኩ\n\n"
-            "ማውጣት:\n• 'Withdraw' ቁልፍን ይጫኑ\n• መጠን እና ስልክ ቁጥር ያስገቡ\n• አስተዳዳሪው ያረጋግጣል እና ገንዘቡን ይልካል"
+            "ማውጣት:\n• 'Withdraw' ቁልፍን ይጫኑ\n• መጠን እና ስልክ ቁጥር ያስገቡ\n• አስተዳዳሪው ያረጋግጣል እና ገንዘቡን ይልካል\n\n"
+            "🎁 ማስተዋወቂያ:\n• /refer በመጠቀም ጓደኞችዎን ይጋብዙ\n• እያንዳንዱ ጓደኛዎ ገንዘብ ሲሞላ 5 ብር ያግኙ"
         )
         await query.edit_message_text(
             help_text,
@@ -1189,7 +1386,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending_payments = len(db.get_pending_payment_requests(limit=100))
         pending_withdrawals = len(db.get_pending_withdrawal_requests(limit=100))
         await query.edit_message_text(
-            f"👑 Admin Panel\n\nUsers: {stats['total_users']}\nTotal Balance: {stats['total_balance']/100:.2f} ETB\nPending Payments: {pending_payments}\nPending Withdrawals: {pending_withdrawals}",
+            f"👑 Admin Panel\n\nUsers: {stats['total_users']}\nTotal Balance: {stats['total_balance']/100:.2f} ETB\nPending Payments: {pending_payments}\nPending Withdrawals: {pending_withdrawals}\nPending Referrals: {stats.get('pending_referrals', 0)}",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📊 View Pending Payments", callback_data="admin_pending_payments")],
                 [InlineKeyboardButton("💸 View Pending Withdrawals", callback_data="admin_pending_withdrawals")],
@@ -1232,6 +1429,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("💰 Balance", callback_data="balance")],
             [InlineKeyboardButton("💳 Deposit", callback_data="deposit_start")],
             [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw_start")],
+            [InlineKeyboardButton("🎁 Referral", callback_data="referral")],
             [InlineKeyboardButton("❓ Help", callback_data="help")]
         ]
         if str(user.id) == str(ADMIN_USER_ID):
@@ -1248,20 +1446,56 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
     if not request:
         await query.edit_message_text("❌ Payment request not found")
         return
+    
     db.update_payment_request_status(request_id, 'completed', 'Approved by admin')
     result = db.update_balance(request['user_id'], request['amount'], 'deposit', f'Payment approved - {request_id}')
+    
     if result:
         await context.bot.send_message(
             request['user_id'],
             f"✅ Payment Approved!\n\nYour payment of {request['amount']/100:.2f} ETB has been approved.\nNew balance: {result['new_balance']/100:.2f} ETB"
         )
+        
+        # 🔥 Check if this user was referred and pay bonus to referrer
+        bonus_paid = db.check_and_pay_referral_bonus(request['user_id'])
+        if bonus_paid:
+            # Get referrer info to notify
+            conn = db.get_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT referred_by FROM users WHERE user_id = ?", (request['user_id'],))
+                referrer_id = cursor.fetchone()['referred_by']
+                
+                # Notify referrer
+                await context.bot.send_message(
+                    chat_id=referrer_id,
+                    text=f"🎁 **Referral Bonus Awarded!** 🎁\n\n"
+                         f"The user you referred (ID: {request['user_id']}) just made their first deposit!\n"
+                         f"You received **5 ETB** as a bonus!\n\n"
+                         f"💰 Check your balance with /balance",
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify referrer: {e}")
+            finally:
+                conn.close()
+        
         admin_msg = context.bot_data.get(f"admin_msg_{request_id}")
         if admin_msg:
             try:
-                await context.bot.edit_message_reply_markup(admin_msg['chat_id'], admin_msg['message_id'], reply_markup=None)
+                await context.bot.edit_message_reply_markup(
+                    admin_msg['chat_id'], 
+                    admin_msg['message_id'], 
+                    reply_markup=None
+                )
             except Exception as e:
                 logger.error(f"Failed to remove admin buttons: {e}")
-        await query.edit_message_text(f"✅ Payment Approved\n\nRequest ID: {request_id}\nAmount: {request['amount']/100:.2f} ETB")
+        
+        await query.edit_message_text(
+            f"✅ Payment Approved\n\n"
+            f"Request ID: {request_id}\n"
+            f"Amount: {request['amount']/100:.2f} ETB"
+        )
     else:
         await query.edit_message_text("❌ Failed to update balance")
 
@@ -1344,7 +1578,12 @@ async def setup_bot():
     application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
     application.add_handler(deposit_conv)
     application.add_handler(withdraw_conv)
-    application.add_handler(CommandHandler("start", start_command))
+    
+    # Replace the existing start handler with the referral-enabled one
+    application.add_handler(CommandHandler("start", start_with_referral))
+    application.add_handler(CommandHandler("refer", referral_command))
+    application.add_handler(CommandHandler("balance", balance_command))
+    
     application.add_handler(CommandHandler("cancel", deposit_cancel))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("startroom2", start_room2_command))
