@@ -63,13 +63,13 @@ PAYMENT_METHODS = {
         "name": "Telebirr",
         "account": "0947330067",
         "account_name": "sued awel",
-        "instructions": "Dial *127# and send money to 0983994214"
+        "instructions": "Dial *127# and send money to 0947330067"
     },
     "cbebirr": {
         "name": "CBE Birr",
         "account": "0947330067",
         "account_name": "suedawel",
-        "instructions": "Dial *847# and send money to 0983994214"
+        "instructions": "Dial *847# and send money to 0947330067"
     }
 }
 
