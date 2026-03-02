@@ -57,21 +57,21 @@ ROUND_RESET_DELAY = 10
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
-        "account": "0953933030",
+        "account": "0983994214",  # Updated account number
         "account_name": "Bingo Bot",
-        "instructions": "Dial *127# and send money to 0953933030"
+        "instructions": "Dial *127# and send money to 0983994214"
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "0953933030",
+        "account": "0983994214",  # Updated account number
         "account_name": "Bingo Bot",
-        "instructions": "Dial *847# and send money to 0953933030"
+        "instructions": "Dial *847# and send money to 0983994214"
     }
 }
 
 # Conversation states
-AMOUNT, REFERENCE = range(2)
-WITHDRAW_AMOUNT, WITHDRAW_PHONE = range(2, 4)
+SELECT_METHOD, SELECT_AMOUNT, WAIT_TRANSACTION = range(3)
+WITHDRAW_AMOUNT, WITHDRAW_PHONE = range(3, 5)
 
 logger.info(f"✅ Using BASE_URL: {BASE_URL}")
 
@@ -118,13 +118,14 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# ==================== Deposit Handlers ====================
+# ==================== Deposit Handlers (New Flow) ====================
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Entry point: show payment method buttons."""
     user_id = update.effective_user.id
     logger.info(f"User {user_id} started deposit via /deposit")
     keyboard = [
-        [InlineKeyboardButton("📱 Telebirr", callback_data="pay_telebirr")],
-        [InlineKeyboardButton("💳 CBE Birr", callback_data="pay_cbebirr")],
+        [InlineKeyboardButton("📱 Telebirr", callback_data="method_telebirr")],
+        [InlineKeyboardButton("💳 CBE Birr", callback_data="method_cbebirr")],
         [InlineKeyboardButton("◀️ Cancel", callback_data="cancel_deposit")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -134,9 +135,10 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
-    return AMOUNT
+    return SELECT_METHOD
 
 async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Entry point from main menu button."""
     query = update.callback_query
     user_id = update.effective_user.id
     logger.info(f"User {user_id} started deposit via button")
@@ -147,8 +149,8 @@ async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_T
         logger.warning(f"Callback answer failed: {e}")
 
     keyboard = [
-        [InlineKeyboardButton("📱 Telebirr", callback_data="pay_telebirr")],
-        [InlineKeyboardButton("💳 CBE Birr", callback_data="pay_cbebirr")],
+        [InlineKeyboardButton("📱 Telebirr", callback_data="method_telebirr")],
+        [InlineKeyboardButton("💳 CBE Birr", callback_data="method_cbebirr")],
         [InlineKeyboardButton("◀️ Cancel", callback_data="cancel_deposit")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -167,12 +169,13 @@ async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode='Markdown',
             reply_markup=reply_markup
         )
-    return AMOUNT
+    return SELECT_METHOD
 
-async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle payment method selection (Telebirr / CBE)."""
     query = update.callback_query
     user_id = update.effective_user.id
-    logger.info(f"Deposit callback from user {user_id}: {query.data}")
+    logger.info(f"Method callback from user {user_id}: {query.data}")
 
     try:
         await query.answer()
@@ -191,21 +194,17 @@ async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Failed to edit cancel message: {e}")
         return ConversationHandler.END
 
-    method = query.data.replace("pay_", "")
+    # Store payment method
+    method = query.data.replace("method_", "")
     context.user_data['payment_method'] = method
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
-    # Create amount buttons
+    # Show amount buttons
     amount_buttons = [
         [
-            InlineKeyboardButton("1000 ETB", callback_data="amount_1000"),
-            InlineKeyboardButton("500 ETB", callback_data="amount_500"),
-            InlineKeyboardButton("300 ETB", callback_data="amount_300"),
-        ],
-        [
-            InlineKeyboardButton("200 ETB", callback_data="amount_200"),
             InlineKeyboardButton("100 ETB", callback_data="amount_100"),
-            InlineKeyboardButton("50 ETB", callback_data="amount_50"),
+            InlineKeyboardButton("500 ETB", callback_data="amount_500"),
+            InlineKeyboardButton("1000 ETB", callback_data="amount_1000"),
         ],
         [InlineKeyboardButton("◀️ Cancel", callback_data="cancel_deposit")]
     ]
@@ -214,9 +213,6 @@ async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await query.edit_message_text(
             f"💰 **{method_info['name']} Deposit**\n\n"
-            f"Account: `{method_info['account']}`\n"
-            f"Account Name: {method_info['account_name']}\n\n"
-            f"Instructions:\n{method_info['instructions']}\n\n"
             f"**Choose an amount:**",
             parse_mode='Markdown',
             reply_markup=reply_markup
@@ -225,180 +221,162 @@ async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Edit failed, sending new: {e}")
         await context.bot.send_message(
             chat_id=user_id,
-            text=f"💰 **{method_info['name']} Deposit**\n\n"
-                 f"Account: `{method_info['account']}`\n"
-                 f"Account Name: {method_info['account_name']}\n\n"
-                 f"Instructions:\n{method_info['instructions']}\n\n"
-                 f"**Choose an amount:**",
+            text=f"💰 **{method_info['name']} Deposit**\n\n**Choose an amount:**",
             parse_mode='Markdown',
             reply_markup=reply_markup
         )
-    return AMOUNT
+    return SELECT_AMOUNT
 
-async def deposit_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle deposit amount from button or text."""
+async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle amount selection."""
+    query = update.callback_query
     user_id = update.effective_user.id
+    logger.info(f"Amount callback from user {user_id}: {query.data}")
 
-    # If it's a callback query (amount button)
-    if update.callback_query:
-        query = update.callback_query
+    try:
         await query.answer()
-        data = query.data
-        if data.startswith("amount_"):
-            amount_str = data.split("_")[1]
-            amount = float(amount_str)
-        else:
-            # Should not happen, but fallback
-            await query.edit_message_text("❌ Invalid amount. Please try again.")
-            return AMOUNT
-        # Show processing message
-        await query.edit_message_text(f"⏳ Processing {amount} ETB deposit...")
-    else:
-        # It's a text message
-        text = update.message.text.strip()
-        logger.info(f"Deposit amount from user {user_id}: {text}")
+    except BadRequest as e:
+        logger.warning(f"Callback query expired: {e}")
+
+    if query.data == "cancel_deposit":
         try:
-            amount = float(text)
-        except ValueError:
-            await update.message.reply_text("❌ Invalid amount. Please enter a number:")
-            return AMOUNT
+            await query.edit_message_text(
+                "❌ Deposit cancelled.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+                ]])
+            )
+        except Exception as e:
+            logger.error(f"Failed to edit cancel message: {e}")
+        return ConversationHandler.END
+
+    # Parse amount
+    amount_str = query.data.replace("amount_", "")
+    try:
+        amount = int(amount_str)
+    except ValueError:
+        await query.edit_message_text("❌ Invalid amount. Please try again.")
+        return SELECT_AMOUNT
 
     # Validate amount
-    if amount < 10:
-        msg = "❌ Minimum deposit is 10 ETB. Please choose a valid amount."
-        if update.callback_query:
-            await update.callback_query.edit_message_text(msg)
-        else:
-            await update.message.reply_text(msg)
-        return AMOUNT
-    if amount > 1000:
-        msg = "❌ Maximum deposit is 1000 ETB. Please choose a valid amount."
-        if update.callback_query:
-            await update.callback_query.edit_message_text(msg)
-        else:
-            await update.message.reply_text(msg)
-        return AMOUNT
+    if amount < 10 or amount > 1000:
+        await query.edit_message_text("❌ Amount must be between 10 and 1000 ETB. Please choose again.")
+        return SELECT_AMOUNT
 
-    amount_cents = int(amount * 100)
-    context.user_data['amount'] = amount_cents
-    context.user_data['amount_etb'] = amount
-
+    # Store amount in user_data
+    context.user_data['deposit_amount'] = amount
     method = context.user_data.get('payment_method', 'telebirr')
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
+    # Show account details and ask for transaction ID
+    await query.edit_message_text(
+        f"💰 **{method_info['name']} Deposit**\n\n"
+        f"💵 Amount: **{amount} ETB**\n"
+        f"🏦 Account: `{method_info['account']}`\n"
+        f"Account Name: {method_info['account_name']}\n\n"
+        f"**Instructions:**\n"
+        f"{method_info['instructions']}\n\n"
+        f"✅ After sending the money, please **send the transaction ID** here.\n\n"
+        f"_(Example: `TRX123456`)_",
+        parse_mode='Markdown'
+    )
+    return WAIT_TRANSACTION
+
+async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle transaction ID input."""
+    user_id = update.effective_user.id
+    trx_id = update.message.text.strip()
+    logger.info(f"Transaction ID from user {user_id}: {trx_id}")
+
+    # Retrieve stored data
+    amount = context.user_data.get('deposit_amount')
+    method = context.user_data.get('payment_method')
+
+    if not amount or not method:
+        await update.message.reply_text(
+            "❌ Session expired. Please start over with /deposit"
+        )
+        return ConversationHandler.END
+
+    method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
+
+    # Get payment method ID from database
     methods = db.get_payment_methods(type='mobile_money', active_only=True)
     if not methods:
-        msg = "❌ No payment methods available"
-        if update.callback_query:
-            await update.callback_query.edit_message_text(msg)
-        else:
-            await update.message.reply_text(msg)
+        await update.message.reply_text("❌ No payment methods available")
         return ConversationHandler.END
     method_id = methods[0]['id']
 
+    # Create payment request
     request_id = db.create_payment_request(
-        user_id=update.effective_user.id,
+        user_id=user_id,
         method_id=method_id,
-        amount=amount_cents,
+        amount=amount * 100,  # convert to cents
         sender_phone=""
     )
-
     if not request_id:
-        msg = "❌ Failed to create payment request"
-        if update.callback_query:
-            await update.callback_query.edit_message_text(msg)
-        else:
-            await update.message.reply_text(msg)
+        await update.message.reply_text("❌ Failed to create payment request")
         return ConversationHandler.END
 
-    context.user_data['payment_request_id'] = request_id
+    # Store transaction ID as proof
+    db.add_payment_proof(request_id, 'text', trx_id)
 
-    # Send appropriate response
-    reply_text = (
-        f"💳 **Payment Request Created**\n\n"
-        f"💰 **Amount:** {amount:.0f} ETB\n"
+    # Notify user
+    await update.message.reply_text(
+        f"✅ **Payment Report Submitted!**\n\n"
+        f"💰 **Amount:** {amount} ETB\n"
         f"💳 **Method:** {method_info['name']}\n"
-        f"🆔 **Request ID:** `{request_id}`\n\n"
-        f"**Instructions:**\n"
-        f"1. Send {amount:.0f} ETB to `{method_info['account']}` via {method_info['name']}\n"
-        f"2. Save the reference number you receive\n"
-        f"3. **Send the reference number here:**"
+        f"🆔 **Request ID:** `{request_id}`\n"
+        f"🔢 **Transaction ID:** `{trx_id}`\n\n"
+        f"⏳ Admin will verify your payment shortly.\n"
+        f"You'll be notified once your balance is updated.",
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+        ]])
     )
 
-    if update.callback_query:
-        await update.callback_query.edit_message_text(reply_text, parse_mode='Markdown')
-    else:
-        await update.message.reply_text(reply_text, parse_mode='Markdown')
-    return REFERENCE
-
-async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    reference = update.message.text.strip()
-    user = update.effective_user
-    logger.info(f"Deposit reference from user {user.id}: {reference}")
-
-    request_id = context.user_data.get('payment_request_id')
-    amount_etb = context.user_data.get('amount_etb', 0)
-    method = context.user_data.get('payment_method', 'telebirr')
-
-    if not request_id:
-        await update.message.reply_text("❌ Session expired. Please start over with /deposit")
-        return ConversationHandler.END
-
-    success = db.add_payment_proof(request_id, 'text', reference)
-
-    if success:
-        method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
-        await update.message.reply_text(
-            f"✅ **Payment Report Submitted!**\n\n"
-            f"💰 **Amount:** {amount_etb:.0f} ETB\n"
-            f"💳 **Method:** {method_info['name']}\n"
-            f"🆔 **Request ID:** `{request_id}`\n"
-            f"🔢 **Reference:** `{reference}`\n\n"
-            f"⏳ Admin will verify your payment shortly.\n"
-            f"You'll be notified once your balance is updated.",
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
-            ]])
-        )
-
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Approve", callback_data=f"approve_payment_{request_id}"),
-                InlineKeyboardButton("❌ Reject", callback_data=f"reject_payment_{request_id}")
-            ]
+    # Notify admin with approve/reject buttons
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Approve", callback_data=f"approve_payment_{request_id}"),
+            InlineKeyboardButton("❌ Reject", callback_data=f"reject_payment_{request_id}")
         ]
-        try:
-            admin_message = await context.bot.send_message(
-                chat_id=ADMIN_USER_ID,
-                text=f"💰 **New Payment Request**\n\n"
-                     f"👤 **User:** {user.first_name}\n"
-                     f"🆔 **User ID:** `{user.id}`\n"
-                     f"💰 **Amount:** {amount_etb:.0f} ETB\n"
-                     f"💳 **Method:** {method_info['name']}\n"
-                     f"🆔 **Request ID:** `{request_id}`\n"
-                     f"🔢 **Reference:** `{reference}`",
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            context.bot_data[f"admin_msg_{request_id}"] = {
-                'chat_id': ADMIN_USER_ID,
-                'message_id': admin_message.message_id
-            }
-        except Exception as e:
-            logger.error(f"Failed to notify admin: {e}")
-    else:
-        await update.message.reply_text("❌ Failed to save reference. Please try again.")
+    ]
+    try:
+        admin_message = await context.bot.send_message(
+            chat_id=ADMIN_USER_ID,
+            text=f"💰 **New Payment Request**\n\n"
+                 f"👤 **User:** {update.effective_user.first_name}\n"
+                 f"🆔 **User ID:** `{user_id}`\n"
+                 f"💰 **Amount:** {amount} ETB\n"
+                 f"💳 **Method:** {method_info['name']}\n"
+                 f"🆔 **Request ID:** `{request_id}`\n"
+                 f"🔢 **Transaction ID:** `{trx_id}`",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        context.bot_data[f"admin_msg_{request_id}"] = {
+            'chat_id': ADMIN_USER_ID,
+            'message_id': admin_message.message_id
+        }
+    except Exception as e:
+        logger.error(f"Failed to notify admin: {e}")
 
+    # Clear user_data and end conversation
     context.user_data.clear()
     return ConversationHandler.END
 
 async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel deposit conversation."""
     logger.info(f"User {update.effective_user.id} cancelled deposit")
-    await update.message.reply_text("❌ Deposit cancelled.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text(
+        "❌ Deposit cancelled.",
+        reply_markup=ReplyKeyboardRemove()
+    )
     return ConversationHandler.END
 
-# ==================== Withdrawal Handlers ====================
+# ==================== Withdrawal Handlers (unchanged) ====================
 async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_user(user.id) or db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
@@ -462,7 +440,7 @@ async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['withdraw_amount_etb'] = amount
 
         await update.message.reply_text(
-            "📱 **Enter your phone number** (the one registered with your mobile money):\nExample: `0953933030`",
+            "📱 **Enter your phone number** (the one registered with your mobile money):\nExample: `0983994214`",
             parse_mode='Markdown'
         )
         return WITHDRAW_PHONE
@@ -529,7 +507,7 @@ async def withdraw_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Withdrawal cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# ==================== Game Class ====================
+# ==================== Game Class (unchanged) ====================
 class IntegratedBingoGame:
     def __init__(self):
         self.round_number = 1
@@ -547,7 +525,6 @@ class IntegratedBingoGame:
         self.game_locks = {}
         self.bot_app = None
         self.user_connections = {}
-        # Increased from 2 to 5 to reduce 403 errors
         self.MAX_CONNECTIONS_PER_USER = 5
         self.auto_start_timer = None
         self.first_card_time = None
@@ -571,7 +548,6 @@ class IntegratedBingoGame:
                     except:
                         pass
 
-    # ==================== WEBSOCKET CONNECTION METHODS ====================
     async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
         if self.user_connections.get(user_id, 0) >= self.MAX_CONNECTIONS_PER_USER:
             logger.warning(f"User {user_id} exceeded max connections ({self.MAX_CONNECTIONS_PER_USER}), rejecting")
@@ -683,7 +659,6 @@ class IntegratedBingoGame:
         except:
             pass
 
-    # ==================== GAME METHODS ====================
     async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]):
         async with self.get_lock(game_id):
             if game_id not in self.active_games:
@@ -757,7 +732,6 @@ class IntegratedBingoGame:
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_number})
         asyncio.create_task(self.draw_numbers(game_id))
 
-    # ==================== Winner check for any line (rows, columns, diagonals) - returns list ====================
     async def check_winner_any_line(self, game_id: int, last_number: int) -> List[Tuple[int, int]]:
         """Check if anyone won by completing a row, column, or diagonal.
            Returns a list of (user_id, card_id) for all winners on this number."""
@@ -783,7 +757,6 @@ class IntegratedBingoGame:
                     if all(is_marked(card[col][row]) for col in range(5)):
                         logger.info(f"ROW BINGO! User {user_id} with card {card_id} at number {last_number}")
                         winners.append((user_id, card_id))
-                        # Break out of card loops to avoid counting same card multiple times
                         break
 
                 # Check columns (if not already a winner from a row)
@@ -806,11 +779,9 @@ class IntegratedBingoGame:
                         logger.info(f"DIAGONAL BINGO (anti)! User {user_id} with card {card_id} at number {last_number}")
                         winners.append((user_id, card_id))
 
-        # Remove duplicate (user, card) pairs (shouldn't happen, but just in case)
         return list(set(winners))
 
     def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
-        """Mark a number on player's card"""
         if game_id not in self.active_games or not self.game_started or self.game_winner.get(game_id):
             return False
         player = self.active_games[game_id]['players'].get(user_id)
@@ -820,7 +791,6 @@ class IntegratedBingoGame:
         return True
 
     async def draw_numbers(self, game_id: int = 1):
-        """Draw numbers for the game - any line wins, multiple winners possible."""
         numbers = list(range(1, 76))
         random.shuffle(numbers)
 
@@ -845,18 +815,15 @@ class IntegratedBingoGame:
                     'called': self.active_games[game_id]['called_numbers']
                 })
 
-                # Check for winners – now we get a list
                 winners = await self.check_winner_any_line(game_id, n)
                 if winners:
                     logger.info(f"🏆 WINNERS FOUND on number {n}: {winners}")
                     self.stop_number_generation = True
-                    # Store winners list in game_winner (as a list)
-                    self.game_winner[game_id] = [w[0] for w in winners]  # list of user_ids
+                    self.game_winner[game_id] = [w[0] for w in winners]
                     await self.finish_round_multi(game_id, winners)
                     break
 
     async def finish_round_multi(self, game_id: int, winners: List[Tuple[int, int]]):
-        """Finish the round and split prize among multiple winners."""
         if game_id not in self.active_games:
             return
 
@@ -867,12 +834,11 @@ class IntegratedBingoGame:
         prize_pool = self.active_games[game_id]['prize_pool']
         house_cut = prize_pool * HOUSE_PERCENT
         total_prize = prize_pool - house_cut
-        prize_per_winner = total_prize // len(winners)  # integer division
+        prize_per_winner = total_prize // len(winners)
         remainder = total_prize - (prize_per_winner * len(winners))
-        house_cut += remainder  # remainder goes to house
+        house_cut += remainder
         self.house_profit += house_cut
 
-        # Update each winner's balance
         for user_id, winning_card_id in winners:
             if user_id in self.active_games[game_id]['players']:
                 player = self.active_games[game_id]['players'][user_id]
@@ -886,7 +852,6 @@ class IntegratedBingoGame:
                     player['balance'] = update_result['new_balance']
                     player['winner'] = True
 
-        # Prepare winning cards data (optional, could send first winning card)
         winning_card_data = None
         if winners:
             first_winner_id, first_card_id = winners[0]
@@ -894,7 +859,6 @@ class IntegratedBingoGame:
             if card:
                 winning_card_data = card['card']
 
-        # Broadcast game_won with list of winners
         await self.broadcast(game_id, {
             'type': 'game_won',
             'winners': [
@@ -911,7 +875,6 @@ class IntegratedBingoGame:
             'winning_card_id': winners[0][1] if winners else None
         })
 
-        # Send Telegram notifications to each winner
         if self.bot_app:
             for user_id, _ in winners:
                 try:
@@ -953,7 +916,6 @@ class IntegratedBingoGame:
 
         self.taken_cards[game_id] = set()
         logger.info(f"✅ Round {self.round_number} ready - all cards unlocked")
-
         await self.broadcast(game_id, {
             'type': 'game_reset',
             'round': self.round_number,
@@ -970,12 +932,13 @@ deposit_conv = ConversationHandler(
         CallbackQueryHandler(deposit_start_callback, pattern='^deposit_start$')
     ],
     states={
-        AMOUNT: [
-            CallbackQueryHandler(deposit_callback, pattern='^(pay_telebirr|pay_cbebirr|cancel_deposit)$'),
-            CallbackQueryHandler(deposit_amount, pattern='^amount_'),  # amount buttons
-            MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_amount)
+        SELECT_METHOD: [
+            CallbackQueryHandler(method_callback, pattern='^(method_|cancel_deposit)'),
         ],
-        REFERENCE: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_reference)],
+        SELECT_AMOUNT: [
+            CallbackQueryHandler(amount_callback, pattern='^(amount_|cancel_deposit)'),
+        ],
+        WAIT_TRANSACTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, transaction_handler)],
     },
     fallbacks=[CommandHandler('cancel', deposit_cancel)],
     name="deposit_conversation",
@@ -1061,7 +1024,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "help":
         help_text = (
             "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose cards (1-1000)\n3. Game auto-starts 30s after first card\n4. Numbers called every 3 seconds\n5. Complete ONE LINE (row, column, or diagonal) to win!\n6. If multiple players win on the same number, the prize is split equally!\n\n"
-            f"Price: {CARD_PRICE/100} ETB per card\n\nDeposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Choose an amount\n• Send payment and enter reference\n\nWithdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
+            f"Price: {CARD_PRICE/100} ETB per card\n\nDeposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Choose an amount\n• Send the money and provide the transaction ID\n\nWithdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
         )
         await query.edit_message_text(
             help_text,
