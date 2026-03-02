@@ -700,9 +700,62 @@ class IntegratedBingoGame:
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_number})
         asyncio.create_task(self.draw_numbers(game_id))
 
-    # ==================== FIXED: draw_numbers with correct winner card ====================
+    # ==================== FIXED: check_winner_any_line (rows, columns, diagonals) ====================
+    async def check_winner_any_line(self, game_id: int, last_number: int) -> Optional[Tuple[int, int]]:
+        """Check if someone won by completing a row, column, or diagonal. Returns (user_id, card_id) or None."""
+        if game_id not in self.active_games:
+            return None
+
+        called = set(self.active_games[game_id]['called_numbers'])
+
+        for user_id, player in self.active_games[game_id]['players'].items():
+            if player['winner']:
+                continue
+
+            for card_idx, card in enumerate(player['cards']):
+                card_id = player['card_ids'][card_idx]
+                marked = set(player['marked'].get(card_id, []))
+
+                # Helper to check if a value is considered "marked"
+                def is_marked(val):
+                    return val == 'FREE' or val in called or val in marked
+
+                # Check rows
+                for row in range(5):
+                    if all(is_marked(card[col][row]) for col in range(5)):
+                        logger.info(f"ROW BINGO! User {user_id} with card {card_id} at number {last_number}")
+                        return (user_id, card_id)
+
+                # Check columns
+                for col in range(5):
+                    if all(is_marked(card[col][row]) for row in range(5)):
+                        logger.info(f"COLUMN BINGO! User {user_id} with card {card_id} at number {last_number}")
+                        return (user_id, card_id)
+
+                # Check main diagonal (top-left to bottom-right)
+                if all(is_marked(card[i][i]) for i in range(5)):
+                    logger.info(f"DIAGONAL BINGO (main)! User {user_id} with card {card_id} at number {last_number}")
+                    return (user_id, card_id)
+
+                # Check anti-diagonal (top-right to bottom-left)
+                if all(is_marked(card[i][4-i]) for i in range(5)):
+                    logger.info(f"DIAGONAL BINGO (anti)! User {user_id} with card {card_id} at number {last_number}")
+                    return (user_id, card_id)
+
+        return None
+
+    def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
+        """Mark a number on player's card"""
+        if game_id not in self.active_games or not self.game_started or self.game_winner.get(game_id):
+            return False
+        player = self.active_games[game_id]['players'].get(user_id)
+        if not player or card_id not in player['marked'] or number in player['marked'][card_id]:
+            return False
+        player['marked'][card_id].append(number)
+        return True
+
     async def draw_numbers(self, game_id: int = 1):
-        """Draw numbers for the game - ONE ROW ONLY win condition"""
+        """Draw numbers for the game - any line wins"""
         numbers = list(range(1, 76))
         random.shuffle(numbers)
 
@@ -727,8 +780,8 @@ class IntegratedBingoGame:
                     'called': self.active_games[game_id]['called_numbers']
                 })
 
-                # Check for winner – returns (user_id, card_id) or None
-                result = await self.check_winner_row_only(game_id, n)
+                # Check for winner – now using any line
+                result = await self.check_winner_any_line(game_id, n)
                 if result:
                     user_id, card_id = result
                     logger.info(f"🏆 WINNER FOUND! User {user_id} with card {card_id}")
@@ -736,49 +789,6 @@ class IntegratedBingoGame:
                     self.game_winner[game_id] = user_id
                     await self.finish_round(game_id, user_id, card_id)
                     break
-
-    async def check_winner_row_only(self, game_id: int, last_number: int) -> Optional[Tuple[int, int]]:
-        """Check if someone won by completing a row. Returns (user_id, card_id) or None."""
-        if game_id not in self.active_games:
-            return None
-
-        called = set(self.active_games[game_id]['called_numbers'])
-
-        for user_id, player in self.active_games[game_id]['players'].items():
-            if player['winner']:
-                continue
-
-            for card_idx, card in enumerate(player['cards']):
-                card_id = player['card_ids'][card_idx]
-                marked = set(player['marked'].get(card_id, []))
-
-                # Add FREE space if it's the center
-                if card[2][2] == 'FREE':
-                    marked.add('FREE')
-
-                # Check rows only (5 rows)
-                for row in range(5):
-                    row_complete = True
-                    for col in range(5):
-                        val = card[col][row]
-                        if val != 'FREE' and val not in called and val not in marked:
-                            row_complete = False
-                            break
-                    if row_complete:
-                        logger.info(f"ROW BINGO! User {user_id} with card {card_id} at number {last_number}")
-                        return (user_id, card_id)
-
-        return None
-
-    def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
-        """Mark a number on player's card"""
-        if game_id not in self.active_games or not self.game_started or self.game_winner.get(game_id):
-            return False
-        player = self.active_games[game_id]['players'].get(user_id)
-        if not player or card_id not in player['marked'] or number in player['marked'][card_id]:
-            return False
-        player['marked'][card_id].append(number)
-        return True
 
     async def finish_round(self, game_id: int, winner_id: int, winning_card_id: int):
         """Finish the round and pay winner – now uses actual winning card ID."""
@@ -982,7 +992,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif data == "help":
         help_text = (
-            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose cards (1-1000)\n3. Game auto-starts 30s after first card\n4. Numbers called every 3 seconds\n5. Complete ONE ROW to win!\n6. Winner gets 80% of prize pool\n\n"
+            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose cards (1-1000)\n3. Game auto-starts 30s after first card\n4. Numbers called every 3 seconds\n5. Complete ONE LINE (row, column, or diagonal) to win!\n6. Winner gets 80% of prize pool\n\n"
             f"Price: {CARD_PRICE/100} ETB per card\n\nDeposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Enter amount\n• Send payment and enter reference\n\nWithdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
         )
         await query.edit_message_text(
@@ -1258,7 +1268,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 card_id = data.get('card_id')
                 if card_id:
                     last = game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0
-                    result = await game_manager.check_winner_row_only(game_id, last)
+                    result = await game_manager.check_winner_any_line(game_id, last)
                     if result:
                         winner_id, winning_card = result
                         if winner_id == user_id:
