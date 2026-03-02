@@ -39,6 +39,7 @@ try:
 except ValueError:
     raise ValueError("ADMIN_USER_ID must be an integer")
 
+BOT_USERNAME = os.getenv('BOT_USERNAME', 'MK_BINGO_bot')  # Add this to Railway variables
 RAILWAY_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN', 'bingo-production-a078.up.railway.app')
 
 if not RAILWAY_URL.startswith('http'):
@@ -1129,33 +1130,13 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]])
             )
             return
-        # Show room selection with descriptions
-        room_buttons = [
-            [
-                InlineKeyboardButton("🚪 Room 1 (Any Line)", callback_data="room_1"),
-                InlineKeyboardButton("🚪 Room 2 (Full House)", callback_data="room_2"),
-                InlineKeyboardButton("🚪 Room 3 (Any Line)", callback_data="room_3"),
-            ],
-            [InlineKeyboardButton("◀️ Back", callback_data="menu")]
-        ]
+        # Direct link to web app room selection
+        webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
         await query.edit_message_text(
-            "🎮 Select a room to play:",
-            reply_markup=InlineKeyboardMarkup(room_buttons)
-        )
-    elif data.startswith("room_"):
-        room_id = int(data.split("_")[1])
-        if room_id == 2:
-            pattern = "Full House (100 ETB/card, manual start)"
-        else:
-            pattern = "Any Line (10 ETB/card)"
-        webapp_url = f"{BASE_URL}/game?user_id={user.id}&game_id={room_id}"
-        balance = db.get_user(user.id)['balance'] / 100
-        await query.edit_message_text(
-            f"🚪 You joined Room {room_id} ({pattern})\n\n"
-            f"⏱️ Game starts: {'manually by admin' if room_id == 2 else '30s after 5 cards'}\n\n"
-            f"💰 Your Balance: {balance:.2f} ETB",
+            f"🎮 Click to open game and choose a room\n\n"
+            f"💰 Balance: {user_data['balance']/100:.2f} ETB",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🎮 Open Game", web_app={'url': webapp_url})
+                InlineKeyboardButton("🎮 Open Game Lobby", web_app={'url': webapp_url})
             ]])
         )
     elif data == "balance":
@@ -1173,7 +1154,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif data == "help":
         help_text = (
-            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose a room\n"
+            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose a room in the web app\n"
             "   - Room 1 & 3: Win by completing any line (row, column, diagonal) – 10 ETB/card\n"
             "   - Room 2: Win by covering all numbers on your card (Full House) – 100 ETB/card, manual start by admin\n"
             "3. Choose cards (1-1000)\n4. Game auto-starts 30s after 5 cards are purchased (rooms 1&3) or admin starts (room2)\n"
@@ -1382,6 +1363,43 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Bingo Game", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# ==================== Web App Routes ====================
+@app.get("/rooms", response_class=HTMLResponse)
+async def rooms_page(request: Request, user_id: int):
+    user = db.get_or_create_user(user_id)
+    return templates.TemplateResponse("rooms.html", {
+        "request": request,
+        "user_id": user_id,
+        "balance": user['balance'] / 100,
+        "price_room1": CARD_PRICE_DEFAULT / 100,
+        "price_room2": CARD_PRICE_ROOM2 / 100,
+        "price_room3": CARD_PRICE_DEFAULT / 100,
+        "bot_username": BOT_USERNAME
+    })
+
+@app.get("/game", response_class=HTMLResponse)
+async def game_page(request: Request, user_id: int, game_id: int = 1):
+    user = db.get_or_create_user(user_id)
+    if game_id == 2:
+        pattern = "Full House"
+        price = CARD_PRICE_ROOM2 / 100
+    else:
+        pattern = "Any Line"
+        price = CARD_PRICE_DEFAULT / 100
+    return templates.TemplateResponse("bingo.html", {
+        "request": request,
+        "user_id": user_id,
+        "game_id": game_id,
+        "pattern": pattern,
+        "admin_id": ADMIN_USER_ID,
+        "price_per_card": price,
+        "max_cards": MAX_CARDS_PER_PLAYER,
+        "initial_balance": user['balance'] / 100,
+        "initial_active_games": db.get_active_games_count(user_id),
+        "initial_stake": db.get_total_stake(user_id) / 100,
+        "auto_start_delay": AUTO_START_DELAY
+    })
+
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
@@ -1413,29 +1431,6 @@ async def get_user_info(user_id: int):
     except Exception as e:
         logger.error(f"Error getting user {user_id}: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.get("/game", response_class=HTMLResponse)
-async def game_page(request: Request, user_id: int, game_id: int = 1):
-    user = db.get_or_create_user(user_id)
-    if game_id == 2:
-        pattern = "Full House"
-        price = CARD_PRICE_ROOM2 / 100
-    else:
-        pattern = "Any Line"
-        price = CARD_PRICE_DEFAULT / 100
-    return templates.TemplateResponse("bingo.html", {
-        "request": request,
-        "user_id": user_id,
-        "game_id": game_id,
-        "pattern": pattern,
-        "admin_id": ADMIN_USER_ID,
-        "price_per_card": price,
-        "max_cards": MAX_CARDS_PER_PLAYER,
-        "initial_balance": user['balance'] / 100,
-        "initial_active_games": db.get_active_games_count(user_id),
-        "initial_stake": db.get_total_stake(user_id) / 100,
-        "auto_start_delay": AUTO_START_DELAY
-    })
 
 @app.websocket("/ws/{game_id}/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
