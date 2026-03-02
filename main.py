@@ -46,14 +46,16 @@ if not RAILWAY_URL.startswith('http'):
 else:
     BASE_URL = RAILWAY_URL
 
-CARD_PRICE = 1000
+# Card prices (in cents)
+CARD_PRICE_DEFAULT = 1000      # 10.00 ETB for rooms 1 & 3
+CARD_PRICE_ROOM2 = 10000       # 100.00 ETB for room 2
 MAX_CARDS_PER_PLAYER = 20
 WELCOME_BONUS = 1000
 AUTO_START_DELAY = 30
 HOUSE_PERCENT = 0.20
 ROUND_RESET_DELAY = 10
 
-# Payment methods (both use the same account number)
+# Payment methods
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
@@ -558,30 +560,56 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"Broadcast sent to {sent} users. Failed: {failed}")
 
-# ==================== Game Class ====================
+# ==================== Admin Command to Start Room 2 ====================
+async def start_room2_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to manually start Room 2."""
+    user_id = update.effective_user.id
+    if user_id != ADMIN_USER_ID:
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+        return
+
+    game_id = 2
+    if game_id not in game_manager.active_games:
+        await update.message.reply_text("❌ Room 2 has not been initialized yet (no players).")
+        return
+
+    if game_manager.game_started.get(game_id, False):
+        await update.message.reply_text("❌ Room 2 is already started.")
+        return
+
+    if game_manager.active_games[game_id]['total_cards_sold'] == 0:
+        await update.message.reply_text("❌ No cards sold in Room 2. Cannot start.")
+        return
+
+    # Manually start the round
+    await game_manager.start_round(game_id)
+    await update.message.reply_text(f"✅ Room 2 started manually.")
+
+# ==================== Game Class (Multi‑Room with Patterns) ====================
 class IntegratedBingoGame:
     def __init__(self):
-        self.round_number = 1
-        self.called_numbers = []
-        self.game_started = False
-        self.total_pool = 0
-        self.house_profit = 0
-        self.users = {}
-        self.active_games = {}
-        self.game_connections = {}
-        self.taken_cards = {}
-        self.game_winner = {}
-        self.number_tasks = {}
-        self.countdown_timers = {}
-        self.game_locks = {}
+        # Per‑room data dictionaries
+        self.round_numbers = {}           # game_id -> round number
+        self.called_numbers = {}           # game_id -> list of called numbers
+        self.game_started = {}             # game_id -> bool
+        self.total_pool = {}               # game_id -> int
+        self.house_profit = 0              # global house profit
+        self.active_games = {}              # game_id -> game state dict
+        self.game_connections = {}          # game_id -> list of websockets
+        self.taken_cards = {}               # game_id -> set of taken card ids
+        self.game_winner = {}               # game_id -> winner info (or list for multi)
+        self.number_tasks = {}              # game_id -> asyncio tasks (if needed)
+        self.countdown_timers = {}          # game_id -> countdown seconds
+        self.game_locks = {}                # game_id -> asyncio.Lock
+        self.auto_start_timers = {}         # game_id -> asyncio.Task
+        self.first_card_time = {}           # game_id -> timestamp
+        self.reset_timers = {}              # game_id -> asyncio.Task
+        self.game_patterns = {}             # game_id -> pattern name ("any_line" or "full_house")
+
         self.bot_app = None
-        self.user_connections = {}
+        self.user_connections = {}          # user_id -> connection count
         self.MAX_CONNECTIONS_PER_USER = 5
-        self.auto_start_timer = None
-        self.first_card_time = None
-        self.reset_timer = None
-        self.stop_number_generation = False
-        self.game_id = 1
+        self.stop_number_generation = {}    # game_id -> bool
         self.heartbeat_task = None
 
     def get_lock(self, game_id: int) -> asyncio.Lock:
@@ -615,6 +643,10 @@ class IntegratedBingoGame:
                 self.taken_cards[game_id] = set()
                 self.game_winner[game_id] = None
                 self.countdown_timers[game_id] = 15
+                self.round_numbers[game_id] = 1
+                self.called_numbers[game_id] = []
+                self.game_started[game_id] = False
+                self.stop_number_generation[game_id] = False
                 self.active_games[game_id] = {
                     'called_numbers': [],
                     'players': {},
@@ -622,6 +654,11 @@ class IntegratedBingoGame:
                     'total_cards_sold': 0,
                     'last_winner': None,
                 }
+                # Set pattern based on room number
+                if game_id == 2:
+                    self.game_patterns[game_id] = "full_house"
+                else:
+                    self.game_patterns[game_id] = "any_line"
 
             self.game_connections[game_id].append(websocket)
             if user_id not in self.active_games[game_id]['players']:
@@ -642,8 +679,8 @@ class IntegratedBingoGame:
                 'type': 'connected',
                 'taken_cards': list(self.taken_cards[game_id]),
                 'players': self.get_players(game_id),
-                'round': self.round_number,
-                'game_started': self.game_started,
+                'round': self.round_numbers[game_id],
+                'game_started': self.game_started[game_id],
                 'winner': self.game_winner[game_id],
                 'called_numbers': self.active_games[game_id]['called_numbers'],
                 'countdown': self.countdown_timers[game_id],
@@ -651,7 +688,8 @@ class IntegratedBingoGame:
                 'active_games': active_games_count,
                 'total_stake': total_stake / 100,
                 'auto_start_delay': AUTO_START_DELAY,
-                'auto_start_active': self.auto_start_timer is not None
+                'auto_start_active': game_id in self.auto_start_timers,
+                'pattern': self.game_patterns.get(game_id, "any_line")
             })
 
             player = self.active_games[game_id]['players'][user_id]
@@ -705,7 +743,7 @@ class IntegratedBingoGame:
                     if self.countdown_timers[game_id] > 0:
                         self.countdown_timers[game_id] -= 1
                         await self.broadcast(game_id, {'type': 'countdown', 'time': self.countdown_timers[game_id]})
-                    if self.countdown_timers[game_id] <= 0 and self.game_started:
+                    if self.countdown_timers[game_id] <= 0 and self.game_started.get(game_id, False):
                         self.countdown_timers[game_id] = 15
         except:
             pass
@@ -714,7 +752,7 @@ class IntegratedBingoGame:
         async with self.get_lock(game_id):
             if game_id not in self.active_games:
                 return False, "Game not found", 0, None
-            if self.game_started:
+            if self.game_started.get(game_id, False):
                 return False, "Game already started", 0, None
             if user_id not in self.active_games[game_id]['players']:
                 return False, "Player not found", 0, None
@@ -729,7 +767,13 @@ class IntegratedBingoGame:
                 if not next((c for c in BINGO_CARDS if c['id'] == card_id), None):
                     return False, f"Card {card_id} not found", 0, None
 
-            total_cost = len(card_ids) * CARD_PRICE
+            # Determine card price based on room
+            if game_id == 2:
+                price_per_card = CARD_PRICE_ROOM2
+            else:
+                price_per_card = CARD_PRICE_DEFAULT
+
+            total_cost = len(card_ids) * price_per_card
             user = db.get_user(user_id)
             if not user or user['balance'] < total_cost:
                 return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
@@ -749,13 +793,12 @@ class IntegratedBingoGame:
                 player['ready'] = True
 
             self.active_games[game_id]['total_cards_sold'] += len(card_ids)
-            self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * CARD_PRICE
+            self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * price_per_card
 
-            # 🔁 Auto‑start when total cards sold reaches 5 or more
-            if not self.game_started and self.active_games[game_id]['total_cards_sold'] >= 5:
-                if self.auto_start_timer is None:
+            # 🔁 Auto‑start only for rooms 1 and 3 when total cards sold reaches 5
+            if game_id != 2 and not self.game_started.get(game_id, False) and self.active_games[game_id]['total_cards_sold'] >= 5:
+                if game_id not in self.auto_start_timers:
                     asyncio.create_task(self.start_auto_start_timer(game_id))
-                    # Broadcast to all clients that timer started
                     await self.broadcast(game_id, {'type': 'auto_start_timer', 'delay': AUTO_START_DELAY})
 
             await self.broadcast(game_id, {'type': 'player_ready', 'players': self.get_players(game_id), 'user_id': user_id})
@@ -763,29 +806,31 @@ class IntegratedBingoGame:
             return True, f"Selected {len(card_ids)} cards", total_cost, new_balance
 
     async def start_auto_start_timer(self, game_id: int):
-        if self.auto_start_timer:
-            self.auto_start_timer.cancel()
-        self.first_card_time = time.time()
+        if game_id in self.auto_start_timers:
+            self.auto_start_timers[game_id].cancel()
+        self.first_card_time[game_id] = time.time()
 
         async def auto_start():
             await asyncio.sleep(AUTO_START_DELAY)
             async with self.get_lock(game_id):
-                if not self.game_started and game_id in self.active_games and self.active_games[game_id]['players']:
+                if not self.game_started.get(game_id, False) and game_id in self.active_games and self.active_games[game_id]['players']:
                     await self.start_round(game_id)
-        self.auto_start_timer = asyncio.create_task(auto_start())
+        self.auto_start_timers[game_id] = asyncio.create_task(auto_start())
 
     async def start_round(self, game_id: int = 1):
-        if self.game_started or game_id not in self.active_games or self.active_games[game_id]['total_cards_sold'] == 0:
+        if self.game_started.get(game_id, False) or game_id not in self.active_games or self.active_games[game_id]['total_cards_sold'] == 0:
             return
-        self.game_started = True
-        self.stop_number_generation = False
-        if self.auto_start_timer:
-            self.auto_start_timer.cancel()
-            self.auto_start_timer = None
-        await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_number})
+        self.game_started[game_id] = True
+        self.stop_number_generation[game_id] = False
+        if game_id in self.auto_start_timers:
+            self.auto_start_timers[game_id].cancel()
+            del self.auto_start_timers[game_id]
+        await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_numbers[game_id]})
         asyncio.create_task(self.draw_numbers(game_id))
 
+    # ==================== WINNER CHECKERS ====================
     async def check_winner_any_line(self, game_id: int, last_number: int) -> List[Tuple[int, int]]:
+        """Check for any line (row, column, diagonal) winners."""
         if game_id not in self.active_games:
             return []
 
@@ -803,6 +848,7 @@ class IntegratedBingoGame:
                 def is_marked(val):
                     return val == 'FREE' or val in called or val in marked
 
+                # Check rows
                 for row in range(5):
                     if all(is_marked(card[col][row]) for col in range(5)):
                         winners.append((user_id, card_id))
@@ -824,33 +870,56 @@ class IntegratedBingoGame:
 
         return list(set(winners))
 
-    def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
-        if game_id not in self.active_games or not self.game_started or self.game_winner.get(game_id):
-            return False
-        player = self.active_games[game_id]['players'].get(user_id)
-        if not player or card_id not in player['marked'] or number in player['marked'][card_id]:
-            return False
-        player['marked'][card_id].append(number)
-        return True
+    async def check_full_house(self, game_id: int, last_number: int) -> List[Tuple[int, int]]:
+        """Check for full house (all numbers on card are marked)."""
+        if game_id not in self.active_games:
+            return []
 
+        called = set(self.active_games[game_id]['called_numbers'])
+        winners = []
+
+        for user_id, player in self.active_games[game_id]['players'].items():
+            if player['winner']:
+                continue
+
+            for card_idx, card in enumerate(player['cards']):
+                card_id = player['card_ids'][card_idx]
+                marked = set(player['marked'].get(card_id, []))
+
+                # Count all cells that are either called or marked (FREE always counts)
+                total_marked = 0
+                for row in range(5):
+                    for col in range(5):
+                        val = card[col][row]
+                        if val == 'FREE' or val in called or val in marked:
+                            total_marked += 1
+                if total_marked == 25:  # all 25 cells are covered
+                    logger.info(f"FULL HOUSE! User {user_id} with card {card_id} at number {last_number}")
+                    winners.append((user_id, card_id))
+
+        return list(set(winners))
+
+    # ==================== MAIN GAME LOOP ====================
     async def draw_numbers(self, game_id: int = 1):
         numbers = list(range(1, 76))
         random.shuffle(numbers)
 
+        pattern = self.game_patterns.get(game_id, "any_line")
+
         for n in numbers:
-            if self.stop_number_generation or self.game_winner.get(game_id):
+            if self.stop_number_generation.get(game_id, False) or self.game_winner.get(game_id):
                 break
 
             await asyncio.sleep(3)
 
-            if self.stop_number_generation or self.game_winner.get(game_id):
+            if self.stop_number_generation.get(game_id, False) or self.game_winner.get(game_id):
                 break
 
             async with self.get_lock(game_id):
-                if self.stop_number_generation or self.game_winner.get(game_id) or not self.game_started:
+                if self.stop_number_generation.get(game_id, False) or self.game_winner.get(game_id) or not self.game_started.get(game_id, False):
                     break
 
-                self.called_numbers.append(n)
+                self.called_numbers[game_id].append(n)
                 self.active_games[game_id]['called_numbers'].append(n)
                 await self.broadcast(game_id, {
                     'type': 'number_called',
@@ -858,10 +927,15 @@ class IntegratedBingoGame:
                     'called': self.active_games[game_id]['called_numbers']
                 })
 
-                winners = await self.check_winner_any_line(game_id, n)
+                # Check winners based on room pattern
+                if pattern == "full_house":
+                    winners = await self.check_full_house(game_id, n)
+                else:
+                    winners = await self.check_winner_any_line(game_id, n)
+
                 if winners:
-                    logger.info(f"🏆 WINNERS FOUND on number {n}: {winners}")
-                    self.stop_number_generation = True
+                    logger.info(f"🏆 WINNERS FOUND in room {game_id} on number {n}: {winners}")
+                    self.stop_number_generation[game_id] = True
                     self.game_winner[game_id] = [w[0] for w in winners]
                     await self.finish_round_multi(game_id, winners)
                     break
@@ -870,7 +944,7 @@ class IntegratedBingoGame:
         if game_id not in self.active_games:
             return
 
-        self.stop_number_generation = True
+        self.stop_number_generation[game_id] = True
         winner_ids = [w[0] for w in winners]
         logger.info(f"Finishing round {game_id} - Winners: {winner_ids}")
 
@@ -889,7 +963,7 @@ class IntegratedBingoGame:
                     user_id=user_id,
                     amount=prize_per_winner,
                     transaction_type='game_win',
-                    description=f'Won round {self.round_number} in game #{game_id} (shared win)'
+                    description=f'Won round {self.round_numbers[game_id]} in room #{game_id} (shared win)'
                 )
                 if update_result:
                     player['balance'] = update_result['new_balance']
@@ -923,27 +997,31 @@ class IntegratedBingoGame:
                 try:
                     await self.bot_app.bot.send_message(
                         chat_id=user_id,
-                        text=f"🎉 CONGRATULATIONS! 🎉\n\nYou won round {self.round_number}!\nYour share: {prize_per_winner/100} ETB"
+                        text=f"🎉 CONGRATULATIONS! 🎉\n\nYou won round {self.round_numbers[game_id]} in Room {game_id}!\nYour share: {prize_per_winner/100} ETB"
                     )
                 except:
                     pass
 
-        if self.reset_timer:
-            self.reset_timer.cancel()
-        self.reset_timer = asyncio.create_task(self.delayed_reset(game_id))
+        if game_id in self.reset_timers:
+            self.reset_timers[game_id].cancel()
+        self.reset_timers[game_id] = asyncio.create_task(self.delayed_reset(game_id))
 
     async def delayed_reset(self, game_id: int):
         await asyncio.sleep(ROUND_RESET_DELAY)
         await self.reset_round(game_id)
 
     async def reset_round(self, game_id: int = 1):
-        self.round_number += 1
-        self.called_numbers = []
-        self.game_started = False
-        self.stop_number_generation = False
-        self.auto_start_timer = None
-        self.first_card_time = None
-        self.reset_timer = None
+        self.round_numbers[game_id] = self.round_numbers.get(game_id, 1) + 1
+        self.called_numbers[game_id] = []
+        self.game_started[game_id] = False
+        self.stop_number_generation[game_id] = False
+        if game_id in self.auto_start_timers:
+            self.auto_start_timers[game_id].cancel()
+            del self.auto_start_timers[game_id]
+        if game_id in self.first_card_time:
+            del self.first_card_time[game_id]
+        if game_id in self.reset_timers:
+            del self.reset_timers[game_id]
         self.game_winner[game_id] = None
 
         if game_id in self.active_games:
@@ -958,10 +1036,10 @@ class IntegratedBingoGame:
                 player['winner'] = False
 
         self.taken_cards[game_id] = set()
-        logger.info(f"✅ Round {self.round_number} ready - all cards unlocked")
+        logger.info(f"✅ Room {game_id} round {self.round_numbers[game_id]} ready - all cards unlocked")
         await self.broadcast(game_id, {
             'type': 'game_reset',
-            'round': self.round_number,
+            'round': self.round_numbers[game_id],
             'players': self.get_players(game_id),
             'countdown': 15
         })
@@ -1042,18 +1120,40 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "play":
         user_data = db.get_user(user.id)
-        if not user_data or user_data['balance'] < CARD_PRICE:
+        if not user_data or user_data['balance'] < CARD_PRICE_DEFAULT:
             await query.edit_message_text(
-                f"❌ Insufficient balance. Need {CARD_PRICE/100} ETB minimum.",
+                f"❌ Insufficient balance. Need {CARD_PRICE_DEFAULT/100} ETB minimum.",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("💳 Deposit", callback_data="deposit_start"),
                     InlineKeyboardButton("◀️ Back", callback_data="menu")
                 ]])
             )
             return
-        webapp_url = f"{BASE_URL}/game?user_id={user.id}&game_id=1"
+        # Show room selection with descriptions
+        room_buttons = [
+            [
+                InlineKeyboardButton("🚪 Room 1 (Any Line)", callback_data="room_1"),
+                InlineKeyboardButton("🚪 Room 2 (Full House)", callback_data="room_2"),
+                InlineKeyboardButton("🚪 Room 3 (Any Line)", callback_data="room_3"),
+            ],
+            [InlineKeyboardButton("◀️ Back", callback_data="menu")]
+        ]
         await query.edit_message_text(
-            f"🎮 Click to open game\n\n⏱️ Auto-starts {AUTO_START_DELAY}s after 5 cards!\n\n💰 Balance: {user_data['balance']/100:.2f} ETB",
+            "🎮 Select a room to play:",
+            reply_markup=InlineKeyboardMarkup(room_buttons)
+        )
+    elif data.startswith("room_"):
+        room_id = int(data.split("_")[1])
+        if room_id == 2:
+            pattern = "Full House (100 ETB/card, manual start)"
+        else:
+            pattern = "Any Line (10 ETB/card)"
+        webapp_url = f"{BASE_URL}/game?user_id={user.id}&game_id={room_id}"
+        balance = db.get_user(user.id)['balance'] / 100
+        await query.edit_message_text(
+            f"🚪 You joined Room {room_id} ({pattern})\n\n"
+            f"⏱️ Game starts: {'manually by admin' if room_id == 2 else '30s after 5 cards'}\n\n"
+            f"💰 Your Balance: {balance:.2f} ETB",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🎮 Open Game", web_app={'url': webapp_url})
             ]])
@@ -1073,8 +1173,15 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif data == "help":
         help_text = (
-            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose cards (1-1000)\n3. Game auto-starts 30s after 5 cards are purchased!\n4. Numbers called every 3 seconds\n5. Complete ONE LINE (row, column, or diagonal) to win!\n6. If multiple players win on the same number, the prize is split equally!\n\n"
-            f"Price: {CARD_PRICE/100} ETB per card\n\nDeposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Choose an amount (50–10000 ETB)\n• Send the money and provide the transaction ID\n\nWithdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
+            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose a room\n"
+            "   - Room 1 & 3: Win by completing any line (row, column, diagonal) – 10 ETB/card\n"
+            "   - Room 2: Win by covering all numbers on your card (Full House) – 100 ETB/card, manual start by admin\n"
+            "3. Choose cards (1-1000)\n4. Game auto-starts 30s after 5 cards are purchased (rooms 1&3) or admin starts (room2)\n"
+            "5. Numbers called every 3 seconds\n6. If multiple players win on the same number, the prize is split equally!\n\n"
+            f"Price (rooms 1&3): {CARD_PRICE_DEFAULT/100} ETB per card\n"
+            f"Price (room 2): {CARD_PRICE_ROOM2/100} ETB per card\n\n"
+            "Deposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Choose an amount (50–10000 ETB)\n• Send the money and provide the transaction ID\n\n"
+            "Withdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
         )
         await query.edit_message_text(
             help_text,
@@ -1245,6 +1352,7 @@ async def setup_bot():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("cancel", deposit_cancel))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
+    application.add_handler(CommandHandler("startroom2", start_room2_command))  # new admin command
     application.add_handler(CallbackQueryHandler(button_callback))
     await application.initialize()
     await application.start()
@@ -1283,7 +1391,7 @@ async def webhook(request: Request):
 
 @app.get("/")
 async def root():
-    return {"status": "online", "cards": len(BINGO_CARDS), "price_per_card": CARD_PRICE / 100, "max_cards_per_player": MAX_CARDS_PER_PLAYER}
+    return {"status": "online", "cards": len(BINGO_CARDS), "price_per_card": CARD_PRICE_DEFAULT / 100, "max_cards_per_player": MAX_CARDS_PER_PLAYER}
 
 @app.get("/health")
 async def health():
@@ -1309,12 +1417,19 @@ async def get_user_info(user_id: int):
 @app.get("/game", response_class=HTMLResponse)
 async def game_page(request: Request, user_id: int, game_id: int = 1):
     user = db.get_or_create_user(user_id)
+    if game_id == 2:
+        pattern = "Full House"
+        price = CARD_PRICE_ROOM2 / 100
+    else:
+        pattern = "Any Line"
+        price = CARD_PRICE_DEFAULT / 100
     return templates.TemplateResponse("bingo.html", {
         "request": request,
         "user_id": user_id,
         "game_id": game_id,
+        "pattern": pattern,
         "admin_id": ADMIN_USER_ID,
-        "price_per_card": CARD_PRICE / 100,
+        "price_per_card": price,
         "max_cards": MAX_CARDS_PER_PLAYER,
         "initial_balance": user['balance'] / 100,
         "initial_active_games": db.get_active_games_count(user_id),
@@ -1339,7 +1454,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                         card = next(c for c in BINGO_CARDS if c['id'] == card_id)
                         await websocket.send_json({'type': 'your_card', 'card': card['card'], 'card_id': card_id})
             elif data['type'] == 'mark_number':
-                if not game_manager.game_started:
+                if not game_manager.game_started.get(game_id, False):
                     await websocket.send_json({'type': 'error', 'message': 'Game not started'})
                     continue
                 success = game_manager.mark_number(game_id, user_id, data['card_id'], data['number'])
@@ -1349,10 +1464,14 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 card_id = data.get('card_id')
                 if card_id:
                     last = game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0
-                    winners = await game_manager.check_winner_any_line(game_id, last)
+                    pattern = game_manager.game_patterns.get(game_id, "any_line")
+                    if pattern == "full_house":
+                        winners = await game_manager.check_full_house(game_id, last)
+                    else:
+                        winners = await game_manager.check_winner_any_line(game_id, last)
                     if winners:
                         if any(uid == user_id for uid, _ in winners):
-                            game_manager.stop_number_generation = True
+                            game_manager.stop_number_generation[game_id] = True
                             await game_manager.finish_round_multi(game_id, winners)
                         else:
                             await websocket.send_json({'type': 'error', 'message': 'Not a valid bingo'})
@@ -1364,7 +1483,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 await websocket.send_json({'type': 'pong'})
     except WebSocketDisconnect:
         await game_manager.disconnect(game_id, websocket, user_id)
-        logger.info(f"User {user_id} disconnected")
+        logger.info(f"User {user_id} disconnected from room {game_id}")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         await game_manager.disconnect(game_id, websocket, user_id)
