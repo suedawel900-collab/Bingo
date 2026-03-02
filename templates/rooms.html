@@ -15,7 +15,7 @@
             padding: 10px;
         }
         .container {
-            max-width: 900px;
+            max-width: 1000px;
             width: 100%;
             background: white;
             border-radius: 20px;
@@ -50,6 +50,20 @@
             margin-bottom: 30px;
             font-weight: bold;
         }
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 20px;
+            margin-bottom: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        .refresh-btn:hover {
+            background: #764ba2;
+        }
         .rooms {
             display: flex;
             flex-wrap: wrap;
@@ -62,19 +76,26 @@
             border: 2px solid #667eea;
             border-radius: 15px;
             padding: 25px 20px;
-            width: 260px;
+            width: 280px;
             cursor: pointer;
             transition: transform 0.3s, box-shadow 0.3s;
             text-align: center;
+            position: relative;
         }
         .room-card:hover {
             transform: translateY(-10px);
             box-shadow: 0 20px 40px rgba(102,126,234,0.4);
         }
+        .room-card.room2 {
+            border-color: #9c27b0;
+        }
         .room-card h2 {
             color: #667eea;
             margin-bottom: 15px;
             font-size: 28px;
+        }
+        .room-card.room2 h2 {
+            color: #9c27b0;
         }
         .room-card .pattern {
             color: #555;
@@ -88,7 +109,47 @@
             color: #4CAF50;
             margin: 15px 0;
         }
-        .room-card .start-type {
+        .stats {
+            background: rgba(102,126,234,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 8px 0;
+            font-size: 16px;
+        }
+        .stat-label {
+            color: #666;
+            font-weight: normal;
+        }
+        .stat-value {
+            font-weight: bold;
+            color: #333;
+            background: white;
+            padding: 3px 10px;
+            border-radius: 15px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .status-waiting {
+            background: #ff9800;
+            color: white;
+        }
+        .status-playing {
+            background: #4CAF50;
+            color: white;
+        }
+        .start-type {
             background: #ff9800;
             color: white;
             padding: 8px 15px;
@@ -96,6 +157,7 @@
             display: inline-block;
             font-size: 14px;
             font-weight: bold;
+            margin-top: 10px;
         }
         .room-card.room2 .start-type {
             background: #9c27b0;
@@ -103,6 +165,20 @@
         .footer {
             margin-top: 20px;
             color: #666;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -113,12 +189,29 @@
         <h1>🎯 MK-BINGO</h1>
         <div class="balance">💰 ቀሪ ሂሳብ: <span id="balance">{{ balance }}</span> ብር</div>
         
-        <div class="rooms">
+        <button class="refresh-btn" onclick="refreshStats()">
+            🔄 አዘምን ሁኔታ
+        </button>
+        
+        <div class="rooms" id="rooms-container">
             <!-- Room 1 - Any Line -->
             <div class="room-card" onclick="selectRoom(1)">
                 <h2>🚪 ክፍል 1</h2>
                 <div class="pattern">አንድ መስመር</div>
                 <div class="price">10 ብር በካርድ</div>
+                
+                <div class="stats" id="stats-1">
+                    <div class="stat-item">
+                        <span class="stat-label">👥 ተጫዋቾች:</span>
+                        <span class="stat-value" id="players-1">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">🎴 ጠቅላላ ካርዶች:</span>
+                        <span class="stat-value" id="cards-1">0</span>
+                    </div>
+                </div>
+                
+                <div id="status-1" class="status-badge status-waiting">⏳ በመጠበቅ ላይ</div>
                 <div class="start-type">⏱️ ከ5 ካርዶች በኋላ ይጀምራል</div>
             </div>
             
@@ -127,6 +220,19 @@
                 <h2>🚪 ክፍል 2</h2>
                 <div class="pattern">ፉል ሃውስ</div>
                 <div class="price">100 ብር በካርድ</div>
+                
+                <div class="stats" id="stats-2">
+                    <div class="stat-item">
+                        <span class="stat-label">👥 ተጫዋቾች:</span>
+                        <span class="stat-value" id="players-2">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">🎴 ጠቅላላ ካርዶች:</span>
+                        <span class="stat-value" id="cards-2">0</span>
+                    </div>
+                </div>
+                
+                <div id="status-2" class="status-badge status-waiting">⏳ በመጠበቅ ላይ</div>
                 <div class="start-type">👑 በአስተዳዳሪ ይጀምራል</div>
             </div>
             
@@ -135,6 +241,19 @@
                 <h2>🚪 ክፍል 3</h2>
                 <div class="pattern">ፉል ሃውስ</div>
                 <div class="price">20 ብር በካርድ</div>
+                
+                <div class="stats" id="stats-3">
+                    <div class="stat-item">
+                        <span class="stat-label">👥 ተጫዋቾች:</span>
+                        <span class="stat-value" id="players-3">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">🎴 ጠቅላላ ካርዶች:</span>
+                        <span class="stat-value" id="cards-3">0</span>
+                    </div>
+                </div>
+                
+                <div id="status-3" class="status-badge status-waiting">⏳ በመጠበቅ ላይ</div>
                 <div class="start-type">⏱️ ከ5 ካርዶች በኋላ ይጀምራል</div>
             </div>
         </div>
@@ -146,8 +265,46 @@
         const userId = {{ user_id }};
         const botUsername = "{{ bot_username }}";
         
+        // Load stats immediately and then every 5 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchRoomStats();
+            setInterval(fetchRoomStats, 5000); // Update every 5 seconds
+        });
+        
         function selectRoom(roomId) {
             window.location.href = `/game?user_id=${userId}&game_id=${roomId}`;
+        }
+        
+        function refreshStats() {
+            fetchRoomStats();
+        }
+        
+        async function fetchRoomStats() {
+            try {
+                const response = await fetch('/api/room-stats');
+                const stats = await response.json();
+                
+                // Update each room's stats
+                for (let roomId = 1; roomId <= 3; roomId++) {
+                    const roomStats = stats[roomId];
+                    
+                    // Update player count and total cards
+                    document.getElementById(`players-${roomId}`).textContent = roomStats.players;
+                    document.getElementById(`cards-${roomId}`).textContent = roomStats.total_cards;
+                    
+                    // Update status badge
+                    const statusEl = document.getElementById(`status-${roomId}`);
+                    if (roomStats.game_started) {
+                        statusEl.textContent = '🎮 በመጫወት ላይ';
+                        statusEl.className = 'status-badge status-playing';
+                    } else {
+                        statusEl.textContent = '⏳ በመጠበቅ ላይ';
+                        statusEl.className = 'status-badge status-waiting';
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching room stats:', error);
+            }
         }
     </script>
 </body>
