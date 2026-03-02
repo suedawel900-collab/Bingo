@@ -154,7 +154,6 @@ async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_T
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Edit the current menu message to show payment methods
     try:
         await query.edit_message_text(
             "💰 **Deposit Menu**\n\nChoose your payment method:",
@@ -198,7 +197,6 @@ async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['payment_method'] = method
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
-    # Ask for amount
     try:
         await query.edit_message_text(
             f"💰 **{method_info['name']} Deposit**\n\n"
@@ -526,6 +524,7 @@ class IntegratedBingoGame:
                     except:
                         pass
 
+    # ==================== WEBSOCKET CONNECTION METHODS ====================
     async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
         if self.user_connections.get(user_id, 0) >= self.MAX_CONNECTIONS_PER_USER:
             await websocket.close(code=1008, reason="Too many connections")
@@ -636,6 +635,7 @@ class IntegratedBingoGame:
         except:
             pass
 
+    # ==================== GAME METHODS ====================
     async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]):
         async with self.get_lock(game_id):
             if game_id not in self.active_games:
@@ -709,51 +709,89 @@ class IntegratedBingoGame:
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_number})
         asyncio.create_task(self.draw_numbers(game_id))
 
+    # ==================== FIXED: draw_numbers with multiple stop checks ====================
     async def draw_numbers(self, game_id: int = 1):
+        """Draw numbers for the game - ONE ROW ONLY win condition"""
         numbers = list(range(1, 76))
         random.shuffle(numbers)
-
+        
+        logger.info(f"Starting draw_numbers for game {game_id}")
+        
         for n in numbers:
+            # Check stop condition BEFORE sleeping
             if self.stop_number_generation or self.game_winner.get(game_id):
+                logger.info(f"Stopping number generation for game {game_id} - winner already found (pre-sleep)")
                 break
-
+                
             await asyncio.sleep(3)
-
+            
+            # Check again after sleep
+            if self.stop_number_generation or self.game_winner.get(game_id):
+                logger.info(f"Stopping number generation for game {game_id} - winner found during sleep")
+                break
+                
             async with self.get_lock(game_id):
+                # Final check inside lock
                 if self.stop_number_generation or self.game_winner.get(game_id) or not self.game_started:
                     break
-
+                    
                 self.called_numbers.append(n)
                 self.active_games[game_id]['called_numbers'].append(n)
                 logger.info(f"Number called: {n}")
-                await self.broadcast(game_id, {'type': 'number_called', 'number': n, 'called': self.active_games[game_id]['called_numbers']})
-
+                
+                await self.broadcast(game_id, {
+                    'type': 'number_called',
+                    'number': n,
+                    'called': self.active_games[game_id]['called_numbers']
+                })
+                
+                # Check for winner
                 winner = await self.check_winner_row_only(game_id, n)
                 if winner:
-                    logger.info(f"Winner found! Stopping number generation")
+                    logger.info(f"🏆 WINNER FOUND! User {winner} - Stopping number generation IMMEDIATELY")
                     self.stop_number_generation = True
+                    self.game_winner[game_id] = winner
                     await self.finish_round(game_id, winner)
-                    break
+                    break  # Exit loop immediately
 
     async def check_winner_row_only(self, game_id: int, last_number: int):
+        """Check if someone won by completing a row (only rows, no columns/diagonals)"""
         if game_id not in self.active_games:
             return None
+            
         called = set(self.active_games[game_id]['called_numbers'])
-
+        logger.info(f"Checking winner for game {game_id} - called numbers: {called}")
+        
         for user_id, player in self.active_games[game_id]['players'].items():
             if player['winner']:
                 continue
+                
             for card_idx, card in enumerate(player['cards']):
                 card_id = player['card_ids'][card_idx]
                 marked = set(player['marked'].get(card_id, []))
+                
+                # Add FREE space if it's the center
                 if card[2][2] == 'FREE':
                     marked.add('FREE')
+                    
+                # Check rows only (5 rows)
                 for row in range(5):
-                    if all(card[col][row] == 'FREE' or card[col][row] in called or card[col][row] in marked for col in range(5)):
+                    row_numbers = [card[col][row] for col in range(5)]
+                    row_complete = True
+                    
+                    for val in row_numbers:
+                        if val != 'FREE' and val not in called and val not in marked:
+                            row_complete = False
+                            break
+                            
+                    if row_complete:
+                        logger.info(f"✅ ROW BINGO! User {user_id} with card {card_id} at number {last_number} - Row: {row_numbers}")
                         return user_id
+                        
         return None
 
     def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
+        """Mark a number on player's card"""
         if game_id not in self.active_games or not self.game_started or self.game_winner.get(game_id):
             return False
         player = self.active_games[game_id]['players'].get(user_id)
@@ -762,20 +800,42 @@ class IntegratedBingoGame:
         player['marked'][card_id].append(number)
         return True
 
+    # ==================== FIXED: finish_round sets stop flag first ====================
     async def finish_round(self, game_id: int, winner_id: int):
+        """Finish the round and pay winner"""
         if game_id not in self.active_games:
             return
+            
+        logger.info(f"Finishing round {game_id} - Winner: {winner_id}")
+        
+        # Set stop flag FIRST - before any other operations
         self.stop_number_generation = True
+        
         prize_pool = self.active_games[game_id]['prize_pool']
         house_cut = prize_pool * HOUSE_PERCENT
         winner_prize = prize_pool - house_cut
         self.house_profit += house_cut
 
-        player = self.active_games[game_id]['players'].get(winner_id)
-        if player:
+        # Find the winning card ID (optional but useful)
+        winning_card_id = None
+        winning_card_data = None
+        if winner_id in self.active_games[game_id]['players']:
+            player = self.active_games[game_id]['players'][winner_id]
             winning_card_id = player['card_ids'][0] if player['card_ids'] else None
-            winning_card_data = next((c['card'] for c in BINGO_CARDS if c['id'] == winning_card_id), None) if winning_card_id else None
-            update_result = db.update_balance(winner_id, winner_prize, 'game_win', f'Won round {self.round_number} in game #{game_id}')
+            if winning_card_id:
+                card = next((c for c in BINGO_CARDS if c['id'] == winning_card_id), None)
+                if card:
+                    winning_card_data = card['card']
+
+        # Update winner's balance in database
+        if winner_id in self.active_games[game_id]['players']:
+            player = self.active_games[game_id]['players'][winner_id]
+            update_result = db.update_balance(
+                user_id=winner_id,
+                amount=winner_prize,
+                transaction_type='game_win',
+                description=f'Won round {self.round_number} in game #{game_id}'
+            )
             if update_result:
                 player['balance'] = update_result['new_balance']
                 player['winner'] = True
@@ -786,6 +846,7 @@ class IntegratedBingoGame:
                     'winning_number': self.active_games[game_id]['called_numbers'][-1] if self.active_games[game_id]['called_numbers'] else 0,
                     'round': self.round_number
                 }
+                logger.info(f"Game {game_id} winner: {winner_id}, prize: {winner_prize/100} ETB")
                 await self.broadcast(game_id, {
                     'type': 'game_won',
                     'winner': self.game_winner[game_id],
@@ -795,9 +856,13 @@ class IntegratedBingoGame:
                     'winning_card_id': winning_card_id
                 })
 
+        # Send Telegram notification
         if self.bot_app:
             try:
-                await self.bot_app.bot.send_message(winner_id, f"🎉 You won round {self.round_number}!\nPrize: {winner_prize/100} ETB")
+                await self.bot_app.bot.send_message(
+                    chat_id=winner_id,
+                    text=f"🎉 CONGRATULATIONS! 🎉\n\nYou won round {self.round_number}!\nPrize: {winner_prize/100} ETB"
+                )
             except:
                 pass
 
@@ -831,8 +896,14 @@ class IntegratedBingoGame:
                 player['winner'] = False
 
         self.taken_cards[game_id] = set()
-        logger.info(f"✅ Round {self.round_number} ready")
-        await self.broadcast(game_id, {'type': 'game_reset', 'round': self.round_number, 'players': self.get_players(game_id), 'countdown': 15})
+        logger.info(f"✅ Round {self.round_number} ready - all cards unlocked")
+
+        await self.broadcast(game_id, {
+            'type': 'game_reset',
+            'round': self.round_number,
+            'players': self.get_players(game_id),
+            'countdown': 15
+        })
 
 game_manager = IntegratedBingoGame()
 
@@ -878,8 +949,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🎮 Play Bingo", callback_data="play")],
         [InlineKeyboardButton("💰 Balance", callback_data="balance")],
-        [InlineKeyboardButton("💳 Deposit", callback_data="deposit_start")],   # new button
-        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw_start")], # new button
+        [InlineKeyboardButton("💳 Deposit", callback_data="deposit_start")],
+        [InlineKeyboardButton("💸 Withdraw", callback_data="withdraw_start")],
         [InlineKeyboardButton("❓ Help", callback_data="help")]
     ]
     if str(user.id) == str(ADMIN_USER_ID):
@@ -899,15 +970,6 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
     data = query.data
-
-    # Handle admin approval/rejection callbacks first (they start with approve_/reject_)
-    if data.startswith('approve_payment_') or data.startswith('reject_payment_') or \
-       data.startswith('approve_withdraw_') or data.startswith('reject_withdraw_'):
-        # These are handled by separate functions called from the main callback handler earlier.
-        # But to avoid confusion, we'll just return and let the main handler process them.
-        # Actually, these are caught in the main button_callback before we get here.
-        # We'll keep them here for completeness but they won't be triggered because we have separate handlers.
-        pass
 
     if data == "play":
         user_data = db.get_user(user.id)
@@ -1007,7 +1069,6 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎯 Main Menu\n💰 Balance: {balance:.2f} ETB",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        # Do not return a state – this is just navigation
 
 # ==================== Approval Handlers ====================
 async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, request_id: str):
