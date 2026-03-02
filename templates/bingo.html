@@ -438,6 +438,11 @@
         .winning-card-cell.free {
             background: #ffd700;
         }
+        .winning-card-cell.winning-row {
+            border: 3px solid gold;
+            box-shadow: 0 0 10px gold;
+            background: #fff3e0;
+        }
         
         /* Cards Grid - Display all player cards */
         .player-cards-section {
@@ -900,7 +905,7 @@
             });
         }
         
-        // Show winning card to all players
+        // Show winning card to all players (with winning row highlighted)
         function showWinningCard(cardGrid, cardId) {
             // Clear any existing timeout
             if (winningCardTimeout) {
@@ -910,6 +915,23 @@
             const section = document.getElementById('winning-card-section');
             const container = document.getElementById('winning-card-grid');
             container.innerHTML = '';
+            
+            // Determine which row is complete (if any)
+            let winningRow = -1;
+            for (let row = 0; row < 5; row++) {
+                let rowComplete = true;
+                for (let col = 0; col < 5; col++) {
+                    const val = cardGrid[col][row];
+                    if (val !== 'FREE' && !called.includes(parseInt(val))) {
+                        rowComplete = false;
+                        break;
+                    }
+                }
+                if (rowComplete) {
+                    winningRow = row;
+                    break;
+                }
+            }
             
             // Build the 5x5 grid
             for (let row = 0; row < 5; row++) {
@@ -926,16 +948,20 @@
                     if (called.includes(parseInt(val))) {
                         cell.classList.add('marked');
                     }
+                    // Highlight winning row
+                    if (row === winningRow) {
+                        cell.classList.add('winning-row');
+                    }
                     container.appendChild(cell);
                 }
             }
             
             section.style.display = 'block';
             
-            // Hide after 5 seconds
+            // Hide after 10 seconds
             winningCardTimeout = setTimeout(() => {
                 section.style.display = 'none';
-            }, 5000);
+            }, 10000);
         }
         
         // WebSocket connection
