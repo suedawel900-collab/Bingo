@@ -917,11 +917,6 @@
             const container = document.getElementById('winning-card-grid');
             const titleEl = document.getElementById('winning-card-title');
             
-            // Set title with card number
-            titleEl.innerHTML = `🏆 Winning Card #${cardId} 🏆`;
-            
-            container.innerHTML = '';
-            
             // Determine which row is complete (if any)
             let winningRow = -1;
             for (let row = 0; row < 5; row++) {
@@ -938,6 +933,15 @@
                     break;
                 }
             }
+            
+            // Set title with card number and winning row
+            if (winningRow >= 0) {
+                titleEl.innerHTML = `🏆 Winning Card #${cardId} (Row ${winningRow + 1}) 🏆`;
+            } else {
+                titleEl.innerHTML = `🏆 Winning Card #${cardId} 🏆`;
+            }
+            
+            container.innerHTML = '';
             
             // Build the 5x5 grid
             for (let row = 0; row < 5; row++) {
