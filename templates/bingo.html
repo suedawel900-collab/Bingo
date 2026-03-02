@@ -735,6 +735,7 @@
         let currentRound = 1;
         let currentWinner = null;
         let currentWinnerCardId = null; // store winning card id (as number)
+        let currentWinners = null; // store list of winners for multi-winner
         let balance = {{ initial_balance }};
         let activeGames = {{ initial_active_games }};
         let totalStake = {{ initial_stake }};
@@ -1083,28 +1084,32 @@
                     gameStarted = false;
                     gameEnded = true;
                     roundLocked = true;
-                    currentWinner = data.winner;
-                    // Ensure card_id is stored as number
-                    currentWinnerCardId = parseInt(data.winner.card_id);
+                    
+                    // Store winners list
+                    currentWinners = data.winners;  // array of {user_id, name, card_id}
+                    // For backward compatibility, set currentWinnerCardId to the first winner's card
+                    currentWinnerCardId = data.winning_card_id ? parseInt(data.winning_card_id) : null;
                     
                     document.getElementById('status').textContent = '🏆 WINNER!';
                     document.getElementById('bingo-btn').disabled = true;
                     
+                    // Build winner announcement text
+                    let winnerNames = data.winners.map(w => w.name).join(', ');
                     const winnerDiv = document.getElementById('winner-announcement');
-                    document.getElementById('winner-text').innerHTML = `🏆 ${data.winner.name} WINS! 🏆`;
-                    document.getElementById('winner-amount').textContent = `${data.prize} ETB`;
+                    document.getElementById('winner-text').innerHTML = `🏆 ${winnerNames} WINS! 🏆`;
+                    document.getElementById('winner-amount').textContent = `${data.prize_per_winner} ETB each`;
                     winnerDiv.style.display = 'block';
                     
                     // Update winner prize in header and display
-                    updateWinnerPrize(data.prize);
-                    document.getElementById('winner-prize-value').textContent = data.prize + ' ETB';
+                    updateWinnerPrize(data.total_prize);
+                    document.getElementById('winner-prize-value').textContent = data.total_prize + ' ETB';
                     
                     // Show winning card to all players if data includes it
                     if (data.winning_card) {
                         showWinningCard(data.winning_card, data.winning_card_id);
                     }
                     
-                    showMessage(`🏆 ${data.winner.name} won!`, 'success');
+                    showMessage(`🏆 ${winnerNames} won!`, 'success');
                     updatePlayersList();
                     fetchBalance();
                     renderAllCards(); // Re-render to highlight winning card
@@ -1112,6 +1117,7 @@
                     setTimeout(() => {
                         winnerDiv.style.display = 'none';
                         currentWinnerCardId = null;
+                        currentWinners = null;
                         renderAllCards();
                     }, 10000);
                 }
@@ -1122,6 +1128,7 @@
                     called = [];
                     currentWinner = null;
                     currentWinnerCardId = null;
+                    currentWinners = null;
                     
                     // Hide winning card section
                     document.getElementById('winning-card-section').style.display = 'none';
