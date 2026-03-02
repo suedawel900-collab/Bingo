@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MK-BINGO - Choose Room</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .balance {
+            font-size: 18px;
+            color: #4CAF50;
+            margin-bottom: 30px;
+        }
+        .rooms {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+        .room-card {
+            background: #f8f9fa;
+            border: 2px solid #667eea;
+            border-radius: 15px;
+            padding: 20px;
+            width: 250px;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .room-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(102,126,234,0.4);
+        }
+        .room-card h2 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        .room-card .price {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin: 10px 0;
+        }
+        .room-card .pattern {
+            color: #666;
+            margin: 10px 0;
+        }
+        .room-card .start-type {
+            background: #ff9800;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            display: inline-block;
+            font-size: 12px;
+        }
+        .back-btn {
+            margin-top: 30px;
+            padding: 10px 30px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .back-btn:hover {
+            background: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 MK-BINGO</h1>
+        <div class="balance">💰 Your Balance: <span id="balance">{{ balance }}</span> ETB</div>
+        
+        <div class="rooms">
+            <!-- Room 1 -->
+            <div class="room-card" onclick="selectRoom(1)">
+                <h2>🚪 Room 1</h2>
+                <div class="pattern">Any Line (row, column, diagonal)</div>
+                <div class="price">{{ price_room1 }} ETB per card</div>
+                <div class="start-type">⏱️ Auto-start after 5 cards</div>
+            </div>
+            
+            <!-- Room 2 -->
+            <div class="room-card" onclick="selectRoom(2)">
+                <h2>🚪 Room 2</h2>
+                <div class="pattern">Full House (all numbers)</div>
+                <div class="price">{{ price_room2 }} ETB per card</div>
+                <div class="start-type">👑 Manual start by admin</div>
+            </div>
+            
+            <!-- Room 3 -->
+            <div class="room-card" onclick="selectRoom(3)">
+                <h2>🚪 Room 3</h2>
+                <div class="pattern">Any Line (row, column, diagonal)</div>
+                <div class="price">{{ price_room3 }} ETB per card</div>
+                <div class="start-type">⏱️ Auto-start after 5 cards</div>
+            </div>
+        </div>
+        
+        <button class="back-btn" onclick="goBack()">◀️ Back to Telegram</button>
+    </div>
+
+    <script>
+        const userId = {{ user_id }};
+        
+        function selectRoom(roomId) {
+            window.location.href = `/game?user_id=${userId}&game_id=${roomId}`;
+        }
+        
+        function goBack() {
+            window.location.href = `https://t.me/{{ bot_username }}`;  // Replace with your bot's username
+        }
+    </script>
+</body>
+</html>
