@@ -1417,6 +1417,31 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
         "auto_start_delay": AUTO_START_DELAY
     })
 
+# ==================== API Endpoints ====================
+@app.get("/api/room-stats")
+async def get_room_stats():
+    """Get statistics for all rooms"""
+    stats = {}
+    for room_id in [1, 2, 3]:
+        if room_id in game_manager.active_games:
+            total_cards = game_manager.active_games[room_id]['total_cards_sold']
+            player_count = len(game_manager.active_games[room_id]['players'])
+            game_started = game_manager.game_started.get(room_id, False)
+            pattern = "አንድ መስመር" if room_id == 1 else "ፉል ሃውስ"
+        else:
+            total_cards = 0
+            player_count = 0
+            game_started = False
+            pattern = "አንድ መስመር" if room_id == 1 else "ፉል ሃውስ"
+        
+        stats[room_id] = {
+            "total_cards": total_cards,
+            "players": player_count,
+            "game_started": game_started,
+            "pattern": pattern
+        }
+    return stats
+
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
