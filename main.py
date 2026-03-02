@@ -118,7 +118,7 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# ==================== Deposit Handlers (HTML version, robust) ====================
+# ==================== Deposit Handlers ====================
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"User {user_id} started deposit via /deposit")
@@ -193,12 +193,10 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
-    # Store payment method
     method = query.data.replace("method_", "")
     context.user_data['payment_method'] = method
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
-    # Expanded amount buttons
     amounts = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 1000, 5000, 10000]
     amount_buttons = []
     row = []
@@ -254,7 +252,6 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
-    # Parse amount
     amount_str = query.data.replace("amount_", "")
     try:
         amount = int(amount_str)
@@ -262,12 +259,10 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Invalid amount. Please try again.")
         return SELECT_AMOUNT
 
-    # Validate amount (now up to 10000)
     if amount < 10 or amount > 10000:
         await query.edit_message_text("❌ Amount must be between 10 and 10000 ETB. Please choose again.")
         return SELECT_AMOUNT
 
-    # Retrieve payment method from user_data
     method = context.user_data.get('payment_method')
     if not method:
         logger.warning(f"User {user_id} had no payment_method in user_data – restarting")
@@ -279,18 +274,15 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
-    # Store amount
     context.user_data['deposit_amount'] = amount
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
-    # Delete the old message with buttons (clean up)
     try:
         await query.delete_message()
         logger.info(f"Deleted old amount selection message for user {user_id}")
     except Exception as e:
         logger.error(f"Failed to delete old message: {e}")
 
-    # Send a brand new message with account instructions – using HTML
     text = (f"💰 <b>{method_info['name']} Deposit</b>\n\n"
             f"💵 Amount: <b>{amount} ETB</b>\n"
             f"🏦 Account: <code>{method_info['account']}</code>\n"
@@ -306,7 +298,6 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     logger.info(f"Sent new instructions for amount {amount} to user {user_id}")
 
-    # Move to waiting for transaction ID
     return WAIT_TRANSACTION
 
 async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -314,31 +305,26 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     trx_id = update.message.text.strip()
     logger.info(f"Transaction ID from user {user_id}: {trx_id}")
 
-    # Retrieve stored data
     amount = context.user_data.get('deposit_amount')
     method = context.user_data.get('payment_method')
 
     if not amount or not method:
-        await update.message.reply_text(
-            "❌ Session expired. Please start over with /deposit"
-        )
+        await update.message.reply_text("❌ Session expired. Please start over with /deposit")
         return ConversationHandler.END
 
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
-    # Get payment method ID from database
     methods = db.get_payment_methods(type='mobile_money', active_only=True)
     if not methods:
         await update.message.reply_text("❌ No payment methods available")
         return ConversationHandler.END
     method_id = methods[0]['id']
 
-    # Create payment request
     try:
         request_id = db.create_payment_request(
             user_id=user_id,
             method_id=method_id,
-            amount=amount * 100,  # convert to cents
+            amount=amount * 100,
             sender_phone=""
         )
     except Exception as e:
@@ -350,14 +336,11 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("❌ Failed to create payment request. Please try again.")
         return ConversationHandler.END
 
-    # Store transaction ID as proof
     try:
         db.add_payment_proof(request_id, 'text', trx_id)
     except Exception as e:
         logger.error(f"Failed to add payment proof: {e}")
-        # Non-critical, continue
 
-    # Notify user – using HTML
     await update.message.reply_text(
         f"✅ <b>Payment Report Submitted!</b>\n\n"
         f"💰 <b>Amount:</b> {amount} ETB\n"
@@ -372,7 +355,6 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]])
     )
 
-    # Notify admin with approve/reject buttons
     keyboard = [
         [
             InlineKeyboardButton("✅ Approve", callback_data=f"approve_payment_{request_id}"),
@@ -399,16 +381,12 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.error(f"Failed to notify admin: {e}")
 
-    # Clear user_data and end conversation
     context.user_data.clear()
     return ConversationHandler.END
 
 async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"User {update.effective_user.id} cancelled deposit")
-    await update.message.reply_text(
-        "❌ Deposit cancelled.",
-        reply_markup=ReplyKeyboardRemove()
-    )
+    await update.message.reply_text("❌ Deposit cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 # ==================== Withdrawal Handlers ====================
@@ -542,9 +520,8 @@ async def withdraw_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Withdrawal cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# ==================== Broadcast Command (Admin only) ====================
+# ==================== Broadcast Command ====================
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin command to send a message to all users."""
     user_id = update.effective_user.id
     if user_id != ADMIN_USER_ID:
         await update.message.reply_text("❌ You are not authorized to use this command.")
@@ -574,7 +551,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='HTML'
             )
             sent += 1
-            await asyncio.sleep(0.05)  # small delay to avoid hitting rate limits
+            await asyncio.sleep(0.05)
         except Exception as e:
             logger.error(f"Failed to send broadcast to {uid}: {e}")
             failed += 1
@@ -757,9 +734,6 @@ class IntegratedBingoGame:
             if not user or user['balance'] < total_cost:
                 return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
 
-            # Note: was_empty is no longer used for timer
-            was_empty = all(len(p['card_ids']) == 0 for p in self.active_games[game_id]['players'].values())
-
             update_result = db.update_balance(user_id, -total_cost, 'game_fee', f'Selected cards for game #{game_id}')
             if not update_result:
                 return False, "Failed to deduct balance", total_cost, None
@@ -781,6 +755,8 @@ class IntegratedBingoGame:
             if not self.game_started and self.active_games[game_id]['total_cards_sold'] >= 5:
                 if self.auto_start_timer is None:
                     asyncio.create_task(self.start_auto_start_timer(game_id))
+                    # Broadcast to all clients that timer started
+                    await self.broadcast(game_id, {'type': 'auto_start_timer', 'delay': AUTO_START_DELAY})
 
             await self.broadcast(game_id, {'type': 'player_ready', 'players': self.get_players(game_id), 'user_id': user_id})
 
@@ -810,8 +786,6 @@ class IntegratedBingoGame:
         asyncio.create_task(self.draw_numbers(game_id))
 
     async def check_winner_any_line(self, game_id: int, last_number: int) -> List[Tuple[int, int]]:
-        """Check if anyone won by completing a row, column, or diagonal.
-           Returns a list of (user_id, card_id) for all winners on this number."""
         if game_id not in self.active_games:
             return []
 
@@ -829,31 +803,23 @@ class IntegratedBingoGame:
                 def is_marked(val):
                     return val == 'FREE' or val in called or val in marked
 
-                # Check rows
                 for row in range(5):
                     if all(is_marked(card[col][row]) for col in range(5)):
-                        logger.info(f"ROW BINGO! User {user_id} with card {card_id} at number {last_number}")
                         winners.append((user_id, card_id))
                         break
 
-                # Check columns (if not already a winner from a row)
                 if not any(w[0] == user_id and w[1] == card_id for w in winners):
                     for col in range(5):
                         if all(is_marked(card[col][row]) for row in range(5)):
-                            logger.info(f"COLUMN BINGO! User {user_id} with card {card_id} at number {last_number}")
                             winners.append((user_id, card_id))
                             break
 
-                # Check main diagonal
                 if not any(w[0] == user_id and w[1] == card_id for w in winners):
                     if all(is_marked(card[i][i]) for i in range(5)):
-                        logger.info(f"DIAGONAL BINGO (main)! User {user_id} with card {card_id} at number {last_number}")
                         winners.append((user_id, card_id))
 
-                # Check anti-diagonal
                 if not any(w[0] == user_id and w[1] == card_id for w in winners):
                     if all(is_marked(card[i][4-i]) for i in range(5)):
-                        logger.info(f"DIAGONAL BINGO (anti)! User {user_id} with card {card_id} at number {last_number}")
                         winners.append((user_id, card_id))
 
         return list(set(winners))
@@ -1038,7 +1004,7 @@ withdraw_conv = ConversationHandler(
     per_message=False
 )
 
-# ==================== Menu and Navigation Handlers ====================
+# ==================== Menu and Navigation ====================
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
@@ -1087,7 +1053,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         webapp_url = f"{BASE_URL}/game?user_id={user.id}&game_id=1"
         await query.edit_message_text(
-            f"🎮 Click to open game\n\n⏱️ Auto-starts {AUTO_START_DELAY}s after first card!\n\n💰 Balance: {user_data['balance']/100:.2f} ETB",
+            f"🎮 Click to open game\n\n⏱️ Auto-starts {AUTO_START_DELAY}s after 5 cards!\n\n💰 Balance: {user_data['balance']/100:.2f} ETB",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🎮 Open Game", web_app={'url': webapp_url})
             ]])
@@ -1107,7 +1073,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif data == "help":
         help_text = (
-            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose cards (1-1000)\n3. Game auto-starts 30s after first card\n4. Numbers called every 3 seconds\n5. Complete ONE LINE (row, column, or diagonal) to win!\n6. If multiple players win on the same number, the prize is split equally!\n\n"
+            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose cards (1-1000)\n3. Game auto-starts 30s after 5 cards are purchased!\n4. Numbers called every 3 seconds\n5. Complete ONE LINE (row, column, or diagonal) to win!\n6. If multiple players win on the same number, the prize is split equally!\n\n"
             f"Price: {CARD_PRICE/100} ETB per card\n\nDeposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Choose an amount (50–10000 ETB)\n• Send the money and provide the transaction ID\n\nWithdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
         )
         await query.edit_message_text(
@@ -1308,7 +1274,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Bingo Game", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ==================== Endpoints ====================
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
