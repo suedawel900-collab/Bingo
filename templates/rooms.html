@@ -15,7 +15,7 @@
             padding: 10px;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             width: 100%;
             background: white;
             border-radius: 20px;
@@ -26,65 +26,80 @@
         h1 {
             color: #333;
             margin-bottom: 10px;
+            font-size: 36px;
         }
         .balance {
-            font-size: 18px;
+            font-size: 20px;
             color: #4CAF50;
             margin-bottom: 30px;
+            font-weight: bold;
         }
         .rooms {
             display: flex;
             flex-wrap: wrap;
             gap: 20px;
             justify-content: center;
+            margin-bottom: 30px;
         }
         .room-card {
-            background: #f8f9fa;
+            background: linear-gradient(145deg, #f8f9fa, #e9ecef);
             border: 2px solid #667eea;
             border-radius: 15px;
-            padding: 20px;
-            width: 250px;
+            padding: 25px 20px;
+            width: 260px;
             cursor: pointer;
             transition: transform 0.3s, box-shadow 0.3s;
+            text-align: center;
         }
         .room-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(102,126,234,0.4);
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(102,126,234,0.4);
         }
         .room-card h2 {
             color: #667eea;
-            margin-bottom: 10px;
-        }
-        .room-card .price {
-            font-size: 20px;
-            font-weight: bold;
-            color: #4CAF50;
-            margin: 10px 0;
+            margin-bottom: 15px;
+            font-size: 28px;
         }
         .room-card .pattern {
-            color: #666;
+            color: #555;
             margin: 10px 0;
+            font-size: 16px;
+        }
+        .room-card .price {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin: 15px 0;
         }
         .room-card .start-type {
             background: #ff9800;
             color: white;
-            padding: 5px 10px;
-            border-radius: 20px;
+            padding: 8px 15px;
+            border-radius: 25px;
             display: inline-block;
-            font-size: 12px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .room-card.room2 .start-type {
+            background: #9c27b0;
         }
         .back-btn {
-            margin-top: 30px;
-            padding: 10px 30px;
+            padding: 12px 40px;
             background: #dc3545;
             color: white;
             border: none;
             border-radius: 10px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 18px;
+            font-weight: bold;
+            transition: background 0.3s;
         }
         .back-btn:hover {
             background: #c82333;
+        }
+        .footer {
+            margin-top: 20px;
+            color: #666;
         }
     </style>
 </head>
@@ -97,15 +112,17 @@
             <!-- Room 1 -->
             <div class="room-card" onclick="selectRoom(1)">
                 <h2>🚪 Room 1</h2>
-                <div class="pattern">Any Line (row, column, diagonal)</div>
+                <div class="pattern">Any Line</div>
+                <div class="pattern">(row, column, diagonal)</div>
                 <div class="price">{{ price_room1 }} ETB per card</div>
                 <div class="start-type">⏱️ Auto-start after 5 cards</div>
             </div>
             
             <!-- Room 2 -->
-            <div class="room-card" onclick="selectRoom(2)">
+            <div class="room-card room2" onclick="selectRoom(2)">
                 <h2>🚪 Room 2</h2>
-                <div class="pattern">Full House (all numbers)</div>
+                <div class="pattern">Full House</div>
+                <div class="pattern">(all numbers)</div>
                 <div class="price">{{ price_room2 }} ETB per card</div>
                 <div class="start-type">👑 Manual start by admin</div>
             </div>
@@ -113,24 +130,27 @@
             <!-- Room 3 -->
             <div class="room-card" onclick="selectRoom(3)">
                 <h2>🚪 Room 3</h2>
-                <div class="pattern">Any Line (row, column, diagonal)</div>
+                <div class="pattern">Any Line</div>
+                <div class="pattern">(row, column, diagonal)</div>
                 <div class="price">{{ price_room3 }} ETB per card</div>
                 <div class="start-type">⏱️ Auto-start after 5 cards</div>
             </div>
         </div>
         
         <button class="back-btn" onclick="goBack()">◀️ Back to Telegram</button>
+        <div class="footer">Good luck! 🍀</div>
     </div>
 
     <script>
         const userId = {{ user_id }};
+        const botUsername = "{{ bot_username }}";
         
         function selectRoom(roomId) {
             window.location.href = `/game?user_id=${userId}&game_id=${roomId}`;
         }
         
         function goBack() {
-            window.location.href = `https://t.me/{{ bot_username }}`;  // Replace with your bot's username
+            window.location.href = `https://t.me/${botUsername}`;
         }
     </script>
 </body>
