@@ -200,7 +200,6 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- Expanded amount buttons ---
     amounts = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 1000, 5000, 10000]
-    # Arrange in rows of 3 (except last row may have fewer)
     amount_buttons = []
     row = []
     for amt in amounts:
@@ -210,7 +209,6 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             row = []
     if row:
         amount_buttons.append(row)
-    # Add cancel button
     amount_buttons.append([InlineKeyboardButton("◀️ Cancel", callback_data="cancel_deposit")])
 
     reply_markup = InlineKeyboardMarkup(amount_buttons)
@@ -544,9 +542,47 @@ async def withdraw_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Withdrawal cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
+# ==================== Broadcast Command (Admin only) ====================
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to send a message to all users."""
+    user_id = update.effective_user.id
+    if user_id != ADMIN_USER_ID:
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+        return
+
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "Usage: /broadcast <message>\n\nExample: /broadcast New game starting soon!"
+        )
+        return
+
+    message = ' '.join(args)
+
+    all_users = db.get_all_user_ids()
+    if not all_users:
+        await update.message.reply_text("No users found.")
+        return
+
+    sent = 0
+    failed = 0
+    for uid in all_users:
+        try:
+            await context.bot.send_message(
+                chat_id=uid,
+                text=f"📢 <b>Announcement</b>\n\n{message}",
+                parse_mode='HTML'
+            )
+            sent += 1
+            await asyncio.sleep(0.05)  # small delay to avoid hitting rate limits
+        except Exception as e:
+            logger.error(f"Failed to send broadcast to {uid}: {e}")
+            failed += 1
+
+    await update.message.reply_text(f"Broadcast sent to {sent} users. Failed: {failed}")
+
 # ==================== Game Class ====================
 class IntegratedBingoGame:
-    # ... (entire class unchanged – same as before) ...
     def __init__(self):
         self.round_number = 1
         self.called_numbers = []
@@ -1232,6 +1268,7 @@ async def setup_bot():
     application.add_handler(withdraw_conv)
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("cancel", deposit_cancel))
+    application.add_handler(CommandHandler("broadcast", broadcast_command))  # <-- added
     application.add_handler(CallbackQueryHandler(button_callback))
     await application.initialize()
     await application.start()
