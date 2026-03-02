@@ -22,6 +22,22 @@
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             padding: 30px;
             text-align: center;
+            position: relative;
+        }
+        .back-arrow {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 28px;
+            cursor: pointer;
+            color: #667eea;
+            transition: transform 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-arrow:hover {
+            transform: translateX(-5px);
+            color: #764ba2;
         }
         h1 {
             color: #333;
@@ -63,7 +79,8 @@
         .room-card .pattern {
             color: #555;
             margin: 10px 0;
-            font-size: 16px;
+            font-size: 18px;
+            font-weight: bold;
         }
         .room-card .price {
             font-size: 24px;
@@ -83,20 +100,6 @@
         .room-card.room2 .start-type {
             background: #9c27b0;
         }
-        .back-btn {
-            padding: 12px 40px;
-            background: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 18px;
-            font-weight: bold;
-            transition: background 0.3s;
-        }
-        .back-btn:hover {
-            background: #c82333;
-        }
         .footer {
             margin-top: 20px;
             color: #666;
@@ -105,40 +108,38 @@
 </head>
 <body>
     <div class="container">
+        <a href="https://t.me/{{ bot_username }}" class="back-arrow" title="Back to Telegram">←</a>
+        
         <h1>🎯 MK-BINGO</h1>
-        <div class="balance">💰 Your Balance: <span id="balance">{{ balance }}</span> ETB</div>
+        <div class="balance">💰 ቀሪ ሂሳብ: <span id="balance">{{ balance }}</span> ብር</div>
         
         <div class="rooms">
-            <!-- Room 1 -->
+            <!-- Room 1 - Any Line -->
             <div class="room-card" onclick="selectRoom(1)">
-                <h2>🚪 Room 1</h2>
-                <div class="pattern">Any Line</div>
-                <div class="pattern">(row, column, diagonal)</div>
-                <div class="price">{{ price_room1 }} ETB per card</div>
-                <div class="start-type">⏱️ Auto-start after 5 cards</div>
+                <h2>🚪 ክፍል 1</h2>
+                <div class="pattern">አንድ መስመር</div>
+                <div class="price">10 ብር በካርድ</div>
+                <div class="start-type">⏱️ ከ5 ካርዶች በኋላ ይጀምራል</div>
             </div>
             
-            <!-- Room 2 -->
+            <!-- Room 2 - Full House 100 Birr -->
             <div class="room-card room2" onclick="selectRoom(2)">
-                <h2>🚪 Room 2</h2>
-                <div class="pattern">Full House</div>
-                <div class="pattern">(all numbers)</div>
-                <div class="price">{{ price_room2 }} ETB per card</div>
-                <div class="start-type">👑 Manual start by admin</div>
+                <h2>🚪 ክፍል 2</h2>
+                <div class="pattern">ፉል ሃውስ</div>
+                <div class="price">100 ብር በካርድ</div>
+                <div class="start-type">👑 በአስተዳዳሪ ይጀምራል</div>
             </div>
             
-            <!-- Room 3 -->
+            <!-- Room 3 - Full House 20 Birr -->
             <div class="room-card" onclick="selectRoom(3)">
-                <h2>🚪 Room 3</h2>
-                <div class="pattern">Any Line</div>
-                <div class="pattern">(row, column, diagonal)</div>
-                <div class="price">{{ price_room3 }} ETB per card</div>
-                <div class="start-type">⏱️ Auto-start after 5 cards</div>
+                <h2>🚪 ክፍል 3</h2>
+                <div class="pattern">ፉል ሃውስ</div>
+                <div class="price">20 ብር በካርድ</div>
+                <div class="start-type">⏱️ ከ5 ካርዶች በኋላ ይጀምራል</div>
             </div>
         </div>
         
-        <button class="back-btn" onclick="goBack()">◀️ Back to Telegram</button>
-        <div class="footer">Good luck! 🍀</div>
+        <div class="footer">መልካም እድል! 🍀</div>
     </div>
 
     <script>
@@ -147,10 +148,6 @@
         
         function selectRoom(roomId) {
             window.location.href = `/game?user_id=${userId}&game_id=${roomId}`;
-        }
-        
-        function goBack() {
-            window.open(`https://t.me/${botUsername}`, '_blank');
         }
     </script>
 </body>
