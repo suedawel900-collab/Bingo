@@ -394,7 +394,7 @@
             margin-top: 5px;
         }
         
-        /* Winning Card Display (for all players) */
+        /* Winning Card Display (for all players) - now positioned between called numbers and your cards */
         .winning-card-section {
             background: linear-gradient(145deg, gold, orange);
             padding: 15px;
@@ -635,12 +635,6 @@
             ⚡ Connection lost. <button onclick="manualReconnect()">Reconnect Now</button>
         </div>
         
-        <!-- Winning Card Display (for all players) -->
-        <div id="winning-card-section" class="winning-card-section">
-            <div class="winning-card-title" id="winning-card-title">🏆 Winning Card 🏆</div>
-            <div id="winning-card-grid" class="winning-card-grid"></div>
-        </div>
-        
         <!-- Main Content -->
         <div class="main-content">
             <!-- Card Grid -->
@@ -699,6 +693,12 @@
                     <!-- Players List - Shows players with their card counts -->
                     <div class="players-list" id="players-list"></div>
                 </div>
+            </div>
+            
+            <!-- Winning Card Display (for all players) - placed between called numbers and your cards -->
+            <div id="winning-card-section" class="winning-card-section">
+                <div class="winning-card-title" id="winning-card-title">🏆 Winning Card 🏆</div>
+                <div id="winning-card-grid" class="winning-card-grid"></div>
             </div>
             
             <!-- Player Cards Grid - Shows all cards -->
