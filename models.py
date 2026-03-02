@@ -119,14 +119,14 @@ class Database:
                 )
             ''')
             
-            # Referral bonuses table - tracks pending vs paid bonuses
+            # Referral bonuses table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS referral_bonuses (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     referrer_id INTEGER,
                     referred_id INTEGER,
-                    amount INTEGER DEFAULT 500,  # 5 ETB in cents
-                    status TEXT DEFAULT 'pending',  # pending, paid, expired
+                    amount INTEGER DEFAULT 500,
+                    status TEXT DEFAULT 'pending',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     paid_at TIMESTAMP,
                     FOREIGN KEY (referrer_id) REFERENCES users(user_id),
@@ -217,6 +217,9 @@ class Database:
             
             conn.commit()
             logger.info("✅ Database initialized successfully with conditional referral system")
+        except Exception as e:
+            logger.error(f"Database initialization error: {e}")
+            raise
         finally:
             conn.close()
 
@@ -525,7 +528,7 @@ class Database:
             ''', (referrer_id, referred_id, 500))
             
             conn.commit()
-            logger.info(f"✅ Pending referral bonus created: {referrer_id} -> {referred_id}")
+            logger.info(f"Pending referral bonus created: {referrer_id} -> {referred_id}")
             return True
         except Exception as e:
             logger.error(f"Error creating pending referral bonus: {e}")
@@ -588,7 +591,7 @@ class Database:
             ''', (referrer_id, 500, 'referral_bonus', f'Referral bonus for user {user_id} (after deposit)'))
             
             conn.commit()
-            logger.info(f"✅ Referral bonus paid: {referrer_id} received 5 ETB for {user_id}'s deposit")
+            logger.info(f"Referral bonus paid: {referrer_id} received 5 ETB for {user_id}'s deposit")
             return True
         except Exception as e:
             logger.error(f"Error paying referral bonus: {e}")
@@ -623,7 +626,7 @@ class Database:
             )
             total_referrals = cursor.fetchone()[0]
             
-            # Count pending bonuses (referred but not yet deposited)
+            # Count pending bonuses
             cursor.execute('''
                 SELECT COUNT(*) FROM referral_bonuses 
                 WHERE referrer_id = ? AND status = 'pending'
@@ -776,7 +779,6 @@ class Database:
             cursor.execute("SELECT COUNT(DISTINCT game_id) FROM active_games")
             active_games = cursor.fetchone()[0]
 
-            # Referral stats
             cursor.execute("SELECT COUNT(*) FROM referral_bonuses WHERE status = 'pending'")
             pending_referrals = cursor.fetchone()[0]
 
