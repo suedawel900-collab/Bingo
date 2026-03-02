@@ -409,6 +409,7 @@
             font-weight: bold;
             color: white;
             margin-bottom: 10px;
+            text-shadow: 1px 1px 2px black;
         }
         .winning-card-grid {
             display: grid;
@@ -626,7 +627,7 @@
         
         <!-- Winning Card Display (for all players) -->
         <div id="winning-card-section" class="winning-card-section">
-            <div class="winning-card-title">🏆 Winning Card 🏆</div>
+            <div class="winning-card-title" id="winning-card-title">🏆 Winning Card 🏆</div>
             <div id="winning-card-grid" class="winning-card-grid"></div>
         </div>
         
@@ -905,7 +906,7 @@
             });
         }
         
-        // Show winning card to all players (with winning row highlighted)
+        // Show winning card to all players (with winning row highlighted and card number)
         function showWinningCard(cardGrid, cardId) {
             // Clear any existing timeout
             if (winningCardTimeout) {
@@ -914,6 +915,11 @@
             
             const section = document.getElementById('winning-card-section');
             const container = document.getElementById('winning-card-grid');
+            const titleEl = document.getElementById('winning-card-title');
+            
+            // Set title with card number
+            titleEl.innerHTML = `🏆 Winning Card #${cardId} 🏆`;
+            
             container.innerHTML = '';
             
             // Determine which row is complete (if any)
