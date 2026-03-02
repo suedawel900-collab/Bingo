@@ -535,6 +535,19 @@ class Database:
         finally:
             conn.close()
 
+    # ==================== BROADCAST / UTILITY METHODS ====================
+
+    def get_all_user_ids(self):
+        """Return list of all user IDs."""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id FROM users")
+            rows = cursor.fetchall()
+            return [row['user_id'] for row in rows]
+        finally:
+            conn.close()
+
     # ==================== SYSTEM STATS ====================
 
     def get_system_stats(self) -> Dict:
