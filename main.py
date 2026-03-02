@@ -118,9 +118,8 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
-# ==================== Deposit Handlers (New Flow) ====================
+# ==================== Deposit Handlers (Robust Version) ====================
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Entry point: show payment method buttons."""
     user_id = update.effective_user.id
     logger.info(f"User {user_id} started deposit via /deposit")
     keyboard = [
@@ -138,7 +137,6 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SELECT_METHOD
 
 async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Entry point from main menu button."""
     query = update.callback_query
     user_id = update.effective_user.id
     logger.info(f"User {user_id} started deposit via button")
@@ -172,7 +170,6 @@ async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_T
     return SELECT_METHOD
 
 async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle payment method selection (Telebirr / CBE)."""
     query = update.callback_query
     user_id = update.effective_user.id
     logger.info(f"Method callback from user {user_id}: {query.data}")
@@ -228,7 +225,6 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SELECT_AMOUNT
 
 async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle amount selection with fallback if edit fails."""
     query = update.callback_query
     user_id = update.effective_user.id
     logger.info(f"Amount callback from user {user_id}: {query.data}")
@@ -263,14 +259,24 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Amount must be between 10 and 1000 ETB. Please choose again.")
         return SELECT_AMOUNT
 
-    # Store amount in user_data
+    # Retrieve payment method from user_data (if missing, restart)
+    method = context.user_data.get('payment_method')
+    if not method:
+        logger.warning(f"User {user_id} had no payment_method in user_data – restarting")
+        await query.edit_message_text(
+            "❌ Session expired. Please start over with /deposit",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+            ]])
+        )
+        return ConversationHandler.END
+
+    # Store amount
     context.user_data['deposit_amount'] = amount
-    method = context.user_data.get('payment_method', 'telebirr')
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
-    # Show account details and ask for transaction ID
+    # Try to edit the current message
     try:
-        # Try to edit the current message
         await query.edit_message_text(
             f"💰 **{method_info['name']} Deposit**\n\n"
             f"💵 Amount: **{amount} ETB**\n"
@@ -282,8 +288,9 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"_(Example: `TRX123456`)_",
             parse_mode='Markdown'
         )
+        logger.info(f"Successfully edited message for amount {amount}")
     except Exception as e:
-        # If editing fails, send a new message instead
+        # If editing fails, send a new message
         logger.error(f"Failed to edit message for amount {amount}: {e}. Sending new message.")
         await context.bot.send_message(
             chat_id=user_id,
@@ -297,11 +304,12 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                  f"_(Example: `TRX123456`)_",
             parse_mode='Markdown'
         )
+        logger.info(f"Sent new message for amount {amount}")
 
+    # Important: return the next state
     return WAIT_TRANSACTION
 
 async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle transaction ID input."""
     user_id = update.effective_user.id
     trx_id = update.message.text.strip()
     logger.info(f"Transaction ID from user {user_id}: {trx_id}")
@@ -326,18 +334,28 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     method_id = methods[0]['id']
 
     # Create payment request
-    request_id = db.create_payment_request(
-        user_id=user_id,
-        method_id=method_id,
-        amount=amount * 100,  # convert to cents
-        sender_phone=""
-    )
+    try:
+        request_id = db.create_payment_request(
+            user_id=user_id,
+            method_id=method_id,
+            amount=amount * 100,  # convert to cents
+            sender_phone=""
+        )
+    except Exception as e:
+        logger.error(f"Database error creating payment request: {e}")
+        await update.message.reply_text("❌ Failed to create payment request. Please try again later.")
+        return ConversationHandler.END
+
     if not request_id:
-        await update.message.reply_text("❌ Failed to create payment request")
+        await update.message.reply_text("❌ Failed to create payment request. Please try again.")
         return ConversationHandler.END
 
     # Store transaction ID as proof
-    db.add_payment_proof(request_id, 'text', trx_id)
+    try:
+        db.add_payment_proof(request_id, 'text', trx_id)
+    except Exception as e:
+        logger.error(f"Failed to add payment proof: {e}")
+        # Non-critical, continue
 
     # Notify user
     await update.message.reply_text(
@@ -386,7 +404,6 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel deposit conversation."""
     logger.info(f"User {update.effective_user.id} cancelled deposit")
     await update.message.reply_text(
         "❌ Deposit cancelled.",
@@ -394,7 +411,7 @@ async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# ==================== Withdrawal Handlers ====================
+# ==================== Withdrawal Handlers (unchanged) ====================
 async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_user(user.id) or db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
@@ -525,7 +542,7 @@ async def withdraw_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Withdrawal cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# ==================== Game Class ====================
+# ==================== Game Class (unchanged, full version from previous) ====================
 class IntegratedBingoGame:
     def __init__(self):
         self.round_number = 1
