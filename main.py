@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime
 from contextlib import asynccontextmanager
-from typing import Dict, Set, List, Any, Optional
+from typing import Dict, Set, List, Any, Optional, Tuple
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -119,7 +119,6 @@ os.makedirs("static", exist_ok=True)
 
 # ==================== Deposit Handlers ====================
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /deposit command – same as deposit_start but from a message."""
     user_id = update.effective_user.id
     logger.info(f"User {user_id} started deposit via /deposit")
     keyboard = [
@@ -137,7 +136,6 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return AMOUNT
 
 async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle deposit button from main menu – starts the deposit conversation."""
     query = update.callback_query
     user_id = update.effective_user.id
     logger.info(f"User {user_id} started deposit via button")
@@ -171,7 +169,6 @@ async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_T
     return AMOUNT
 
 async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle payment method selection (Telebirr / CBE) and cancellation."""
     query = update.callback_query
     user_id = update.effective_user.id
     logger.info(f"Deposit callback from user {user_id}: {query.data}")
@@ -220,7 +217,6 @@ async def deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return AMOUNT
 
 async def deposit_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle amount input and create payment request."""
     user_id = update.effective_user.id
     text = update.message.text.strip()
     logger.info(f"Deposit amount from user {user_id}: {text}")
@@ -281,7 +277,6 @@ async def deposit_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
 async def deposit_reference(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle payment reference and notify admin."""
     reference = update.message.text.strip()
     user = update.effective_user
     logger.info(f"Deposit reference from user {user.id}: {reference}")
@@ -350,7 +345,6 @@ async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ==================== Withdrawal Handlers ====================
 async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /withdraw command."""
     user = update.effective_user
     user_data = db.get_user(user.id) or db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
     balance = user_data['balance'] / 100
@@ -362,7 +356,6 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return WITHDRAW_AMOUNT
 
 async def withdraw_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle withdraw button from main menu – starts the withdrawal conversation."""
     query = update.callback_query
     user = update.effective_user
     logger.info(f"User {user.id} started withdrawal via button")
@@ -392,7 +385,6 @@ async def withdraw_start_callback(update: Update, context: ContextTypes.DEFAULT_
     return WITHDRAW_AMOUNT
 
 async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle withdrawal amount input."""
     user_id = update.effective_user.id
     text = update.message.text.strip()
     try:
@@ -424,7 +416,6 @@ async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return WITHDRAW_AMOUNT
 
 async def withdraw_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle phone number and create withdrawal request."""
     phone = update.message.text.strip()
     user = update.effective_user
     amount_cents = context.user_data.get('withdraw_amount')
@@ -709,85 +700,74 @@ class IntegratedBingoGame:
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_number})
         asyncio.create_task(self.draw_numbers(game_id))
 
-    # ==================== FIXED: draw_numbers with multiple stop checks ====================
+    # ==================== FIXED: draw_numbers with correct winner card ====================
     async def draw_numbers(self, game_id: int = 1):
         """Draw numbers for the game - ONE ROW ONLY win condition"""
         numbers = list(range(1, 76))
         random.shuffle(numbers)
-        
-        logger.info(f"Starting draw_numbers for game {game_id}")
-        
+
         for n in numbers:
-            # Check stop condition BEFORE sleeping
             if self.stop_number_generation or self.game_winner.get(game_id):
-                logger.info(f"Stopping number generation for game {game_id} - winner already found (pre-sleep)")
                 break
-                
+
             await asyncio.sleep(3)
-            
-            # Check again after sleep
+
             if self.stop_number_generation or self.game_winner.get(game_id):
-                logger.info(f"Stopping number generation for game {game_id} - winner found during sleep")
                 break
-                
+
             async with self.get_lock(game_id):
-                # Final check inside lock
                 if self.stop_number_generation or self.game_winner.get(game_id) or not self.game_started:
                     break
-                    
+
                 self.called_numbers.append(n)
                 self.active_games[game_id]['called_numbers'].append(n)
-                logger.info(f"Number called: {n}")
-                
                 await self.broadcast(game_id, {
                     'type': 'number_called',
                     'number': n,
                     'called': self.active_games[game_id]['called_numbers']
                 })
-                
-                # Check for winner
-                winner = await self.check_winner_row_only(game_id, n)
-                if winner:
-                    logger.info(f"🏆 WINNER FOUND! User {winner} - Stopping number generation IMMEDIATELY")
-                    self.stop_number_generation = True
-                    self.game_winner[game_id] = winner
-                    await self.finish_round(game_id, winner)
-                    break  # Exit loop immediately
 
-    async def check_winner_row_only(self, game_id: int, last_number: int):
-        """Check if someone won by completing a row (only rows, no columns/diagonals)"""
+                # Check for winner – returns (user_id, card_id) or None
+                result = await self.check_winner_row_only(game_id, n)
+                if result:
+                    user_id, card_id = result
+                    logger.info(f"🏆 WINNER FOUND! User {user_id} with card {card_id}")
+                    self.stop_number_generation = True
+                    self.game_winner[game_id] = user_id
+                    await self.finish_round(game_id, user_id, card_id)
+                    break
+
+    async def check_winner_row_only(self, game_id: int, last_number: int) -> Optional[Tuple[int, int]]:
+        """Check if someone won by completing a row. Returns (user_id, card_id) or None."""
         if game_id not in self.active_games:
             return None
-            
+
         called = set(self.active_games[game_id]['called_numbers'])
-        logger.info(f"Checking winner for game {game_id} - called numbers: {called}")
-        
+
         for user_id, player in self.active_games[game_id]['players'].items():
             if player['winner']:
                 continue
-                
+
             for card_idx, card in enumerate(player['cards']):
                 card_id = player['card_ids'][card_idx]
                 marked = set(player['marked'].get(card_id, []))
-                
+
                 # Add FREE space if it's the center
                 if card[2][2] == 'FREE':
                     marked.add('FREE')
-                    
+
                 # Check rows only (5 rows)
                 for row in range(5):
-                    row_numbers = [card[col][row] for col in range(5)]
                     row_complete = True
-                    
-                    for val in row_numbers:
+                    for col in range(5):
+                        val = card[col][row]
                         if val != 'FREE' and val not in called and val not in marked:
                             row_complete = False
                             break
-                            
                     if row_complete:
-                        logger.info(f"✅ ROW BINGO! User {user_id} with card {card_id} at number {last_number} - Row: {row_numbers}")
-                        return user_id
-                        
+                        logger.info(f"ROW BINGO! User {user_id} with card {card_id} at number {last_number}")
+                        return (user_id, card_id)
+
         return None
 
     def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
@@ -800,32 +780,30 @@ class IntegratedBingoGame:
         player['marked'][card_id].append(number)
         return True
 
-    # ==================== FIXED: finish_round sets stop flag first ====================
-    async def finish_round(self, game_id: int, winner_id: int):
-        """Finish the round and pay winner"""
+    async def finish_round(self, game_id: int, winner_id: int, winning_card_id: int):
+        """Finish the round and pay winner – now uses actual winning card ID."""
         if game_id not in self.active_games:
             return
-            
-        logger.info(f"Finishing round {game_id} - Winner: {winner_id}")
-        
-        # Set stop flag FIRST - before any other operations
+
         self.stop_number_generation = True
-        
+        logger.info(f"Finishing round {game_id} - Winner: {winner_id}, Winning Card: {winning_card_id}")
+
         prize_pool = self.active_games[game_id]['prize_pool']
         house_cut = prize_pool * HOUSE_PERCENT
         winner_prize = prize_pool - house_cut
         self.house_profit += house_cut
 
-        # Find the winning card ID (optional but useful)
-        winning_card_id = None
+        # Get winning card data
         winning_card_data = None
         if winner_id in self.active_games[game_id]['players']:
             player = self.active_games[game_id]['players'][winner_id]
-            winning_card_id = player['card_ids'][0] if player['card_ids'] else None
-            if winning_card_id:
-                card = next((c for c in BINGO_CARDS if c['id'] == winning_card_id), None)
-                if card:
-                    winning_card_data = card['card']
+            # Find the specific card that won
+            for card_id in player['card_ids']:
+                if card_id == winning_card_id:
+                    card = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+                    if card:
+                        winning_card_data = card['card']
+                    break
 
         # Update winner's balance in database
         if winner_id in self.active_games[game_id]['players']:
@@ -839,24 +817,25 @@ class IntegratedBingoGame:
             if update_result:
                 player['balance'] = update_result['new_balance']
                 player['winner'] = True
+
                 self.game_winner[game_id] = {
                     'user_id': winner_id,
                     'name': player['name'],
-                    'card_id': winning_card_id,
+                    'card_id': winning_card_id,  # ← correct card
                     'winning_number': self.active_games[game_id]['called_numbers'][-1] if self.active_games[game_id]['called_numbers'] else 0,
                     'round': self.round_number
                 }
-                logger.info(f"Game {game_id} winner: {winner_id}, prize: {winner_prize/100} ETB")
+
                 await self.broadcast(game_id, {
                     'type': 'game_won',
                     'winner': self.game_winner[game_id],
                     'prize': winner_prize / 100,
                     'house_fee': house_cut / 100,
                     'winning_card': winning_card_data,
-                    'winning_card_id': winning_card_id
+                    'winning_card_id': winning_card_id  # ← send correct ID
                 })
 
-        # Send Telegram notification
+        # Send Telegram notification (optional)
         if self.bot_app:
             try:
                 await self.bot_app.bot.send_message(
@@ -961,7 +940,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles all menu navigation callbacks (play, balance, help, admin, menu)."""
     query = update.callback_query
     try:
         await query.answer()
@@ -1152,9 +1130,7 @@ async def reject_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
 # ==================== Main Callback Router ====================
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Routes callbacks to the appropriate handler."""
     data = update.callback_query.data
-    # First, check if it's an approval callback
     if data.startswith('approve_payment_'):
         request_id = data.split('_')[2]
         await approve_payment(update, context, request_id)
@@ -1168,19 +1144,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         request_id = data.split('_')[2]
         await reject_withdrawal(update, context, request_id)
     else:
-        # All other menu callbacks
         await menu_callback(update, context)
 
 # ==================== Bot Setup ====================
 async def setup_bot():
     application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
-    # Add conversation handlers first so they catch their specific patterns
     application.add_handler(deposit_conv)
     application.add_handler(withdraw_conv)
-    # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("cancel", deposit_cancel))  # also works for withdrawal cancel
-    # Add the main callback handler for everything else
+    application.add_handler(CommandHandler("cancel", deposit_cancel))
     application.add_handler(CallbackQueryHandler(button_callback))
     await application.initialize()
     await application.start()
@@ -1286,12 +1258,16 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 card_id = data.get('card_id')
                 if card_id:
                     last = game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0
-                    winner_id = await game_manager.check_winner_row_only(game_id, last)
-                    if winner_id == user_id:
-                        game_manager.stop_number_generation = True
-                        await game_manager.finish_round(game_id, user_id)
+                    result = await game_manager.check_winner_row_only(game_id, last)
+                    if result:
+                        winner_id, winning_card = result
+                        if winner_id == user_id:
+                            game_manager.stop_number_generation = True
+                            await game_manager.finish_round(game_id, user_id, winning_card)
+                        else:
+                            await websocket.send_json({'type': 'error', 'message': 'Not a valid bingo'})
                     else:
-                        await websocket.send_json({'type': 'error', 'message': 'Not a valid bingo'})
+                        await websocket.send_json({'type': 'error', 'message': 'No bingo found'})
             elif data['type'] == 'heartbeat':
                 await websocket.send_json({'type': 'heartbeat_ack'})
             elif data['type'] == 'ping':
