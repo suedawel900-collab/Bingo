@@ -57,14 +57,14 @@ ROUND_RESET_DELAY = 10
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
-        "account": "0983994214",
-        "account_name": "Bingo Bot",
+        "account": "0953933030",
+        "account_name": "sued awel",
         "instructions": "Dial *127# and send money to 0983994214"
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "0983994214",
-        "account_name": "Bingo Bot",
+        "account": "0953933030",
+        "account_name": "sued awel",
         "instructions": "Dial *847# and send money to 0983994214"
     }
 }
