@@ -134,7 +134,7 @@ async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "💰 <b>Deposit Menu</b>\n\nChoose your payment method:",
+        "💰 <b>ገንዘብ መሙያ ሜኑ</b>\n\nየክፍያ ዘዴዎን ይምረጡ:",
         parse_mode='HTML',
         reply_markup=reply_markup
     )
@@ -159,7 +159,7 @@ async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         await query.edit_message_text(
-            "💰 <b>Deposit Menu</b>\n\nChoose your payment method:",
+            "💰 <b>ገንዘብ መሙያ ሜኑ</b>\n\nየክፍያ ዘዴዎን ይምረጡ:",
             parse_mode='HTML',
             reply_markup=reply_markup
         )
@@ -167,7 +167,7 @@ async def deposit_start_callback(update: Update, context: ContextTypes.DEFAULT_T
         logger.error(f"Failed to edit message: {e}, sending new")
         await context.bot.send_message(
             chat_id=user_id,
-            text="💰 <b>Deposit Menu</b>\n\nChoose your payment method:",
+            text="💰 <b>ገንዘብ መሙያ ሜኑ</b>\n\nየክፍያ ዘዴዎን ይምረጡ:",
             parse_mode='HTML',
             reply_markup=reply_markup
         )
@@ -190,9 +190,9 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Failed to delete cancel message: {e}")
         await context.bot.send_message(
             chat_id=user_id,
-            text="❌ Deposit cancelled.",
+            text="❌ ገንዘብ መሙላት ተሰርዟል።",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+                InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")
             ]])
         )
         return ConversationHandler.END
@@ -217,8 +217,8 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         await query.edit_message_text(
-            f"💰 <b>{method_info['name']} Deposit</b>\n\n"
-            f"<b>Choose an amount:</b>",
+            f"💰 <b>{method_info['name']} ገንዘብ መሙላት</b>\n\n"
+            f"<b>መጠን ይምረጡ:</b>",
             parse_mode='HTML',
             reply_markup=reply_markup
         )
@@ -226,7 +226,7 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Edit failed, sending new: {e}")
         await context.bot.send_message(
             chat_id=user_id,
-            text=f"💰 <b>{method_info['name']} Deposit</b>\n\n<b>Choose an amount:</b>",
+            text=f"💰 <b>{method_info['name']} ገንዘብ መሙላት</b>\n\n<b>መጠን ይምረጡ:</b>",
             parse_mode='HTML',
             reply_markup=reply_markup
         )
@@ -249,9 +249,9 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Failed to delete cancel message: {e}")
         await context.bot.send_message(
             chat_id=user_id,
-            text="❌ Deposit cancelled.",
+            text="❌ ገንዘብ መሙላት ተሰርዟል።",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+                InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")
             ]])
         )
         return ConversationHandler.END
@@ -260,20 +260,20 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         amount = int(amount_str)
     except ValueError:
-        await query.edit_message_text("❌ Invalid amount. Please try again.")
+        await query.edit_message_text("❌ የተሳሳተ መጠን። እባክዎ እንደገና ይሞክሩ።")
         return SELECT_AMOUNT
 
     if amount < 10 or amount > 10000:
-        await query.edit_message_text("❌ Amount must be between 10 and 10000 ETB. Please choose again.")
+        await query.edit_message_text("❌ መጠን ከ10 እስከ 10000 ብር መሆን አለበት። እባክዎ እንደገና ይምረጡ።")
         return SELECT_AMOUNT
 
     method = context.user_data.get('payment_method')
     if not method:
         logger.warning(f"User {user_id} had no payment_method in user_data – restarting")
         await query.edit_message_text(
-            "❌ Session expired. Please start over with /deposit",
+            "❌ ክፍለ ጊዜ አልቋል። እባክዎ በ /deposit ይጀምሩ",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+                InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")
             ]])
         )
         return ConversationHandler.END
@@ -287,14 +287,14 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Failed to delete old message: {e}")
 
-    text = (f"💰 <b>{method_info['name']} Deposit</b>\n\n"
-            f"💵 Amount: <b>{amount} ETB</b>\n"
-            f"🏦 Account: <code>{method_info['account']}</code>\n"
-            f"Account Name: {method_info['account_name']}\n\n"
-            f"<b>Instructions:</b>\n"
+    text = (f"💰 <b>{method_info['name']} ገንዘብ መሙላት</b>\n\n"
+            f"💵 መጠን: <b>{amount} ብር</b>\n"
+            f"🏦 አካውንት: <code>{method_info['account']}</code>\n"
+            f"የአካውንት ስም: {method_info['account_name']}\n\n"
+            f"<b>መመሪያ:</b>\n"
             f"{method_info['instructions']}\n\n"
-            f"✅ After sending the money, please <b>send the transaction ID</b> here.\n\n"
-            f"<i>Example: <code>TRX123456</code></i>")
+            f"✅ ገንዘቡን ከላኩ በኋላ እባክዎ <b>የግብይት መለያውን</b> ይላኩ።\n\n"
+            f"<i>ምሳሌ: <code>TRX123456</code></i>")
     await context.bot.send_message(
         chat_id=user_id,
         text=text,
@@ -313,14 +313,14 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     method = context.user_data.get('payment_method')
 
     if not amount or not method:
-        await update.message.reply_text("❌ Session expired. Please start over with /deposit")
+        await update.message.reply_text("❌ ክፍለ ጊዜ አልቋል። እባክዎ በ /deposit ይጀምሩ")
         return ConversationHandler.END
 
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
     methods = db.get_payment_methods(type='mobile_money', active_only=True)
     if not methods:
-        await update.message.reply_text("❌ No payment methods available")
+        await update.message.reply_text("❌ ምንም የክፍያ ዘዴዎች አልተገኙም")
         return ConversationHandler.END
     method_id = methods[0]['id']
 
@@ -333,11 +333,11 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
     except Exception as e:
         logger.error(f"Database error creating payment request: {e}")
-        await update.message.reply_text("❌ Failed to create payment request. Please try again later.")
+        await update.message.reply_text("❌ የክፍያ ጥያቄ መፍጠር አልተሳካም። እባክዎ በኋላ ይሞክሩ።")
         return ConversationHandler.END
 
     if not request_id:
-        await update.message.reply_text("❌ Failed to create payment request. Please try again.")
+        await update.message.reply_text("❌ የክፍያ ጥያቄ መፍጠር አልተሳካም። እባክዎ እንደገና ይሞክሩ።")
         return ConversationHandler.END
 
     try:
@@ -346,35 +346,35 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"Failed to add payment proof: {e}")
 
     await update.message.reply_text(
-        f"✅ <b>Payment Report Submitted!</b>\n\n"
-        f"💰 <b>Amount:</b> {amount} ETB\n"
-        f"💳 <b>Method:</b> {method_info['name']}\n"
-        f"🆔 <b>Request ID:</b> <code>{request_id}</code>\n"
-        f"🔢 <b>Transaction ID:</b> <code>{trx_id}</code>\n\n"
-        f"⏳ Admin will verify your payment shortly.\n"
-        f"You'll be notified once your balance is updated.",
+        f"✅ <b>የክፍያ ሪፖርት ተልኳል!</b>\n\n"
+        f"💰 <b>መጠን:</b> {amount} ብር\n"
+        f"💳 <b>ዘዴ:</b> {method_info['name']}\n"
+        f"🆔 <b>የጥያቄ መለያ:</b> <code>{request_id}</code>\n"
+        f"🔢 <b>የግብይት መለያ:</b> <code>{trx_id}</code>\n\n"
+        f"⏳ አስተዳዳሪው ክፍያዎን በቅርቡ ያረጋግጣል።\n"
+        f"ቀሪ ሂሳብዎ ሲዘምን ይነገርዎታል።",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+            InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")
         ]])
     )
 
     keyboard = [
         [
-            InlineKeyboardButton("✅ Approve", callback_data=f"approve_payment_{request_id}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"reject_payment_{request_id}")
+            InlineKeyboardButton("✅ አረጋግጥ", callback_data=f"approve_payment_{request_id}"),
+            InlineKeyboardButton("❌ ከልክል", callback_data=f"reject_payment_{request_id}")
         ]
     ]
     try:
         admin_message = await context.bot.send_message(
             chat_id=ADMIN_USER_ID,
-            text=f"💰 <b>New Payment Request</b>\n\n"
-                 f"👤 <b>User:</b> {update.effective_user.first_name}\n"
-                 f"🆔 <b>User ID:</b> <code>{user_id}</code>\n"
-                 f"💰 <b>Amount:</b> {amount} ETB\n"
-                 f"💳 <b>Method:</b> {method_info['name']}\n"
-                 f"🆔 <b>Request ID:</b> <code>{request_id}</code>\n"
-                 f"🔢 <b>Transaction ID:</b> <code>{trx_id}</code>",
+            text=f"💰 <b>አዲስ የክፍያ ጥያቄ</b>\n\n"
+                 f"👤 <b>ተጠቃሚ:</b> {update.effective_user.first_name}\n"
+                 f"🆔 <b>የተጠቃሚ መለያ:</b> <code>{user_id}</code>\n"
+                 f"💰 <b>መጠን:</b> {amount} ብር\n"
+                 f"💳 <b>ዘዴ:</b> {method_info['name']}\n"
+                 f"🆔 <b>የጥያቄ መለያ:</b> <code>{request_id}</code>\n"
+                 f"🔢 <b>የግብይት መለያ:</b> <code>{trx_id}</code>",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -390,53 +390,128 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"User {update.effective_user.id} cancelled deposit")
-    await update.message.reply_text("❌ Deposit cancelled.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text(
+        "❌ ገንዘብ መሙላት ተሰርዟል።",
+        reply_markup=ReplyKeyboardRemove()
+    )
     return ConversationHandler.END
+
+# ==================== WITHDRAWAL ELIGIBILITY CHECK ====================
+async def check_withdrawal_eligibility(user_id: int) -> Tuple[bool, str]:
+    """Check if user is eligible to withdraw (must have deposited at least 100 ETB first)"""
+    user = db.get_user(user_id)
+    if not user:
+        return False, "❌ ተጠቃሚ አልተገኘም።"
+    
+    # Check if user has ever deposited
+    if not user.get('has_deposited', False):
+        return False, "❌ ማውጣት ከመጀመርዎ በፊት ቢያንስ 100 ብር መሙላት አለብዎት።\n\n💡 መጀመሪያ ገንዘብ ይሙሉ እና ከዚያ ማውጣት ይችላሉ።"
+    
+    # Check total deposits (require minimum 100 ETB)
+    total_deposits = user.get('total_deposits', 0) / 100  # Convert from cents
+    if total_deposits < 100:
+        return False, f"❌ ማውጣት ከመጀመርዎ በፊት ቢያንስ 100 ብር መሙላት አለብዎት።\nእስካሁን ያስገቡት: {total_deposits:.2f} ብር"
+    
+    return True, "✅ ማውጣት ይችላሉ"
 
 # ==================== Withdrawal Handlers ====================
 async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_data = db.get_user(user.id) or db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
+    """Handle /withdraw command - check if user is eligible first"""
+    user_id = update.effective_user.id
+    user_data = db.get_user(user_id) or db.get_or_create_user(user_id, user.username, user.first_name, user.last_name)
+    
+    # Check withdrawal eligibility
+    eligible, message = await check_withdrawal_eligibility(user_id)
+    if not eligible:
+        # Create a keyboard with deposit button
+        keyboard = [
+            [InlineKeyboardButton("💳 ገንዘብ ሙሉ", callback_data="deposit_start")],
+            [InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")]
+        ]
+        await update.message.reply_text(
+            message,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ConversationHandler.END
+    
     balance = user_data['balance'] / 100
     await update.message.reply_text(
-        f"💸 <b>Withdrawal</b>\n\nYour current balance: <b>{balance:.2f} ETB</b>\n"
-        f"Minimum withdrawal: <b>10 ETB</b>\n\nPlease enter the amount you want to withdraw (10-{balance:.2f} ETB):",
+        f"💸 <b>ማውጣት</b>\n\n"
+        f"የእርስዎ ቀሪ ሂሳብ: <b>{balance:.2f} ብር</b>\n"
+        f"ዝቅተኛ ማውጫ: <b>10 ብር</b>\n\n"
+        f"እባክዎ ማውጣት የሚፈልጉትን መጠን ያስገቡ (10-{balance:.2f} ብር):",
         parse_mode='HTML'
     )
     return WITHDRAW_AMOUNT
 
 async def withdraw_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle withdraw button from main menu - check eligibility first"""
     query = update.callback_query
     user = update.effective_user
     logger.info(f"User {user.id} started withdrawal via button")
-
+    
     try:
         await query.answer()
     except BadRequest as e:
         logger.warning(f"Callback answer failed: {e}")
-
+    
+    # Check withdrawal eligibility
+    eligible, message = await check_withdrawal_eligibility(user.id)
+    if not eligible:
+        keyboard = [
+            [InlineKeyboardButton("💳 ገንዘብ ሙሉ", callback_data="deposit_start")],
+            [InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")]
+        ]
+        await query.edit_message_text(
+            message,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ConversationHandler.END
+    
     user_data = db.get_user(user.id) or db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
     balance = user_data['balance'] / 100
-
+    
     try:
         await query.edit_message_text(
-            f"💸 <b>Withdrawal</b>\n\nYour current balance: <b>{balance:.2f} ETB</b>\n"
-            f"Minimum withdrawal: <b>10 ETB</b>\n\nPlease enter the amount you want to withdraw (10-{balance:.2f} ETB):",
+            f"💸 <b>ማውጣት</b>\n\n"
+            f"የእርስዎ ቀሪ ሂሳብ: <b>{balance:.2f} ብር</b>\n"
+            f"ዝቅተኛ ማውጫ: <b>10 ብር</b>\n\n"
+            f"እባክዎ ማውጣት የሚፈልጉትን መጠን ያስገቡ (10-{balance:.2f} ብር):",
             parse_mode='HTML'
         )
     except Exception as e:
         logger.error(f"Edit failed, sending new: {e}")
         await context.bot.send_message(
             chat_id=user.id,
-            text=f"💸 <b>Withdrawal</b>\n\nYour current balance: <b>{balance:.2f} ETB</b>\n"
-                 f"Minimum withdrawal: <b>10 ETB</b>\n\nPlease enter the amount you want to withdraw (10-{balance:.2f} ETB):",
+            text=f"💸 <b>ማውጣት</b>\n\n"
+                 f"የእርስዎ ቀሪ ሂሳብ: <b>{balance:.2f} ብር</b>\n"
+                 f"ዝቅተኛ ማውጫ: <b>10 ብር</b>\n\n"
+                 f"እባክዎ ማውጣት የሚፈልጉትን መጠን ያስገቡ (10-{balance:.2f} ብር):",
             parse_mode='HTML'
         )
     return WITHDRAW_AMOUNT
 
 async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle withdrawal amount input with eligibility check"""
     user_id = update.effective_user.id
     text = update.message.text.strip()
+    
+    # Double-check eligibility (in case they try to bypass)
+    eligible, message = await check_withdrawal_eligibility(user_id)
+    if not eligible:
+        keyboard = [
+            [InlineKeyboardButton("💳 ገንዘብ ሙሉ", callback_data="deposit_start")],
+            [InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")]
+        ]
+        await update.message.reply_text(
+            message,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return ConversationHandler.END
+    
     try:
         amount = float(text)
         user_data = db.get_user(user_id)
@@ -444,11 +519,11 @@ async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         balance_etb = balance_cents / 100
 
         if amount < 10:
-            await update.message.reply_text("❌ Minimum withdrawal is 10 ETB. Please enter a valid amount:")
+            await update.message.reply_text("❌ ዝቅተኛ ማውጫ 10 ብር ነው። እባክዎ ትክክለኛ መጠን ያስገቡ:")
             return WITHDRAW_AMOUNT
         if amount > balance_etb:
             await update.message.reply_text(
-                f"❌ Insufficient balance. Your balance is {balance_etb:.2f} ETB.\nPlease enter a lower amount:"
+                f"❌ በቂ ገንዘብ የለም። የእርስዎ ቀሪ ሂሳብ {balance_etb:.2f} ብር ነው።\nእባክዎ ዝቅተኛ መጠን ያስገቡ:"
             )
             return WITHDRAW_AMOUNT
 
@@ -457,12 +532,12 @@ async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['withdraw_amount_etb'] = amount
 
         await update.message.reply_text(
-            "📱 <b>Enter your phone number</b> (the one registered with your mobile money):\nExample: <code>0983994214</code>",
+            "📱 <b>ስልክ ቁጥርዎን ያስገቡ</b> (በሞባይል ገንዘብዎ የተመዘገበው):\nምሳሌ: <code>0983994214</code>",
             parse_mode='HTML'
         )
         return WITHDRAW_PHONE
     except ValueError:
-        await update.message.reply_text("❌ Invalid amount. Please enter a number:")
+        await update.message.reply_text("❌ የተሳሳተ መጠን። እባክዎ ቁጥር ያስገቡ:")
         return WITHDRAW_AMOUNT
 
 async def withdraw_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -472,29 +547,29 @@ async def withdraw_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     amount_etb = context.user_data.get('withdraw_amount_etb')
 
     if not amount_cents:
-        await update.message.reply_text("❌ Session expired. Please start over with /withdraw")
+        await update.message.reply_text("❌ ክፍለ ጊዜ አልቋል። እባክዎ በ /withdraw ይጀምሩ")
         return ConversationHandler.END
 
     request_id = db.create_withdrawal_request(user.id, amount_cents, phone)
     if not request_id:
-        await update.message.reply_text("❌ Failed to create withdrawal request. Please try again.")
+        await update.message.reply_text("❌ የማውጫ ጥያቄ መፍጠር አልተሳካም። እባክዎ እንደገና ይሞክሩ።")
         return ConversationHandler.END
 
     keyboard = [
         [
-            InlineKeyboardButton("✅ Approve", callback_data=f"approve_withdraw_{request_id}"),
-            InlineKeyboardButton("❌ Reject", callback_data=f"reject_withdraw_{request_id}")
+            InlineKeyboardButton("✅ አረጋግጥ", callback_data=f"approve_withdraw_{request_id}"),
+            InlineKeyboardButton("❌ ከልክል", callback_data=f"reject_withdraw_{request_id}")
         ]
     ]
     try:
         admin_message = await context.bot.send_message(
             chat_id=ADMIN_USER_ID,
-            text=f"💸 <b>New Withdrawal Request</b>\n\n"
-                 f"👤 <b>User:</b> {user.first_name}\n"
-                 f"🆔 <b>User ID:</b> <code>{user.id}</code>\n"
-                 f"💰 <b>Amount:</b> {amount_etb:.2f} ETB\n"
-                 f"📱 <b>Phone:</b> {phone}\n"
-                 f"🆔 <b>Request ID:</b> <code>{request_id}</code>",
+            text=f"💸 <b>አዲስ የማውጫ ጥያቄ</b>\n\n"
+                 f"👤 <b>ተጠቃሚ:</b> {user.first_name}\n"
+                 f"🆔 <b>የተጠቃሚ መለያ:</b> <code>{user.id}</code>\n"
+                 f"💰 <b>መጠን:</b> {amount_etb:.2f} ብር\n"
+                 f"📱 <b>ስልክ:</b> {phone}\n"
+                 f"🆔 <b>የጥያቄ መለያ:</b> <code>{request_id}</code>",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -506,14 +581,14 @@ async def withdraw_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Failed to notify admin about withdrawal: {e}")
 
     await update.message.reply_text(
-        f"✅ <b>Withdrawal Request Submitted!</b>\n\n"
-        f"💰 Amount: {amount_etb:.2f} ETB\n"
-        f"📱 Phone: {phone}\n"
-        f"🆔 Request ID: <code>{request_id}</code>\n\n"
-        f"⏳ Admin will process your request shortly.",
+        f"✅ <b>የማውጫ ጥያቄ ተልኳል!</b>\n\n"
+        f"💰 መጠን: {amount_etb:.2f} ብር\n"
+        f"📱 ስልክ: {phone}\n"
+        f"🆔 የጥያቄ መለያ: <code>{request_id}</code>\n\n"
+        f"⏳ አስተዳዳሪው ጥያቄዎን በቅርቡ ያስኬዳል።",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ Main Menu", callback_data="menu")
+            InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")
         ]])
     )
 
@@ -521,7 +596,7 @@ async def withdraw_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def withdraw_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Withdrawal cancelled.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("❌ ማውጣት ተሰርዟል።", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 # ==================== Broadcast Command ====================
@@ -551,7 +626,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(
                 chat_id=uid,
-                text=f"📢 <b>Announcement</b>\n\n{message}",
+                text=f"📢 <b>ማስታወቂያ</b>\n\n{message}",
                 parse_mode='HTML'
             )
             sent += 1
@@ -679,7 +754,6 @@ async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_username = context.bot.username
         link = f"https://t.me/{bot_username}?start=ref_{referral_code}"
         
-        # Copy to clipboard (show message)
         await query.edit_message_text(
             f"✅ ሊንክዎ ተዘጋጅቷል! ይህን ሊንክ ለጓደኛዎ ይላኩ:\n\n`{link}`\n\n"
             f"ሊንኩን ለመቅዳት በላዩ ላይ ይንኩና Copy ይምረጡ።",
@@ -690,7 +764,6 @@ async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     elif query.data == "back_to_referral":
-        # Show referral stats again
         user_id = update.effective_user.id
         user = db.get_user(user_id)
         stats = db.get_referral_stats(user_id)
@@ -787,7 +860,7 @@ async def start_with_referral(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user's balance including referral earnings"""
+    """Show user's balance including referral earnings and deposit status"""
     user_id = update.effective_user.id
     user_data = db.get_user(user_id)
     
@@ -797,16 +870,25 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     balance = user_data['balance'] / 100
     referral_earnings = user_data.get('referral_earnings', 0) / 100
     games_won = user_data.get('games_won', 0)
+    has_deposited = user_data.get('has_deposited', False)
+    total_deposits = user_data.get('total_deposits', 0) / 100
     
     # Get referral stats
     stats = db.get_referral_stats(user_id)
+    
+    deposit_status = "✅ ገንዘብ ሞልተዋል" if has_deposited else "❌ ገና ገንዘብ አልሞሉም"
+    withdrawal_status = "✅ ማውጣት ይችላሉ" if has_deposited and total_deposits >= 100 else "❌ ማውጣት ከመጀመር 100 ብር መሙላት አለብዎት"
     
     message = (
         f"💰 **የእርስዎ ቀሪ ሂሳብ**\n\n"
         f"ጠቅላላ ቀሪ: **{balance:.2f} ብር**\n"
         f"ከጨዋታ ያገኙት: **{(balance - referral_earnings):.2f} ብር**\n"
         f"ከማስተዋወቂያ ያገኙት: **{referral_earnings:.2f} ብር**\n"
+        f"ያስገቡት ጠቅላላ: **{total_deposits:.2f} ብር**\n"
         f"ያሸነፉባቸው ጨዋታዎች: **{games_won}**\n\n"
+        f"📊 **ሁኔታ:**\n"
+        f"• ተቀማጭ: {deposit_status}\n"
+        f"• ማውጫ: {withdrawal_status}\n\n"
         f"👥 የተመዘገቡ ጓደኞች: **{stats['total_referrals']}**\n"
         f"⏳ በመጠባበቅ ላይ ያሉ: **{stats['pending_bonuses']}**"
     )
@@ -1230,7 +1312,7 @@ class IntegratedBingoGame:
                 try:
                     await self.bot_app.bot.send_message(
                         chat_id=user_id,
-                        text=f"🎉 CONGRATULATIONS! 🎉\n\nYou won round {self.round_numbers[game_id]} in Room {game_id}!\nYour share: {prize_per_winner/100} ETB"
+                        text=f"🎉 እንኳን ደስ አለዎት! 🎉\n\nበክፍል {game_id} ዙር {self.round_numbers[game_id]} አሸንፈዋል!\nየእርስዎ ድርሻ: {prize_per_winner/100} ብር"
                     )
                 except:
                     pass
@@ -1336,20 +1418,20 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = db.get_user(user.id)
         if not user_data or user_data['balance'] < CARD_PRICE_ROOM1:
             await query.edit_message_text(
-                f"❌ Insufficient balance. Need {CARD_PRICE_ROOM1/100} ETB minimum.",
+                f"❌ በቂ ገንዘብ የለም። ቢያንስ {CARD_PRICE_ROOM1/100} ብር ያስፈልጋል።",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("💳 Deposit", callback_data="deposit_start"),
-                    InlineKeyboardButton("◀️ Back", callback_data="menu")
+                    InlineKeyboardButton("💳 ገንዘብ ሙሉ", callback_data="deposit_start"),
+                    InlineKeyboardButton("◀️ ተመለስ", callback_data="menu")
                 ]])
             )
             return
         # Direct link to web app room selection
         webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
         await query.edit_message_text(
-            f"🎮 Click to open game and choose a room\n\n"
-            f"💰 Balance: {user_data['balance']/100:.2f} ETB",
+            f"🎮 ጨዋታውን ለመክፈት እና ክፍል ለመምረጥ ይጫኑ\n\n"
+            f"💰 ቀሪ ሂሳብ: {user_data['balance']/100:.2f} ብር",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🎮 Open Game Lobby", web_app={'url': webapp_url})
+                InlineKeyboardButton("🎮 ጨዋታ ክፍሎች", web_app={'url': webapp_url})
             ]])
         )
     elif data == "balance":
@@ -1373,12 +1455,13 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"ዋጋ (ክፍል 3): {CARD_PRICE_ROOM3/100} ብር በካርድ\n\n"
             "ተቀማጭ:\n• 'Deposit' ቁልፍን ይጫኑ\n• Telebirr ወይም CBE Birr ይምረጡ\n• መጠን ይምረጡ (50–10000 ብር)\n• ገንዘቡን ይላኩ እና የግብይት መለያውን ይላኩ\n\n"
             "ማውጣት:\n• 'Withdraw' ቁልፍን ይጫኑ\n• መጠን እና ስልክ ቁጥር ያስገቡ\n• አስተዳዳሪው ያረጋግጣል እና ገንዘቡን ይልካል\n\n"
-            "🎁 ማስተዋወቂያ:\n• /refer በመጠቀም ጓደኞችዎን ይጋብዙ\n• እያንዳንዱ ጓደኛዎ ገንዘብ ሲሞላ 5 ብር ያግኙ"
+            "🎁 ማስተዋወቂያ:\n• /refer በመጠቀም ጓደኞችዎን ይጋብዙ\n• እያንዳንዱ ጓደኛዎ ገንዘብ ሲሞላ 5 ብር ያግኙ\n\n"
+            "💸 ማውጣት ሁኔታ:\n• ማውጣት ከመጀመር በፊት ቢያንስ 100 ብር መሙላት አለብዎት"
         )
         await query.edit_message_text(
             help_text,
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Back", callback_data="menu")
+                InlineKeyboardButton("◀️ ተመለስ", callback_data="menu")
             ]])
         )
     elif data == "admin" and str(user.id) == str(ADMIN_USER_ID):
@@ -1386,40 +1469,43 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending_payments = len(db.get_pending_payment_requests(limit=100))
         pending_withdrawals = len(db.get_pending_withdrawal_requests(limit=100))
         await query.edit_message_text(
-            f"👑 Admin Panel\n\nUsers: {stats['total_users']}\nTotal Balance: {stats['total_balance']/100:.2f} ETB\nPending Payments: {pending_payments}\nPending Withdrawals: {pending_withdrawals}\nPending Referrals: {stats.get('pending_referrals', 0)}",
+            f"👑 የአስተዳዳሪ ፓነል\n\n"
+            f"ተጠቃሚዎች: {stats['total_users']}\n"
+            f"ጠቅላላ ቀሪ: {stats['total_balance']/100:.2f} ብር\n"
+            f"በመጠባበቅ ላይ ያሉ ክፍያዎች: {pending_payments}\n"
+            f"በመጠባበቅ ላይ ያሉ ማውጫዎች: {pending_withdrawals}\n"
+            f"በመጠባበቅ ላይ ያሉ ማስተዋወቂያዎች: {stats.get('pending_referrals', 0)}",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📊 View Pending Payments", callback_data="admin_pending_payments")],
-                [InlineKeyboardButton("💸 View Pending Withdrawals", callback_data="admin_pending_withdrawals")],
-                [InlineKeyboardButton("◀️ Back", callback_data="menu")]
+                [InlineKeyboardButton("📊 የሚጠባበቁ ክፍያዎች", callback_data="admin_pending_payments")],
+                [InlineKeyboardButton("💸 የሚጠባበቁ ማውጫዎች", callback_data="admin_pending_withdrawals")],
+                [InlineKeyboardButton("◀️ ተመለስ", callback_data="menu")]
             ])
         )
     elif data == "admin_pending_payments" and str(user.id) == str(ADMIN_USER_ID):
         pending = db.get_pending_payment_requests(limit=10)
         if not pending:
-            await query.edit_message_text("📊 No pending payments.", reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Back", callback_data="admin")
+            await query.edit_message_text("📊 ምንም የሚጠባበቁ ክፍያዎች የሉም።", reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ ተመለስ", callback_data="admin")
             ]]))
             return
-        text = "📊 Pending Payments:\n\n" + "\n\n".join(
-            f"🆔 {p['request_id']}\n👤 {p['first_name']} (@{p.get('username','N/A')})\n💰 {p['amount']/100:.2f} ETB"
-            for p in pending
-        )
+        text = "📊 የሚጠባበቁ ክፍያዎች:\n\n"
+        for p in pending:
+            text += f"🆔 {p['request_id']}\n👤 {p['first_name']} (@{p.get('username','N/A')})\n💰 {p['amount']/100:.2f} ብር\n\n"
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ Back", callback_data="admin")
+            InlineKeyboardButton("◀️ ተመለስ", callback_data="admin")
         ]]))
     elif data == "admin_pending_withdrawals" and str(user.id) == str(ADMIN_USER_ID):
         pending = db.get_pending_withdrawal_requests(limit=10)
         if not pending:
-            await query.edit_message_text("📊 No pending withdrawals.", reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Back", callback_data="admin")
+            await query.edit_message_text("📊 ምንም የሚጠባበቁ ማውጫዎች የሉም።", reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ ተመለስ", callback_data="admin")
             ]]))
             return
-        text = "💸 Pending Withdrawals:\n\n" + "\n\n".join(
-            f"🆔 {w['request_id']}\n👤 {w['first_name']} (@{w.get('username','N/A')})\n💰 {w['amount']/100:.2f} ETB\n📱 {w['phone_number']}"
-            for w in pending
-        )
+        text = "💸 የሚጠባበቁ ማውጫዎች:\n\n"
+        for w in pending:
+            text += f"🆔 {w['request_id']}\n👤 {w['first_name']} (@{w.get('username','N/A')})\n💰 {w['amount']/100:.2f} ብር\n📱 {w['phone_number']}\n\n"
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ Back", callback_data="admin")
+            InlineKeyboardButton("◀️ ተመለስ", callback_data="admin")
         ]]))
     elif data == "menu":
         user_data = db.get_user(user.id)
@@ -1435,7 +1521,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if str(user.id) == str(ADMIN_USER_ID):
             keyboard.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
         await query.edit_message_text(
-            f"🎯 Main Menu\n💰 Balance: {balance:.2f} ETB",
+            f"🎯 ዋና ሜኑ\n💰 ቀሪ ሂሳብ: {balance:.2f} ብር",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
@@ -1444,7 +1530,7 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
     query = update.callback_query
     request = db.get_payment_request(request_id)
     if not request:
-        await query.edit_message_text("❌ Payment request not found")
+        await query.edit_message_text("❌ የክፍያ ጥያቄ አልተገኘም")
         return
     
     db.update_payment_request_status(request_id, 'completed', 'Approved by admin')
@@ -1453,7 +1539,10 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
     if result:
         await context.bot.send_message(
             request['user_id'],
-            f"✅ Payment Approved!\n\nYour payment of {request['amount']/100:.2f} ETB has been approved.\nNew balance: {result['new_balance']/100:.2f} ETB"
+            f"✅ ገንዘብ መሙላት ጸድቋል!\n\n"
+            f"የእርስዎ {request['amount']/100:.2f} ብር ጸድቋል።\n"
+            f"አዲስ ቀሪ ሂሳብ: {result['new_balance']/100:.2f} ብር\n\n"
+            f"💡 አሁን ማውጣት ይችላሉ! /withdraw ይጠቀሙ"
         )
         
         # 🔥 Check if this user was referred and pay bonus to referrer
@@ -1469,10 +1558,10 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
                 # Notify referrer
                 await context.bot.send_message(
                     chat_id=referrer_id,
-                    text=f"🎁 **Referral Bonus Awarded!** 🎁\n\n"
-                         f"The user you referred (ID: {request['user_id']}) just made their first deposit!\n"
-                         f"You received **5 ETB** as a bonus!\n\n"
-                         f"💰 Check your balance with /balance",
+                    text=f"🎁 **የማስተዋወቂያ ቦነስ!** 🎁\n\n"
+                         f"የጋበዙት ሰው (ID: {request['user_id']}) የመጀመሪያ ገንዘባቸውን ሞልተዋል!\n"
+                         f"እርስዎ **5 ብር** ቦነስ አግኝተዋል!\n\n"
+                         f"💰 ቀሪ ሂሳብዎን ለማየት /balance ይጠቀሙ",
                     parse_mode='Markdown'
                 )
             except Exception as e:
@@ -1492,44 +1581,47 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
                 logger.error(f"Failed to remove admin buttons: {e}")
         
         await query.edit_message_text(
-            f"✅ Payment Approved\n\n"
-            f"Request ID: {request_id}\n"
-            f"Amount: {request['amount']/100:.2f} ETB"
+            f"✅ ገንዘብ መሙላት ጸድቋል\n\n"
+            f"የጥያቄ መለያ: {request_id}\n"
+            f"መጠን: {request['amount']/100:.2f} ብር"
         )
     else:
-        await query.edit_message_text("❌ Failed to update balance")
+        await query.edit_message_text("❌ ቀሪ ሂሳብ ማዘመን አልተሳካም")
 
 async def reject_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, request_id: str):
     query = update.callback_query
     request = db.get_payment_request(request_id)
     if not request:
-        await query.edit_message_text("❌ Payment request not found")
+        await query.edit_message_text("❌ የክፍያ ጥያቄ አልተገኘም")
         return
     db.update_payment_request_status(request_id, 'rejected', 'Rejected by admin')
-    await context.bot.send_message(request['user_id'], f"❌ Payment Rejected\n\nYour payment of {request['amount']/100:.2f} ETB has been rejected.\nPlease contact admin.")
+    await context.bot.send_message(
+        request['user_id'], 
+        f"❌ ክፍያ ውድቅ ሆኗል\n\nየእርስዎ {request['amount']/100:.2f} ብር ክፍያ ውድቅ ሆኗል።\nእባክዎ አስተዳዳሪውን ያግኙ።"
+    )
     admin_msg = context.bot_data.get(f"admin_msg_{request_id}")
     if admin_msg:
         try:
             await context.bot.edit_message_reply_markup(admin_msg['chat_id'], admin_msg['message_id'], reply_markup=None)
         except Exception as e:
             logger.error(f"Failed to remove admin buttons: {e}")
-    await query.edit_message_text(f"❌ Payment Rejected\n\nRequest ID: {request_id}")
+    await query.edit_message_text(f"❌ ክፍያ ውድቅ ሆኗል\n\nየጥያቄ መለያ: {request_id}")
 
 async def approve_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE, request_id: str):
     query = update.callback_query
     request = db.get_withdrawal_request(request_id)
     if not request:
-        await query.edit_message_text("❌ Withdrawal request not found")
+        await query.edit_message_text("❌ የማውጫ ጥያቄ አልተገኘም")
         return
     user = db.get_user(request['user_id'])
     if not user or user['balance'] < request['amount']:
-        await query.edit_message_text("❌ Insufficient balance for this withdrawal")
+        await query.edit_message_text("❌ ለዚህ ማውጫ በቂ ገንዘብ የለም")
         return
     db.update_balance(request['user_id'], -request['amount'], 'withdrawal', f'Withdrawal approved - {request_id}')
     db.update_withdrawal_request_status(request_id, 'completed', 'Approved by admin')
     await context.bot.send_message(
         request['user_id'],
-        f"✅ Withdrawal Approved!\n\nAmount: {request['amount']/100:.2f} ETB\nPhone: {request['phone_number']}\nYour money will be sent shortly."
+        f"✅ ማውጣት ጸድቋል!\n\nመጠን: {request['amount']/100:.2f} ብር\nስልክ: {request['phone_number']}\nገንዘብዎ በቅርቡ ይላካል።"
     )
     admin_msg = context.bot_data.get(f"admin_withdraw_msg_{request_id}")
     if admin_msg:
@@ -1537,23 +1629,31 @@ async def approve_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE,
             await context.bot.edit_message_reply_markup(admin_msg['chat_id'], admin_msg['message_id'], reply_markup=None)
         except Exception as e:
             logger.error(f"Failed to remove admin buttons: {e}")
-    await query.edit_message_text(f"✅ Withdrawal Approved\n\nRequest ID: {request_id}\nAmount: {request['amount']/100:.2f} ETB\nPhone: {request['phone_number']}")
+    await query.edit_message_text(
+        f"✅ ማውጫ ጸድቋል\n\n"
+        f"የጥያቄ መለያ: {request_id}\n"
+        f"መጠን: {request['amount']/100:.2f} ብር\n"
+        f"ስልክ: {request['phone_number']}"
+    )
 
 async def reject_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE, request_id: str):
     query = update.callback_query
     request = db.get_withdrawal_request(request_id)
     if not request:
-        await query.edit_message_text("❌ Withdrawal request not found")
+        await query.edit_message_text("❌ የማውጫ ጥያቄ አልተገኘም")
         return
     db.update_withdrawal_request_status(request_id, 'rejected', 'Rejected by admin')
-    await context.bot.send_message(request['user_id'], f"❌ Withdrawal Rejected\n\nYour withdrawal request for {request['amount']/100:.2f} ETB has been rejected.\nPlease contact admin.")
+    await context.bot.send_message(
+        request['user_id'],
+        f"❌ ማውጣት ውድቅ ሆኗል\n\nየእርስዎ {request['amount']/100:.2f} ብር ማውጫ ጥያቄ ውድቅ ሆኗል።\nእባክዎ አስተዳዳሪውን ያግኙ።"
+    )
     admin_msg = context.bot_data.get(f"admin_withdraw_msg_{request_id}")
     if admin_msg:
         try:
             await context.bot.edit_message_reply_markup(admin_msg['chat_id'], admin_msg['message_id'], reply_markup=None)
         except Exception as e:
             logger.error(f"Failed to remove admin buttons: {e}")
-    await query.edit_message_text(f"❌ Withdrawal Rejected\n\nRequest ID: {request_id}")
+    await query.edit_message_text(f"❌ ማውጫ ውድቅ ሆኗል\n\nየጥያቄ መለያ: {request_id}")
 
 # ==================== Main Callback Router ====================
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
