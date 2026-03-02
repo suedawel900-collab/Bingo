@@ -547,7 +547,8 @@ class IntegratedBingoGame:
         self.game_locks = {}
         self.bot_app = None
         self.user_connections = {}
-        self.MAX_CONNECTIONS_PER_USER = 2
+        # Increased from 2 to 5 to reduce 403 errors
+        self.MAX_CONNECTIONS_PER_USER = 5
         self.auto_start_timer = None
         self.first_card_time = None
         self.reset_timer = None
@@ -573,6 +574,7 @@ class IntegratedBingoGame:
     # ==================== WEBSOCKET CONNECTION METHODS ====================
     async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
         if self.user_connections.get(user_id, 0) >= self.MAX_CONNECTIONS_PER_USER:
+            logger.warning(f"User {user_id} exceeded max connections ({self.MAX_CONNECTIONS_PER_USER}), rejecting")
             await websocket.close(code=1008, reason="Too many connections")
             return False
 
@@ -755,13 +757,15 @@ class IntegratedBingoGame:
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_number})
         asyncio.create_task(self.draw_numbers(game_id))
 
-    # ==================== Winner check for any line (rows, columns, diagonals) ====================
-    async def check_winner_any_line(self, game_id: int, last_number: int) -> Optional[Tuple[int, int]]:
-        """Check if someone won by completing a row, column, or diagonal. Returns (user_id, card_id) or None."""
+    # ==================== Winner check for any line (rows, columns, diagonals) - returns list ====================
+    async def check_winner_any_line(self, game_id: int, last_number: int) -> List[Tuple[int, int]]:
+        """Check if anyone won by completing a row, column, or diagonal.
+           Returns a list of (user_id, card_id) for all winners on this number."""
         if game_id not in self.active_games:
-            return None
+            return []
 
         called = set(self.active_games[game_id]['called_numbers'])
+        winners = []
 
         for user_id, player in self.active_games[game_id]['players'].items():
             if player['winner']:
@@ -771,7 +775,6 @@ class IntegratedBingoGame:
                 card_id = player['card_ids'][card_idx]
                 marked = set(player['marked'].get(card_id, []))
 
-                # Helper to check if a value is considered "marked"
                 def is_marked(val):
                     return val == 'FREE' or val in called or val in marked
 
@@ -779,25 +782,32 @@ class IntegratedBingoGame:
                 for row in range(5):
                     if all(is_marked(card[col][row]) for col in range(5)):
                         logger.info(f"ROW BINGO! User {user_id} with card {card_id} at number {last_number}")
-                        return (user_id, card_id)
+                        winners.append((user_id, card_id))
+                        # Break out of card loops to avoid counting same card multiple times
+                        break
 
-                # Check columns
-                for col in range(5):
-                    if all(is_marked(card[col][row]) for row in range(5)):
-                        logger.info(f"COLUMN BINGO! User {user_id} with card {card_id} at number {last_number}")
-                        return (user_id, card_id)
+                # Check columns (if not already a winner from a row)
+                if not any(w[0] == user_id and w[1] == card_id for w in winners):
+                    for col in range(5):
+                        if all(is_marked(card[col][row]) for row in range(5)):
+                            logger.info(f"COLUMN BINGO! User {user_id} with card {card_id} at number {last_number}")
+                            winners.append((user_id, card_id))
+                            break
 
-                # Check main diagonal (top-left to bottom-right)
-                if all(is_marked(card[i][i]) for i in range(5)):
-                    logger.info(f"DIAGONAL BINGO (main)! User {user_id} with card {card_id} at number {last_number}")
-                    return (user_id, card_id)
+                # Check main diagonal
+                if not any(w[0] == user_id and w[1] == card_id for w in winners):
+                    if all(is_marked(card[i][i]) for i in range(5)):
+                        logger.info(f"DIAGONAL BINGO (main)! User {user_id} with card {card_id} at number {last_number}")
+                        winners.append((user_id, card_id))
 
-                # Check anti-diagonal (top-right to bottom-left)
-                if all(is_marked(card[i][4-i]) for i in range(5)):
-                    logger.info(f"DIAGONAL BINGO (anti)! User {user_id} with card {card_id} at number {last_number}")
-                    return (user_id, card_id)
+                # Check anti-diagonal
+                if not any(w[0] == user_id and w[1] == card_id for w in winners):
+                    if all(is_marked(card[i][4-i]) for i in range(5)):
+                        logger.info(f"DIAGONAL BINGO (anti)! User {user_id} with card {card_id} at number {last_number}")
+                        winners.append((user_id, card_id))
 
-        return None
+        # Remove duplicate (user, card) pairs (shouldn't happen, but just in case)
+        return list(set(winners))
 
     def mark_number(self, game_id: int, user_id: int, card_id: int, number: int):
         """Mark a number on player's card"""
@@ -810,7 +820,7 @@ class IntegratedBingoGame:
         return True
 
     async def draw_numbers(self, game_id: int = 1):
-        """Draw numbers for the game - any line wins"""
+        """Draw numbers for the game - any line wins, multiple winners possible."""
         numbers = list(range(1, 76))
         random.shuffle(numbers)
 
@@ -835,80 +845,82 @@ class IntegratedBingoGame:
                     'called': self.active_games[game_id]['called_numbers']
                 })
 
-                # Check for winner – now using any line
-                result = await self.check_winner_any_line(game_id, n)
-                if result:
-                    user_id, card_id = result
-                    logger.info(f"🏆 WINNER FOUND! User {user_id} with card {card_id}")
+                # Check for winners – now we get a list
+                winners = await self.check_winner_any_line(game_id, n)
+                if winners:
+                    logger.info(f"🏆 WINNERS FOUND on number {n}: {winners}")
                     self.stop_number_generation = True
-                    self.game_winner[game_id] = user_id
-                    await self.finish_round(game_id, user_id, card_id)
+                    # Store winners list in game_winner (as a list)
+                    self.game_winner[game_id] = [w[0] for w in winners]  # list of user_ids
+                    await self.finish_round_multi(game_id, winners)
                     break
 
-    async def finish_round(self, game_id: int, winner_id: int, winning_card_id: int):
-        """Finish the round and pay winner – now uses actual winning card ID."""
+    async def finish_round_multi(self, game_id: int, winners: List[Tuple[int, int]]):
+        """Finish the round and split prize among multiple winners."""
         if game_id not in self.active_games:
             return
 
         self.stop_number_generation = True
-        logger.info(f"Finishing round {game_id} - Winner: {winner_id}, Winning Card: {winning_card_id}")
+        winner_ids = [w[0] for w in winners]
+        logger.info(f"Finishing round {game_id} - Winners: {winner_ids}")
 
         prize_pool = self.active_games[game_id]['prize_pool']
         house_cut = prize_pool * HOUSE_PERCENT
-        winner_prize = prize_pool - house_cut
+        total_prize = prize_pool - house_cut
+        prize_per_winner = total_prize // len(winners)  # integer division
+        remainder = total_prize - (prize_per_winner * len(winners))
+        house_cut += remainder  # remainder goes to house
         self.house_profit += house_cut
 
-        # Get winning card data
-        winning_card_data = None
-        if winner_id in self.active_games[game_id]['players']:
-            player = self.active_games[game_id]['players'][winner_id]
-            # Find the specific card that won
-            for card_id in player['card_ids']:
-                if card_id == winning_card_id:
-                    card = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-                    if card:
-                        winning_card_data = card['card']
-                    break
-
-        # Update winner's balance in database
-        if winner_id in self.active_games[game_id]['players']:
-            player = self.active_games[game_id]['players'][winner_id]
-            update_result = db.update_balance(
-                user_id=winner_id,
-                amount=winner_prize,
-                transaction_type='game_win',
-                description=f'Won round {self.round_number} in game #{game_id}'
-            )
-            if update_result:
-                player['balance'] = update_result['new_balance']
-                player['winner'] = True
-
-                self.game_winner[game_id] = {
-                    'user_id': winner_id,
-                    'name': player['name'],
-                    'card_id': winning_card_id,  # ← correct card
-                    'winning_number': self.active_games[game_id]['called_numbers'][-1] if self.active_games[game_id]['called_numbers'] else 0,
-                    'round': self.round_number
-                }
-
-                await self.broadcast(game_id, {
-                    'type': 'game_won',
-                    'winner': self.game_winner[game_id],
-                    'prize': winner_prize / 100,
-                    'house_fee': house_cut / 100,
-                    'winning_card': winning_card_data,
-                    'winning_card_id': winning_card_id  # ← send correct ID
-                })
-
-        # Send Telegram notification (optional)
-        if self.bot_app:
-            try:
-                await self.bot_app.bot.send_message(
-                    chat_id=winner_id,
-                    text=f"🎉 CONGRATULATIONS! 🎉\n\nYou won round {self.round_number}!\nPrize: {winner_prize/100} ETB"
+        # Update each winner's balance
+        for user_id, winning_card_id in winners:
+            if user_id in self.active_games[game_id]['players']:
+                player = self.active_games[game_id]['players'][user_id]
+                update_result = db.update_balance(
+                    user_id=user_id,
+                    amount=prize_per_winner,
+                    transaction_type='game_win',
+                    description=f'Won round {self.round_number} in game #{game_id} (shared win)'
                 )
-            except:
-                pass
+                if update_result:
+                    player['balance'] = update_result['new_balance']
+                    player['winner'] = True
+
+        # Prepare winning cards data (optional, could send first winning card)
+        winning_card_data = None
+        if winners:
+            first_winner_id, first_card_id = winners[0]
+            card = next((c for c in BINGO_CARDS if c['id'] == first_card_id), None)
+            if card:
+                winning_card_data = card['card']
+
+        # Broadcast game_won with list of winners
+        await self.broadcast(game_id, {
+            'type': 'game_won',
+            'winners': [
+                {
+                    'user_id': uid,
+                    'name': self.active_games[game_id]['players'][uid]['name'],
+                    'card_id': cid
+                } for uid, cid in winners
+            ],
+            'prize_per_winner': prize_per_winner / 100,
+            'total_prize': total_prize / 100,
+            'house_fee': house_cut / 100,
+            'winning_card': winning_card_data,
+            'winning_card_id': winners[0][1] if winners else None
+        })
+
+        # Send Telegram notifications to each winner
+        if self.bot_app:
+            for user_id, _ in winners:
+                try:
+                    await self.bot_app.bot.send_message(
+                        chat_id=user_id,
+                        text=f"🎉 CONGRATULATIONS! 🎉\n\nYou won round {self.round_number}!\nYour share: {prize_per_winner/100} ETB"
+                    )
+                except:
+                    pass
 
         if self.reset_timer:
             self.reset_timer.cancel()
@@ -1048,7 +1060,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif data == "help":
         help_text = (
-            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose cards (1-1000)\n3. Game auto-starts 30s after first card\n4. Numbers called every 3 seconds\n5. Complete ONE LINE (row, column, or diagonal) to win!\n6. Winner gets 80% of prize pool\n\n"
+            "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose cards (1-1000)\n3. Game auto-starts 30s after first card\n4. Numbers called every 3 seconds\n5. Complete ONE LINE (row, column, or diagonal) to win!\n6. If multiple players win on the same number, the prize is split equally!\n\n"
             f"Price: {CARD_PRICE/100} ETB per card\n\nDeposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Choose an amount\n• Send payment and enter reference\n\nWithdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
         )
         await query.edit_message_text(
@@ -1324,12 +1336,11 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 card_id = data.get('card_id')
                 if card_id:
                     last = game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0
-                    result = await game_manager.check_winner_any_line(game_id, last)
-                    if result:
-                        winner_id, winning_card = result
-                        if winner_id == user_id:
+                    winners = await game_manager.check_winner_any_line(game_id, last)
+                    if winners:
+                        if any(uid == user_id for uid, _ in winners):
                             game_manager.stop_number_generation = True
-                            await game_manager.finish_round(game_id, user_id, winning_card)
+                            await game_manager.finish_round_multi(game_id, winners)
                         else:
                             await websocket.send_json({'type': 'error', 'message': 'Not a valid bingo'})
                     else:
