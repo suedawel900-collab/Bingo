@@ -475,7 +475,7 @@ async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['withdraw_amount_etb'] = amount
 
         await update.message.reply_text(
-            "📱 <b>Enter your phone number</b> (the one registered with your mobile money):\nExample: <code>0983994214</code>",
+            "📱 <b>Enter your phone number</b> (the one registered with your mobile money):\nExample: <code>0953933030</code>",
             parse_mode='HTML'
         )
         return WITHDRAW_PHONE
