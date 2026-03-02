@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Bingo Game - 1000 Cards</title>
+    <title>MK-BINGO - ቢንጎ ጨዋታ</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -44,6 +44,28 @@
             font-size: 12px; 
             opacity: 0.9; 
         }
+        .back-arrow-btn {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            line-height: 1;
+            padding: 0;
+            margin-right: 10px;
+        }
+        .back-arrow-btn:hover {
+            background: rgba(255,255,255,0.2);
+            transform: scale(1.1);
+        }
         .header-right {
             text-align: right;
             background: rgba(255,255,255,0.1);
@@ -67,20 +89,6 @@
             color: gold;
             margin-top: 2px;
             font-weight: bold;
-        }
-        .back-to-rooms-btn {
-            background: #ff9800;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            padding: 5px 15px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        .back-to-rooms-btn:hover {
-            background: #f57c00;
         }
         #status { 
             display: inline-block;
@@ -615,42 +623,44 @@
         <!-- Header - with balance and winner prize -->
         <div class="header">
             <div class="header-left">
-                <h1>🎯 MK-BINGO</h1>
-                <p>Game #<span id="game-id">{{ game_id }}</span> | Player: <span id="player-id">{{ user_id }}</span> | Room: {{ game_id }} ({{ pattern }})</p>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button class="back-arrow-btn" onclick="goBackToRooms()" title="ወደ ክፍሎች ተመለስ">←</button>
+                    <h1>🎯 MK-BINGO</h1>
+                </div>
+                <p>ክፍል <span id="game-id">{{ game_id }}</span> | ተጫዋች: <span id="player-id">{{ user_id }}</span> | አይነት: {{ pattern }}</p>
                 <div>
-                    <span id="status">⏳ WAITING</span>
-                    <span id="connection-status" class="connection-status">✅ Connected</span>
+                    <span id="status">⏳ በመጠበቅ ላይ</span>
+                    <span id="connection-status" class="connection-status">✅ ተገናኝቷል</span>
                 </div>
             </div>
             <div class="header-right">
-                <div class="balance-label">Your Balance</div>
-                <div class="balance-value" id="game-balance">{{ initial_balance }} ETB</div>
+                <div class="balance-label">የእርስዎ ቀሪ ሂሳብ</div>
+                <div class="balance-value" id="game-balance">{{ initial_balance }} ብር</div>
                 <div class="winner-prize-header" id="winner-prize-header"></div>
-                <button class="back-to-rooms-btn" onclick="goBackToRooms()" title="Back to Room Selection">🚪 Rooms</button>
             </div>
         </div>
         
         <!-- Info Bar - Round and Total Cards -->
         <div class="info-bar">
             <div class="info-item">
-                <div class="info-label">Round</div>
+                <div class="info-label">ዙር</div>
                 <div class="info-value" id="active-game-display">1</div>
             </div>
             <div class="info-item">
-                <div class="info-label">Total Cards</div>
+                <div class="info-label">ጠቅላላ ካርዶች</div>
                 <div class="info-value" id="total-cards-sold">0</div>
             </div>
         </div>
         
         <!-- Winner Prize Display - Shows only final value -->
         <div class="winner-prize-display">
-            <div class="winner-prize-label">🏆 Winner Prize</div>
-            <div class="winner-prize-value" id="winner-prize-value">0 ETB</div>
+            <div class="winner-prize-label">🏆 የአሸናፊ ሽልማት</div>
+            <div class="winner-prize-value" id="winner-prize-value">0 ብር</div>
         </div>
         
         <!-- Reconnect Bar -->
         <div class="reconnect-bar" id="reconnect-bar">
-            ⚡ Connection lost. <button onclick="manualReconnect()">Reconnect Now</button>
+            ⚡ ግንኙነት ተቋርጧል። <button onclick="manualReconnect()">እንደገና ይገናኙ</button>
         </div>
         
         <!-- Main Content -->
@@ -658,8 +668,8 @@
             <!-- Card Grid -->
             <div class="grid-section">
                 <div class="grid-title">
-                    <span>🎲 Choose Cards (1-1000)</span>
-                    <span>{{ price_per_card }} ETB each</span>
+                    <span>🎲 ካርዶችን ይምረጡ (1-1000)</span>
+                    <span>{{ price_per_card }} ብር እያንዳንዱ</span>
                 </div>
                 <div class="card-grid-container">
                     <div class="card-grid" id="card-grid"></div>
@@ -667,7 +677,7 @@
                 
                 <!-- Action Buttons -->
                 <div class="action-buttons">
-                    <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()">Clear All</button>
+                    <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()">ሁሉንም አጽዳ</button>
                 </div>
             </div>
             
@@ -683,12 +693,12 @@
                     
                     <!-- Called Numbers -->
                     <div class="called-numbers-section">
-                        <div class="called-title">📞 CALLED NUMBERS:</div>
+                        <div class="called-title">📞 የተጠሩ ቁጥሮች:</div>
                         <div id="called-numbers-list" class="called-list"></div>
                     </div>
                     
                     <!-- Last Number -->
-                    <div class="last-number" id="last-number">🎲 Ready</div>
+                    <div class="last-number" id="last-number">🎲 ዝግጁ</div>
                 </div>
                 
                 <!-- Right Column -->
@@ -696,17 +706,17 @@
                     <!-- Auto-mark -->
                     <div class="auto-mark">
                         <label>
-                            <input type="checkbox" id="autoDaub" onchange="toggleAutoDaub()"> 🤖 Auto-mark
+                            <input type="checkbox" id="autoDaub" onchange="toggleAutoDaub()"> 🤖 ራስ-ሰር ምልክት
                         </label>
                     </div>
                     
                     <!-- Auto-start timer display -->
                     <div class="auto-start-timer" id="auto-start-timer">
-                        ⏱️ Starting in <span id="timer-seconds">30</span>s
+                        ⏱️ በ <span id="timer-seconds">30</span> ሰከንድ ውስጥ ይጀምራል
                     </div>
                     
                     <!-- BINGO Button -->
-                    <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 BINGO!</button>
+                    <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 ቢንጎ!</button>
                     
                     <!-- Players List - Shows players with their card counts -->
                     <div class="players-list" id="players-list"></div>
@@ -715,14 +725,14 @@
             
             <!-- Winning Card Display (for all players) - placed between called numbers and your cards -->
             <div id="winning-card-section" class="winning-card-section">
-                <div class="winning-card-title" id="winning-card-title">🏆 Winning Card 🏆</div>
+                <div class="winning-card-title" id="winning-card-title">🏆 አሸናፊ ካርድ 🏆</div>
                 <div id="winning-card-grid" class="winning-card-grid"></div>
             </div>
             
             <!-- Player Cards Grid - Shows all cards -->
             <div class="player-cards-section" id="player-cards-section" style="display: none;">
                 <div class="player-cards-title">
-                    <span>🎴 Your Cards</span>
+                    <span>🎴 የእርስዎ ካርዶች</span>
                     <span class="player-cards-count" id="player-cards-count">0</span>
                 </div>
                 <div class="cards-grid-container" id="cards-grid-container">
@@ -810,13 +820,13 @@
         }
         
         function updateWallet() {
-            document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ETB';
+            document.getElementById('game-balance').textContent = balance.toFixed(2) + ' ብር';
         }
         
         // Update winner prize in header
         function updateWinnerPrize(amount) {
             const winnerPrizeEl = document.getElementById('winner-prize-header');
-            winnerPrizeEl.textContent = `🏆 Winner: ${amount} ETB`;
+            winnerPrizeEl.textContent = `🏆 አሸናፊ: ${amount} ብር`;
             setTimeout(() => {
                 winnerPrizeEl.textContent = '';
             }, 10000);
@@ -829,7 +839,7 @@
             winnerPrize = totalPrize * WINNER_PERCENT;
             
             // Update winner prize display with only the final value
-            document.getElementById('winner-prize-value').textContent = winnerPrize.toFixed(2) + ' ETB';
+            document.getElementById('winner-prize-value').textContent = winnerPrize.toFixed(2) + ' ብር';
             
             return winnerPrize;
         }
@@ -898,7 +908,7 @@
                 const header = document.createElement('div');
                 header.className = 'mini-card-header';
                 header.innerHTML = `
-                    <span>Card</span>
+                    <span>ካርድ</span>
                     <span class="mini-card-id">#${cardId}</span>
                 `;
                 miniCard.appendChild(header);
@@ -952,7 +962,7 @@
             const titleEl = document.getElementById('winning-card-title');
             
             // Set title with card number
-            titleEl.innerHTML = `🏆 Winning Card #${cardId} 🏆`;
+            titleEl.innerHTML = `🏆 አሸናፊ ካርድ #${cardId} 🏆`;
             
             container.innerHTML = '';
             
@@ -1016,8 +1026,8 @@
                 reconnectAttempts = 0;
                 document.getElementById('reconnect-bar').style.display = 'none';
                 document.getElementById('connection-status').className = 'connection-status';
-                document.getElementById('connection-status').textContent = '✅ Connected';
-                showMessage('Connected!', 'success');
+                document.getElementById('connection-status').textContent = '✅ ተገናኝቷል';
+                showMessage('ተገናኝቷል!', 'success');
             };
             
             ws.onmessage = function(event) {
@@ -1041,7 +1051,7 @@
                     renderAllCards();
                     
                     if (gameStarted) {
-                        document.getElementById('status').textContent = '🎮 PLAYING';
+                        document.getElementById('status').textContent = '🎮 በመጫወት ላይ';
                         document.getElementById('bingo-btn').disabled = false;
                         document.getElementById('auto-start-timer').style.display = 'none';
                     }
@@ -1088,14 +1098,14 @@
                     gameStarted = true;
                     gameEnded = false;
                     roundLocked = true;
-                    document.getElementById('status').textContent = '🎮 PLAYING';
+                    document.getElementById('status').textContent = '🎮 በመጫወት ላይ';
                     document.getElementById('bingo-btn').disabled = false;
-                    document.getElementById('last-number').textContent = '🎲 Game Started!';
+                    document.getElementById('last-number').textContent = '🎲 ተጀምሯል!';
                     document.getElementById('auto-start-timer').style.display = 'none';
                     if (autoStartTimer) {
                         clearInterval(autoStartTimer);
                     }
-                    showMessage('🚀 Game started!', 'success');
+                    showMessage('🚀 ተጀምሯል!', 'success');
                 }
                 else if (data.type === 'number_called') {
                     called = data.called || [];
@@ -1123,26 +1133,26 @@
                     // For backward compatibility, set currentWinnerCardId to the first winner's card
                     currentWinnerCardId = data.winning_card_id ? parseInt(data.winning_card_id) : null;
                     
-                    document.getElementById('status').textContent = '🏆 WINNER!';
+                    document.getElementById('status').textContent = '🏆 አሸናፊ!';
                     document.getElementById('bingo-btn').disabled = true;
                     
                     // Build winner announcement text
                     let winnerNames = data.winners.map(w => w.name).join(', ');
                     const winnerDiv = document.getElementById('winner-announcement');
-                    document.getElementById('winner-text').innerHTML = `🏆 ${winnerNames} WINS! 🏆`;
-                    document.getElementById('winner-amount').textContent = `${data.prize_per_winner} ETB each`;
+                    document.getElementById('winner-text').innerHTML = `🏆 ${winnerNames} አሸንፈዋል! 🏆`;
+                    document.getElementById('winner-amount').textContent = `${data.prize_per_winner} ብር ለእያንዳንዱ`;
                     winnerDiv.style.display = 'block';
                     
                     // Update winner prize in header and display
                     updateWinnerPrize(data.total_prize);
-                    document.getElementById('winner-prize-value').textContent = data.total_prize + ' ETB';
+                    document.getElementById('winner-prize-value').textContent = data.total_prize + ' ብር';
                     
                     // Show winning card to all players if data includes it
                     if (data.winning_card) {
                         showWinningCard(data.winning_card, data.winning_card_id);
                     }
                     
-                    showMessage(`🏆 ${winnerNames} won!`, 'success');
+                    showMessage(`🏆 ${winnerNames} አሸንፈዋል!`, 'success');
                     updatePlayersList();
                     fetchBalance();
                     renderAllCards(); // Re-render to highlight winning card
@@ -1176,13 +1186,13 @@
                     isReady = false;
                     takenCards.clear();
                     
-                    document.getElementById('status').textContent = '⏳ WAITING';
+                    document.getElementById('status').textContent = '⏳ በመጠበቅ ላይ';
                     document.getElementById('bingo-btn').disabled = true;
-                    document.getElementById('last-number').textContent = '🎲 Ready';
+                    document.getElementById('last-number').textContent = '🎲 ዝግጁ';
                     document.getElementById('winner-announcement').style.display = 'none';
                     document.getElementById('auto-start-timer').style.display = 'none';
                     document.getElementById('winner-prize-header').textContent = '';
-                    document.getElementById('winner-prize-value').textContent = '0 ETB';
+                    document.getElementById('winner-prize-value').textContent = '0 ብር';
                     
                     if (autoStartTimer) {
                         clearInterval(autoStartTimer);
@@ -1197,7 +1207,7 @@
                     updatePlayersList();
                     renderAllCards();
                     
-                    showMessage('🔄 New round started!', 'info');
+                    showMessage('🔄 አዲስ ዙር ተጀምሯል!', 'info');
                 }
                 else if (data.type === 'heartbeat') {
                     console.log('💓 Heartbeat received');
@@ -1217,12 +1227,12 @@
                 console.log('❌ WebSocket disconnected');
                 document.getElementById('reconnect-bar').style.display = 'block';
                 document.getElementById('connection-status').className = 'connection-status error';
-                document.getElementById('connection-status').textContent = '❌ Disconnected';
+                document.getElementById('connection-status').textContent = '❌ ግንኙነት ተቋርጧል';
                 
                 if (reconnectAttempts < maxReconnectAttempts) {
                     reconnectAttempts++;
                     const delay = 2000 * Math.pow(2, reconnectAttempts - 1);
-                    showMessage(`Reconnecting in ${delay/1000}s...`, 'info');
+                    showMessage(`በ${delay/1000}ሰከንድ ውስጥ እንደገና ይገናኛል...`, 'info');
                     setTimeout(connectWebSocket, delay);
                 }
             };
@@ -1252,17 +1262,17 @@
         // Toggle card selection
         function toggleCardSelection(cardId) {
             if (gameStarted) {
-                showMessage('Game already started!', 'error');
+                showMessage('ጨዋታው ተጀምሯል!', 'error');
                 return;
             }
             
             if (gameEnded) {
-                showMessage('Game ended! Next round starting soon', 'info');
+                showMessage('ጨዋታው ተጠናቋል! በቅርቡ ይቀጥላል', 'info');
                 return;
             }
             
             if (roundLocked) {
-                showMessage('Cards are locked for this round', 'info');
+                showMessage('ካርዶች ተዘግተዋል', 'info');
                 return;
             }
             
@@ -1273,18 +1283,18 @@
             } else {
                 // Select card
                 if (selectedCards.length >= maxCards) {
-                    showMessage(`Maximum ${maxCards} cards allowed`, 'error');
+                    showMessage(`ቢበዛ ${maxCards} ካርዶች መምረጥ ይችላሉ`, 'error');
                     return;
                 }
                 
                 const totalCost = (selectedCards.length + 1) * pricePerCard;
                 if (totalCost > balance) {
-                    showMessage('Insufficient balance! Please deposit.', 'error');
+                    showMessage('በቂ ገንዘብ የለም! እባክዎ ይሙሉ', 'error');
                     return;
                 }
                 
                 if (takenCards.has(cardId)) {
-                    showMessage(`Card #${cardId} is already taken`, 'error');
+                    showMessage(`ካርድ #${cardId} ተመርጧል`, 'error');
                     return;
                 }
                 
@@ -1356,12 +1366,12 @@
                 }
             }
             
-            showMessage('No complete row on any of your cards!', 'error');
+            showMessage('በማንኛውም ካርድዎ ላይ የተሟላ መስመር የለም!', 'error');
         }
         
         // Claim BINGO
         function claimBingo(cardId) {
-            showMessage('🎯 BINGO claimed! Verifying...', 'info');
+            showMessage('🎯 ቢንጎ! እየተረጋገጠ ነው...', 'info');
             ws.send(JSON.stringify({
                 type: 'claim_bingo',
                 card_id: cardId
@@ -1385,7 +1395,7 @@
                 const badge = document.createElement('span');
                 badge.className = 'called-badge';
                 badge.style.background = '#999';
-                badge.textContent = 'No numbers yet';
+                badge.textContent = 'ገና ቁጥሮች አልተጠሩም';
                 list.appendChild(badge);
             }
         }
@@ -1404,7 +1414,7 @@
                     if (p.winner) badge.classList.add('winner');
                     
                     let displayName = p.name;
-                    if (p.id == userId) displayName += ' (You)';
+                    if (p.id == userId) displayName += ' (እርስዎ)';
                     if (p.card_count) displayName += ` [${p.card_count}]`; // Show card count
                     
                     badge.textContent = displayName;
@@ -1414,7 +1424,7 @@
                 const badge = document.createElement('span');
                 badge.className = 'player-badge';
                 badge.style.background = '#999';
-                badge.textContent = 'No players yet';
+                badge.textContent = 'ገና ተጫዋቾች የሉም';
                 list.appendChild(badge);
             }
         }
@@ -1440,7 +1450,7 @@
         
         function toggleAutoDaub() {
             autoDaubEnabled = document.getElementById('autoDaub').checked;
-            showMessage(autoDaubEnabled ? 'Auto-mark ON' : 'Auto-mark OFF', 'info');
+            showMessage(autoDaubEnabled ? 'ራስ-ሰር ምልክት በርቷል' : 'ራስ-ሰር ምልክት ጠፍቷል', 'info');
         }
         
         function showMessage(text, type) {
