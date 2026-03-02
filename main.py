@@ -198,15 +198,21 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['payment_method'] = method
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
-    # Show amount buttons
-    amount_buttons = [
-        [
-            InlineKeyboardButton("100 ETB", callback_data="amount_100"),
-            InlineKeyboardButton("500 ETB", callback_data="amount_500"),
-            InlineKeyboardButton("1000 ETB", callback_data="amount_1000"),
-        ],
-        [InlineKeyboardButton("◀️ Cancel", callback_data="cancel_deposit")]
-    ]
+    # --- Expanded amount buttons ---
+    amounts = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 1000, 5000, 10000]
+    # Arrange in rows of 3 (except last row may have fewer)
+    amount_buttons = []
+    row = []
+    for amt in amounts:
+        row.append(InlineKeyboardButton(f"{amt} ETB", callback_data=f"amount_{amt}"))
+        if len(row) == 3:
+            amount_buttons.append(row)
+            row = []
+    if row:
+        amount_buttons.append(row)
+    # Add cancel button
+    amount_buttons.append([InlineKeyboardButton("◀️ Cancel", callback_data="cancel_deposit")])
+
     reply_markup = InlineKeyboardMarkup(amount_buttons)
 
     try:
@@ -258,9 +264,9 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Invalid amount. Please try again.")
         return SELECT_AMOUNT
 
-    # Validate amount
-    if amount < 10 or amount > 1000:
-        await query.edit_message_text("❌ Amount must be between 10 and 1000 ETB. Please choose again.")
+    # Validate amount (now up to 10000)
+    if amount < 10 or amount > 10000:
+        await query.edit_message_text("❌ Amount must be between 10 and 10000 ETB. Please choose again.")
         return SELECT_AMOUNT
 
     # Retrieve payment method from user_data
@@ -407,7 +413,7 @@ async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# ==================== Withdrawal Handlers (unchanged, but ensure they don't use Markdown that fails) ====================
+# ==================== Withdrawal Handlers ====================
 async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_data = db.get_user(user.id) or db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
@@ -538,8 +544,9 @@ async def withdraw_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Withdrawal cancelled.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# ==================== Game Class (unchanged, full version from previous) ====================
+# ==================== Game Class ====================
 class IntegratedBingoGame:
+    # ... (entire class unchanged – same as before) ...
     def __init__(self):
         self.round_number = 1
         self.called_numbers = []
@@ -1055,7 +1062,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "help":
         help_text = (
             "❓ Bingo Bot Help\n\nHow to Play:\n1. Click 'Play Bingo'\n2. Choose cards (1-1000)\n3. Game auto-starts 30s after first card\n4. Numbers called every 3 seconds\n5. Complete ONE LINE (row, column, or diagonal) to win!\n6. If multiple players win on the same number, the prize is split equally!\n\n"
-            f"Price: {CARD_PRICE/100} ETB per card\n\nDeposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Choose an amount\n• Send the money and provide the transaction ID\n\nWithdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
+            f"Price: {CARD_PRICE/100} ETB per card\n\nDeposit:\n• Tap 'Deposit' button\n• Choose Telebirr or CBE Birr\n• Choose an amount (50–10000 ETB)\n• Send the money and provide the transaction ID\n\nWithdraw:\n• Tap 'Withdraw' button\n• Enter amount and phone number\n• Admin will approve and send money"
         )
         await query.edit_message_text(
             help_text,
