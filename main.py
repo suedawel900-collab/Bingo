@@ -1050,7 +1050,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(user.id) == str(ADMIN_USER_ID):
         keyboard.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
     await update.message.reply_text(
-        f"🎯 Welcome, {user.first_name}!\n💰 Balance: {balance:.2f} ETB\n\nChoose an option:",
+        f"🎯 🎉 እንኳን ደስ አለዎት! 🎉
+💰 10 ብር ተጠቃሚ ሁነዋል!
+እድልዎ ተሳክቷል 🎯
+ቀጣዩ ዙር ይበልጥ ትልቅ ሊሆን ይችላል!
+👉 ካርድዎን እንደገና ይያዙ
+👉 ትልቅ ሽልማት ይሞክሩ
+👑 MK BINGO – እድል የሚቀይር ጨዋታ!, {user.first_name}!\n💰 Balance: {balance:.2f} ETB\n\nChoose an option:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
