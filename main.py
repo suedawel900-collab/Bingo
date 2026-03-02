@@ -57,15 +57,15 @@ ROUND_RESET_DELAY = 10
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
-        "account": "0953933030",
-        "account_name": "sued awel",
-        "instructions": "Dial *127# and send money to 0953933030"
+        "account": "0983994214",
+        "account_name": "Bingo Bot",
+        "instructions": "Dial *127# and send money to 0983994214"
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "0953933030",
-        "account_name": "sued awel",
-        "instructions": "Dial *847# and send money to 0953933030"
+        "account": "0983994214",
+        "account_name": "Bingo Bot",
+        "instructions": "Dial *847# and send money to 0983994214"
     }
 }
 
@@ -198,7 +198,7 @@ async def method_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['payment_method'] = method
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
 
-    # --- Expanded amount buttons ---
+    # Expanded amount buttons
     amounts = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 1000, 5000, 10000]
     amount_buttons = []
     row = []
@@ -298,7 +298,7 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<b>Instructions:</b>\n"
             f"{method_info['instructions']}\n\n"
             f"✅ After sending the money, please <b>send the transaction ID</b> here.\n\n"
-            f"<i>Example: <code>TRX123456 OR screenshot</code></i>")
+            f"<i>Example: <code>TRX123456</code></i>")
     await context.bot.send_message(
         chat_id=user_id,
         text=text,
@@ -475,7 +475,7 @@ async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['withdraw_amount_etb'] = amount
 
         await update.message.reply_text(
-            "📱 <b>Enter your phone number</b> (the one registered with your mobile money):\nExample: <code>0953933030</code>",
+            "📱 <b>Enter your phone number</b> (the one registered with your mobile money):\nExample: <code>0983994214</code>",
             parse_mode='HTML'
         )
         return WITHDRAW_PHONE
@@ -757,6 +757,7 @@ class IntegratedBingoGame:
             if not user or user['balance'] < total_cost:
                 return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
 
+            # Note: was_empty is no longer used for timer
             was_empty = all(len(p['card_ids']) == 0 for p in self.active_games[game_id]['players'].values())
 
             update_result = db.update_balance(user_id, -total_cost, 'game_fee', f'Selected cards for game #{game_id}')
@@ -776,8 +777,10 @@ class IntegratedBingoGame:
             self.active_games[game_id]['total_cards_sold'] += len(card_ids)
             self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * CARD_PRICE
 
-            if was_empty and not self.game_started:
-                asyncio.create_task(self.start_auto_start_timer(game_id))
+            # 🔁 Auto‑start when total cards sold reaches 5 or more
+            if not self.game_started and self.active_games[game_id]['total_cards_sold'] >= 5:
+                if self.auto_start_timer is None:
+                    asyncio.create_task(self.start_auto_start_timer(game_id))
 
             await self.broadcast(game_id, {'type': 'player_ready', 'players': self.get_players(game_id), 'user_id': user_id})
 
@@ -1049,14 +1052,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     if str(user.id) == str(ADMIN_USER_ID):
         keyboard.append([InlineKeyboardButton("👑 Admin", callback_data="admin")])
+
     await update.message.reply_text(
-        f"🎯 🎉 እንኳን ደስ አለዎት! 🎉
-💰 10 ብር ተጠቃሚ ሁነዋል!
-እድልዎ ተሳክቷል 🎯
-ቀጣዩ ዙር ይበልጥ ትልቅ ሊሆን ይችላል!
-👉 ካርድዎን እንደገና ይያዙ
-👉 ትልቅ ሽልማት ይሞክሩ
-👑 MK BINGO – እድል የሚቀይር ጨዋታ!, {user.first_name}!\n💰 Balance: {balance:.2f} ETB\n\nChoose an option:",
+        f"🎉 እንኳን ደስ አለዎት! 🎉\n"
+        f"💰 {balance:.2f} ብር ተጠቃሚ ሁነዋል!\n"
+        f"እድልዎ ተሳክቷል 🎯\n"
+        f"ቀጣዩ ዙር ይበልጥ ትልቅ ሊሆን ይችላል!\n"
+        f"👉 ካርድዎን እንደገና ይያዙ\n"
+        f"👉 ትልቅ ሽልማት ይሞክሩ\n"
+        f"👑 MK BINGO – እድል የሚቀይር ጨዋታ!",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1274,7 +1278,7 @@ async def setup_bot():
     application.add_handler(withdraw_conv)
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("cancel", deposit_cancel))
-    application.add_handler(CommandHandler("broadcast", broadcast_command))  # <-- added
+    application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CallbackQueryHandler(button_callback))
     await application.initialize()
     await application.start()
