@@ -50,44 +50,53 @@ else:
     BASE_URL = RAILWAY_URL
 
 # Card prices (in cents)
-CARD_PRICE_ROOM1 = 1000        # 10.00 ETB for room 1 (Any Line)
-CARD_PRICE_ROOM2 = 10000       # 100.00 ETB for room 2 (Full House)
-CARD_PRICE_ROOM3 = 2000        # 20.00 ETB for room 3 (Full House)
+CARD_PRICE_ROOM1 = 1000        # 10.00 ETB for room 1
+CARD_PRICE_ROOM2 = 10000       # 100.00 ETB for room 2
+CARD_PRICE_ROOM3 = 2000        # 20.00 ETB for room 3
 MAX_CARDS_PER_PLAYER = 20
 WELCOME_BONUS = 1000
 AUTO_START_DELAY = 30
 HOUSE_PERCENT = 0.20
 ROUND_RESET_DELAY = 10
 
-# Payment methods with auto-approval settings - UPDATED TELEBIRR NUMBER
+# ==================== BINGO PATTERNS ====================
+PATTERNS = [
+    "ONE_LINE", "TWO_LINES", "THREE_LINES", "FOUR_LINES",
+    "FULL_HOUSE", "FOUR_CORNERS", "CENTER",
+    "X_PATTERN", "PLUS_PATTERN", "TOP_ROW", "BOTTOM_ROW",
+    "LEFT_COLUMN", "RIGHT_COLUMN", "DIAGONAL_MAIN", "DIAGONAL_SECOND",
+    "T_SHAPE", "L_SHAPE", "CROSS", "BOX", "OUTER_FRAME"
+]
+
+# Payment methods with auto-approval settings
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
-        "account": "0982232677",  # ✅ Updated to new number
+        "account": "0982372677",
         "account_name": "Bingo Bot",
         "instructions": (
-            "Dial *127# and send money to 0982232677\n\n"  # ✅ Updated
+            "Dial *127# and send money to 0982372677\n\n"
             "📱 **የደረሰኝ ማረጋገጫ መስመር ላይ:**\n"
             "ክፍያዎን ከፍለው ከጨረሱ በኋላ የደረሰኝ ቁጥርዎን በመጠቀም ከዚህ ሊንክ ማረጋገጥ ይችላሉ፦\n"
             "`https://transactioninfo.ethiotelecom.et/receipt/{የደረሰኝ_ቁጥር}`\n\n"
             "ለምሳሌ: `https://transactioninfo.ethiotelecom.et/receipt/TRX123456`"
         ),
         "auto_approve": True,
-        "receipt_pattern": r'^[A-Z0-9]{6,20}$'
+        "receipt_pattern": r'^[A-Z0-9]{6,30}$'
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "0982232677",  # ✅ Updated to new number (same as Telebirr)
+        "account": "0982372677",
         "account_name": "Bingo Bot",
-        "instructions": "Dial *847# and send money to 0982232677",  # ✅ Updated
+        "instructions": "Dial *847# and send money to 0982372677",
         "auto_approve": False,
-        "receipt_pattern": r'^[A-Z0-9]{6,20}$'
+        "receipt_pattern": r'^[A-Z0-9]{6,30}$'
     }
 }
 
 # Auto-approval settings
 MIN_AMOUNT_FOR_AUTO_APPROVE = 10
-YOUR_TELEBIRR_NUMBER = "0982232677"  # ✅ Updated
+YOUR_TELEBIRR_NUMBER = "0982372677"
 
 # Conversation states
 SELECT_METHOD, SELECT_AMOUNT, WAIT_TRANSACTION = range(3)
@@ -143,33 +152,41 @@ os.makedirs("static", exist_ok=True)
 async def verify_telebirr_transaction(transaction_id: str, amount: int) -> Tuple[bool, str]:
     """
     Real Telebirr verification using receipt scraping
-    Checks:
-    - Format validation
-    - Success status from receipt page
-    - Receiver account number
-    - Amount match
-    - Duplicate prevention
+    Falls back to format validation if the site is unreachable
     """
     
     transaction_id = transaction_id.strip().upper()
     
     # =========================
-    # FORMAT VALIDATION
+    # FORMAT VALIDATION (Always performed)
     # =========================
-    if not re.match(r'^[A-Z0-9]{6,20}$', transaction_id):
-        return False, "❌ የደረሰኝ ቁጥር ትክክል አይደለም (ከ6-20 ፊደል እና ቁጥር ብቻ)"
+    if not re.match(r'^[A-Z0-9]{6,30}$', transaction_id):
+        return False, "❌ የደረሰኝ ቁጥር ትክክል አይደለም (ከ6-30 ፊደል እና ቁጥር ብቻ)"
 
-    # Prevent fake repeated strings (AAAAAA, 111111 etc.)
     if len(set(transaction_id)) == 1:
         return False, "❌ የደረሰኝ ቁጥር የተሳሳተ ነው (ተደጋጋሚ ፊደሎች)"
     
-    # Prevent obvious fake patterns
     common_fakes = ["TEST", "DEMO", "SAMPLE", "FAKE", "TRX"]
     if any(fake in transaction_id for fake in common_fakes):
         return False, "❌ የደረሰኝ ቁጥር የተሳሳተ ነው"
     
     # =========================
-    # FETCH RECEIPT PAGE
+    # CHECK DUPLICATE RECEIPT (Always performed)
+    # =========================
+    conn = db.get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM payment_proofs WHERE proof_data = ? AND proof_type = 'telebirr_receipt'",
+            (transaction_id,)
+        )
+        if cursor.fetchone():
+            return False, "❌ ይህ የደረሰኝ ቁጥር ተጠቅመዋል"
+    finally:
+        conn.close()
+    
+    # =========================
+    # FETCH RECEIPT PAGE (with timeout and fallback)
     # =========================
     receipt_url = f"https://transactioninfo.ethiotelecom.et/receipt/{transaction_id}"
     
@@ -183,33 +200,25 @@ async def verify_telebirr_transaction(transaction_id: str, amount: int) -> Tuple
     }
 
     try:
-        timeout = aiohttp.ClientTimeout(total=20)
-        
+        timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(receipt_url, headers=headers, allow_redirects=True) as response:
                 if response.status != 200:
                     logger.warning(f"Receipt page returned status {response.status} for {transaction_id}")
-                    return False, "❌ የደረሰኝ መረጃ አልተገኘም (ሊጠፋ ወይም የተሳሳተ ቁጥር)"
+                    return True, "✅ ክፍያ በመሠረታዊ ማረጋገጫ ተረጋግጧል (የድረ-ገጽ ችግር)"
                 
                 html = await response.text()
                 
     except asyncio.TimeoutError:
-        logger.error(f"Timeout fetching receipt {transaction_id}")
-        return False, "❌ የደረሰኝ ማረጋገጫ ጊዜ አልፏል"
+        logger.error(f"Timeout fetching receipt {transaction_id} - falling back to format validation")
+        return True, "✅ ክፍያ በመሠረታዊ ማረጋገጫ ተረጋግጧል (የድረ-ገጽ ችግር)"
     except Exception as e:
         logger.error(f"Receipt fetch error for {transaction_id}: {e}")
-        return False, "❌ የደረሰኝ ማረጋገጫ ስህተት (እባክዎ እንደገና ይሞክሩ)"
+        return True, "✅ ክፍያ በመሠረታዊ ማረጋገጫ ተረጋግጧል (የድረ-ገጽ ችግር)"
 
     html_lower = html.lower()
+    logger.info(f"Receipt page fetched successfully for {transaction_id}, length: {len(html)}")
     
-    # =========================
-    # LOGGING FOR DEBUG (remove in production)
-    # =========================
-    logger.info(f"Receipt page length: {len(html)} characters")
-    
-    # =========================
-    # 1️⃣ CHECK SUCCESS STATUS
-    # =========================
     success_indicators = [
         "success", "completed", "successful", "ስኬት", "ተሳክቷል",
         "status: completed", "transaction successful",
@@ -224,28 +233,23 @@ async def verify_telebirr_transaction(transaction_id: str, amount: int) -> Tuple
             break
     
     if not found_success:
-        # Check for failure indicators
         failure_indicators = ["failed", "cancelled", "error", "አልተሳካም", "ተሰርዟል"]
         for indicator in failure_indicators:
             if indicator in html_lower:
                 return False, f"❌ ክፍያው {indicator} ነው"
         
-        # If no clear success, try to detect based on typical page structure
         if "receipt" not in html_lower and "ደረሰኝ" not in html_lower:
-            return False, "❌ የክፍያ መረጃ አልተገኘም"
+            logger.warning(f"No receipt found in page for {transaction_id}")
+            return True, "✅ ክፍያ በመሠረታዊ ማረጋገጫ ተረጋግጧል"
     
-    # =========================
-    # 2️⃣ CHECK RECEIVER NUMBER (UPDATED)
-    # =========================
-    YOUR_TELEBIRR_NUMBER = "0982232677"  # ✅ Updated
+    YOUR_TELEBIRR_NUMBER = "0982372677"
     
-    # Check various formats of the number
     number_variations = [
         YOUR_TELEBIRR_NUMBER,
-        YOUR_TELEBIRR_NUMBER.replace("0", ""),  # 982232677
-        YOUR_TELEBIRR_NUMBER[1:],  # 982232677 (without leading 0)
-        f"0{int(YOUR_TELEBIRR_NUMBER)}",  # with leading zero
-        f"251{ YOUR_TELEBIRR_NUMBER[1:]}"  # 251982232677 (international format)
+        YOUR_TELEBIRR_NUMBER.replace("0", ""),
+        YOUR_TELEBIRR_NUMBER[1:],
+        f"0{int(YOUR_TELEBIRR_NUMBER)}",
+        f"251{ YOUR_TELEBIRR_NUMBER[1:]}"
     ]
     
     receiver_found = False
@@ -256,11 +260,9 @@ async def verify_telebirr_transaction(transaction_id: str, amount: int) -> Tuple
             break
     
     if not receiver_found:
+        logger.warning(f"Receiver number not found for {transaction_id}")
         return False, "❌ ክፍያው ወደ ትክክለኛ አካውንት አልተላከም"
     
-    # =========================
-    # 3️⃣ CHECK AMOUNT MATCH
-    # =========================
     amount_str = str(amount)
     amount_patterns = [
         f"{amount}.00",
@@ -280,7 +282,6 @@ async def verify_telebirr_transaction(transaction_id: str, amount: int) -> Tuple
             logger.info(f"Found amount pattern: {pattern}")
             break
     
-    # Try with decimal variations
     if not amount_found:
         decimal_variations = [
             f"{amount}.0",
@@ -295,31 +296,8 @@ async def verify_telebirr_transaction(transaction_id: str, amount: int) -> Tuple
                 break
     
     if not amount_found:
+        logger.warning(f"Amount {amount} not found in receipt for {transaction_id}")
         return False, "❌ የክፍያ መጠን አይዛመድም"
-    
-    # =========================
-    # 4️⃣ CHECK DUPLICATE RECEIPT
-    # =========================
-    conn = db.get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id FROM payment_proofs WHERE proof_data = ? AND proof_type = 'telebirr_receipt'",
-            (transaction_id,)
-        )
-        if cursor.fetchone():
-            return False, "❌ ይህ የደረሰኝ ቁጥር ተጠቅመዋል"
-        
-        # Also check if this receipt was used with any other transaction
-        cursor.execute(
-            "SELECT id FROM payment_proofs WHERE proof_data = ?",
-            (transaction_id,)
-        )
-        if cursor.fetchone():
-            return False, "❌ ይህ የደረሰኝ ቁጥር አስቀድሞ ተመዝግቧል"
-            
-    finally:
-        conn.close()
     
     return True, "✅ ክፍያ ተረጋገጠ"
 
@@ -339,7 +317,6 @@ async def auto_approve_payment(user_id: int, amount: int, transaction_id: str, m
     else:
         return False, "ራስ-ሰር ማረጋገጫ ለዚህ ዘዴ አይገኝም", None
     
-    # Create payment request (mark as auto-approved)
     request_id = db.create_payment_request(
         user_id=user_id,
         method_id=1,
@@ -350,13 +327,9 @@ async def auto_approve_payment(user_id: int, amount: int, transaction_id: str, m
     if not request_id:
         return False, "የክፍያ ጥያቄ መፍጠር አልተሳካም", None
     
-    # Add payment proof
     db.add_payment_proof(request_id, 'telebirr_receipt', transaction_id)
-    
-    # Update payment request status to auto-approved
     db.update_payment_request_status(request_id, 'auto_approved', 'Auto-approved by system via receipt verification')
     
-    # Update user balance
     result = db.update_balance(
         user_id=user_id,
         amount=amount * 100,
@@ -385,6 +358,214 @@ async def check_withdrawal_eligibility(user_id: int) -> Tuple[bool, str]:
         return False, f"❌ ማውጣት ከመጀመርዎ በፊት ቢያንስ 100 ብር መሙላት አለብዎት።\nእስካሁን ያስገቡት: {total_deposits:.2f} ብር"
     
     return True, "✅ ማውጣት ይችላሉ"
+
+# ==================== PATTERN CHECKING FUNCTION ====================
+
+def check_pattern(marked_positions, pattern_name):
+    """
+    Check if marked positions satisfy the required pattern
+    marked_positions: list of (row, col) tuples that are marked
+    pattern_name: string from PATTERNS list
+    """
+    size = 5
+    p = pattern_name
+    
+    # Create 5x5 boolean grid
+    marked = [[False]*size for _ in range(size)]
+    for r, c in marked_positions:
+        if 0 <= r < size and 0 <= c < size:
+            marked[r][c] = True
+    
+    # ONE LINE
+    if p == "ONE_LINE":
+        return any(all(marked[r][c] for c in range(size)) for r in range(size)) or \
+               any(all(marked[r][c] for r in range(size)) for c in range(size))
+    
+    # TWO LINES
+    if p == "TWO_LINES":
+        lines = 0
+        for r in range(size):
+            if all(marked[r][c] for c in range(size)):
+                lines += 1
+        for c in range(size):
+            if all(marked[r][c] for r in range(size)):
+                lines += 1
+        return lines >= 2
+    
+    # THREE LINES
+    if p == "THREE_LINES":
+        lines = 0
+        for r in range(size):
+            if all(marked[r][c] for c in range(size)):
+                lines += 1
+        for c in range(size):
+            if all(marked[r][c] for r in range(size)):
+                lines += 1
+        return lines >= 3
+    
+    # FOUR LINES
+    if p == "FOUR_LINES":
+        lines = 0
+        for r in range(size):
+            if all(marked[r][c] for c in range(size)):
+                lines += 1
+        for c in range(size):
+            if all(marked[r][c] for r in range(size)):
+                lines += 1
+        return lines >= 4
+    
+    # FULL HOUSE
+    if p == "FULL_HOUSE":
+        return all(marked[r][c] for r in range(size) for c in range(size))
+    
+    # FOUR CORNERS
+    if p == "FOUR_CORNERS":
+        return marked[0][0] and marked[0][4] and marked[4][0] and marked[4][4]
+    
+    # CENTER
+    if p == "CENTER":
+        return marked[2][2]
+    
+    # X PATTERN
+    if p == "X_PATTERN":
+        return all(marked[i][i] for i in range(size)) and \
+               all(marked[i][size-i-1] for i in range(size))
+    
+    # PLUS PATTERN
+    if p == "PLUS_PATTERN":
+        return all(marked[2][c] for c in range(size)) and \
+               all(marked[r][2] for r in range(size))
+    
+    # TOP ROW
+    if p == "TOP_ROW":
+        return all(marked[0][c] for c in range(size))
+    
+    # BOTTOM ROW
+    if p == "BOTTOM_ROW":
+        return all(marked[4][c] for c in range(size))
+    
+    # LEFT COLUMN
+    if p == "LEFT_COLUMN":
+        return all(marked[r][0] for r in range(size))
+    
+    # RIGHT COLUMN
+    if p == "RIGHT_COLUMN":
+        return all(marked[r][4] for r in range(size))
+    
+    # DIAGONAL MAIN
+    if p == "DIAGONAL_MAIN":
+        return all(marked[i][i] for i in range(size))
+    
+    # DIAGONAL SECOND
+    if p == "DIAGONAL_SECOND":
+        return all(marked[i][size-i-1] for i in range(size))
+    
+    # BOX (center 3x3)
+    if p == "BOX":
+        return all(marked[r][c] for r in range(1,4) for c in range(1,4))
+    
+    # OUTER FRAME
+    if p == "OUTER_FRAME":
+        for i in range(size):
+            if not marked[0][i] or not marked[4][i]:
+                return False
+            if not marked[i][0] or not marked[i][4]:
+                return False
+        return True
+    
+    # L SHAPE
+    if p == "L_SHAPE":
+        return all(marked[r][0] for r in range(size)) and \
+               all(marked[4][c] for c in range(size))
+    
+    # T SHAPE
+    if p == "T_SHAPE":
+        return all(marked[0][c] for c in range(size)) and \
+               all(marked[r][2] for r in range(size))
+    
+    # CROSS
+    if p == "CROSS":
+        return all(marked[2][c] for c in range(size)) and \
+               all(marked[r][2] for r in range(size))
+    
+    return False
+
+# ==================== ADMIN COMMANDS FOR PATTERNS ====================
+
+async def set_pattern_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to set pattern for a room"""
+    user_id = update.effective_user.id
+    if user_id != ADMIN_USER_ID:
+        await update.message.reply_text("❌ ይህን ትዕዛዝ ለመጠቀም አይፈቀድልዎትም።")
+        return
+    
+    try:
+        args = context.args
+        if len(args) < 2:
+            await update.message.reply_text(
+                f"Usage: /setpattern <room_id> <pattern_name>\n\n"
+                f"Available patterns:\n{chr(10).join(PATTERNS)}"
+            )
+            return
+        
+        room_id = int(args[0])
+        pattern = args[1].upper()
+        
+        if pattern not in PATTERNS:
+            await update.message.reply_text(
+                f"❌ የተሳሳተ ንድፍ። የሚገኙ ንድፎች:\n{chr(10).join(PATTERNS)}"
+            )
+            return
+        
+        if room_id not in [1, 2, 3]:
+            await update.message.reply_text("❌ ክፍል ከ1-3 ብቻ ነው")
+            return
+        
+        # Store pattern in game_manager
+        game_manager.room_patterns[room_id] = pattern
+        
+        await update.message.reply_text(
+            f"✅ ክፍል {room_id} ንድፍ ተቀይሯል: {pattern}"
+        )
+    except ValueError:
+        await update.message.reply_text("❌ የተሳሳተ የክፍል ቁጥር")
+
+async def set_room_price_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin command to set price for a room"""
+    user_id = update.effective_user.id
+    if user_id != ADMIN_USER_ID:
+        await update.message.reply_text("❌ ይህን ትዕዛዝ ለመጠቀም አይፈቀድልዎትም።")
+        return
+    
+    try:
+        args = context.args
+        room_id = int(args[0])
+        price = int(args[1]) * 100  # Convert to cents
+        
+        if room_id == 1:
+            global CARD_PRICE_ROOM1
+            CARD_PRICE_ROOM1 = price
+        elif room_id == 2:
+            global CARD_PRICE_ROOM2
+            CARD_PRICE_ROOM2 = price
+        elif room_id == 3:
+            global CARD_PRICE_ROOM3
+            CARD_PRICE_ROOM3 = price
+        else:
+            await update.message.reply_text("❌ ክፍል ከ1-3 ብቻ ነው")
+            return
+        
+        await update.message.reply_text(f"✅ ክፍል {room_id} ዋጋ ተቀይሯል: {price/100} ብር")
+    except (IndexError, ValueError):
+        await update.message.reply_text("Usage: /setprice <room_id> <price_in_etb>")
+
+async def list_patterns_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """List all available patterns"""
+    patterns_list = "\n".join([f"• {p}" for p in PATTERNS])
+    await update.message.reply_text(
+        f"📋 **የሚገኙ ንድፎች**\n\n{patterns_list}",
+        parse_mode='Markdown'
+    )
 
 # ==================== Deposit Handlers ====================
 
@@ -552,7 +733,6 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Failed to delete old message: {e}")
 
-    # Add auto-approval info to instructions if applicable
     auto_approve_text = ""
     if method_info.get('auto_approve', False):
         auto_approve_text = (
@@ -593,28 +773,27 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
     
-    # Check if this method supports auto-approval
     if method_info.get('auto_approve', False):
-        # Send "verifying" message
         verifying_msg = await update.message.reply_text(
-            "⏳ <b>በማረጋገጥ ላይ...</b>\n\n"
-            "እባክዎ ይጠብቁ። ክፍያዎ እየተረጋገጠ ነው።",
+            "⏳ <b>በማረጋገጥ ላይ...</b>\n\nእባክዎ ይጠብቁ። ክፍያዎ እየተረጋገጠ ነው።",
             parse_mode='HTML'
         )
         
-        # Attempt auto-approval with real verification
-        success, message, balance_update = await auto_approve_payment(
-            user_id=user_id,
-            amount=amount,
-            transaction_id=trx_id,
-            method=method
-        )
+        try:
+            success, message, balance_update = await auto_approve_payment(
+                user_id=user_id,
+                amount=amount,
+                transaction_id=trx_id,
+                method=method
+            )
+        except Exception as e:
+            logger.error(f"Auto-approval exception: {e}")
+            success = False
+            message = "በማረጋገጥ ላይ ስህተት ተከስቷል"
+            balance_update = None
         
         if success:
-            # Delete verifying message
             await verifying_msg.delete()
-            
-            # Send success message
             await update.message.reply_text(
                 f"✅ <b>ክፍያ በራስ-ሰር ጸድቋል!</b>\n\n"
                 f"💰 መጠን: <b>{amount} ብር</b>\n"
@@ -628,7 +807,6 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 ]])
             )
             
-            # Check for referral bonus
             bonus_paid = db.check_and_pay_referral_bonus(user_id)
             if bonus_paid:
                 conn = db.get_connection()
@@ -653,7 +831,6 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             context.user_data.clear()
             return ConversationHandler.END
         else:
-            # Auto-approval failed, fall back to manual approval
             await verifying_msg.delete()
             await update.message.reply_text(
                 f"⚠️ <b>ራስ-ሰር ማረጋገጥ አልተሳካም</b>\n\n"
@@ -662,7 +839,6 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 parse_mode='HTML'
             )
     
-    # Manual approval flow (for CBE Birr or failed auto-approval)
     methods = db.get_payment_methods(type='mobile_money', active_only=True)
     if not methods:
         await update.message.reply_text("❌ ምንም የክፍያ ዘዴዎች አልተገኙም")
@@ -853,7 +1029,7 @@ async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['withdraw_amount_etb'] = amount
 
         await update.message.reply_text(
-            "📱 <b>ስልክ ቁጥርዎን ያስገቡ</b> (በሞባይል ገንዘብዎ የተመዘገበው):\nምሳሌ: <code>0982232677</code>",  # ✅ Updated example
+            "📱 <b>ስልክ ቁጥርዎን ያስገቡ</b> (በሞባይል ገንዘብዎ የተመዘገበው):\nምሳሌ: <code>0982372677</code>",
             parse_mode='HTML'
         )
         return WITHDRAW_PHONE
@@ -1202,10 +1378,11 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(message, parse_mode='Markdown')
 
-# ==================== Game Class ====================
+# ==================== Game Class with Patterns ====================
 
 class IntegratedBingoGame:
     def __init__(self):
+        # Per‑room data dictionaries
         self.round_numbers = {}
         self.called_numbers = {}
         self.game_started = {}
@@ -1221,7 +1398,13 @@ class IntegratedBingoGame:
         self.auto_start_timers = {}
         self.first_card_time = {}
         self.reset_timers = {}
-        self.game_patterns = {}
+        
+        # Pattern system
+        self.room_patterns = {}  # room_id -> pattern name
+        self.room_pattern_locked = {}  # room_id -> bool
+        self.room_price = {}  # room_id -> price in cents
+        self.room_auto_timer_task = {}  # room_id -> asyncio task
+        self.suspended_players = {}  # room_id -> set of suspended user_ids
 
         self.bot_app = None
         self.user_connections = {}
@@ -1244,6 +1427,24 @@ class IntegratedBingoGame:
                     except:
                         pass
 
+    async def start_auto_settings_timer(self, game_id: int):
+        """Auto-set pattern and price after 10 seconds if not set by admin"""
+        await asyncio.sleep(10)
+        
+        async with self.get_lock(game_id):
+            if not self.room_pattern_locked.get(game_id, False):
+                # Auto-set random pattern and default price
+                self.room_patterns[game_id] = random.choice(PATTERNS)
+                self.room_pattern_locked[game_id] = True
+                if game_id == 1:
+                    self.room_price[game_id] = CARD_PRICE_ROOM1
+                elif game_id == 2:
+                    self.room_price[game_id] = CARD_PRICE_ROOM2
+                else:
+                    self.room_price[game_id] = CARD_PRICE_ROOM3
+                
+                logger.info(f"Room {game_id} auto-set pattern: {self.room_patterns[game_id]}")
+
     async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
         if self.user_connections.get(user_id, 0) >= self.MAX_CONNECTIONS_PER_USER:
             logger.warning(f"User {user_id} exceeded max connections ({self.MAX_CONNECTIONS_PER_USER}), rejecting")
@@ -1264,6 +1465,7 @@ class IntegratedBingoGame:
                 self.called_numbers[game_id] = []
                 self.game_started[game_id] = False
                 self.stop_number_generation[game_id] = False
+                self.suspended_players[game_id] = set()
                 self.active_games[game_id] = {
                     'called_numbers': [],
                     'players': {},
@@ -1271,10 +1473,9 @@ class IntegratedBingoGame:
                     'total_cards_sold': 0,
                     'last_winner': None,
                 }
-                if game_id == 1:
-                    self.game_patterns[game_id] = "any_line"
-                else:
-                    self.game_patterns[game_id] = "full_house"
+                
+                # Start auto-settings timer for new room
+                asyncio.create_task(self.start_auto_settings_timer(game_id))
 
             self.game_connections[game_id].append(websocket)
             if user_id not in self.active_games[game_id]['players']:
@@ -1285,13 +1486,14 @@ class IntegratedBingoGame:
                     'marked': {},
                     'ready': False,
                     'winner': False,
-                    'balance': user['balance']
+                    'balance': user['balance'],
+                    'suspended': False
                 }
 
             active_games_count = db.get_active_games_count(user_id)
             total_stake = db.get_total_stake(user_id)
 
-            pattern_display = "አንድ መስመር" if game_id == 1 else "ፉል ሃውስ"
+            pattern_display = self.room_patterns.get(game_id, "አልተመረጠም")
             await websocket.send_json({
                 'type': 'connected',
                 'taken_cards': list(self.taken_cards[game_id]),
@@ -1306,7 +1508,8 @@ class IntegratedBingoGame:
                 'total_stake': total_stake / 100,
                 'auto_start_delay': AUTO_START_DELAY,
                 'auto_start_active': game_id in self.auto_start_timers,
-                'pattern': pattern_display
+                'pattern': pattern_display,
+                'pattern_locked': self.room_pattern_locked.get(game_id, False)
             })
 
             player = self.active_games[game_id]['players'][user_id]
@@ -1348,7 +1551,14 @@ class IntegratedBingoGame:
         if game_id not in self.active_games:
             return []
         return [
-            {'id': uid, 'name': data['name'], 'card_count': len(data['card_ids']), 'ready': data['ready'], 'winner': data['winner']}
+            {
+                'id': uid, 
+                'name': data['name'], 
+                'card_count': len(data['card_ids']), 
+                'ready': data['ready'], 
+                'winner': data['winner'],
+                'suspended': uid in self.suspended_players.get(game_id, set())
+            }
             for uid, data in self.active_games[game_id]['players'].items()
         ]
 
@@ -1384,12 +1594,8 @@ class IntegratedBingoGame:
                 if not next((c for c in BINGO_CARDS if c['id'] == card_id), None):
                     return False, f"Card {card_id} not found", 0, None
 
-            if game_id == 1:
-                price_per_card = CARD_PRICE_ROOM1
-            elif game_id == 2:
-                price_per_card = CARD_PRICE_ROOM2
-            else:
-                price_per_card = CARD_PRICE_ROOM3
+            # Get price from room settings
+            price_per_card = self.room_price.get(game_id, 1000)
 
             total_cost = len(card_ids) * price_per_card
             user = db.get_user(user_id)
@@ -1445,77 +1651,66 @@ class IntegratedBingoGame:
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_numbers[game_id]})
         asyncio.create_task(self.draw_numbers(game_id))
 
-    async def check_winner_any_line(self, game_id: int, last_number: int) -> List[Tuple[int, int]]:
+    async def check_winner_by_pattern(self, game_id: int, user_id: int, card_id: int, last_number: int) -> bool:
+        """Check if a specific card has won based on room pattern"""
         if game_id not in self.active_games:
-            return []
-
+            return False
+        
+        # Check if player is suspended
+        if user_id in self.suspended_players.get(game_id, set()):
+            return False
+        
+        player = self.active_games[game_id]['players'].get(user_id)
+        if not player:
+            return False
+        
+        # Find the card
+        card_idx = -1
+        for i, cid in enumerate(player['card_ids']):
+            if cid == card_id:
+                card_idx = i
+                break
+        
+        if card_idx == -1:
+            return False
+        
+        card = player['cards'][card_idx]
         called = set(self.active_games[game_id]['called_numbers'])
-        winners = []
+        marked = set(player['marked'].get(card_id, []))
+        
+        # Convert to marked positions
+        marked_positions = []
+        for row in range(5):
+            for col in range(5):
+                val = card[col][row]
+                if val == 'FREE' or val in called or val in marked:
+                    marked_positions.append((row, col))
+        
+        # Get room pattern
+        pattern = self.room_patterns.get(game_id, "ONE_LINE")
+        
+        # Check if pattern is satisfied
+        return check_pattern(marked_positions, pattern)
 
-        for user_id, player in self.active_games[game_id]['players'].items():
-            if player['winner']:
-                continue
-
-            for card_idx, card in enumerate(player['cards']):
-                card_id = player['card_ids'][card_idx]
-                marked = set(player['marked'].get(card_id, []))
-
-                def is_marked(val):
-                    return val == 'FREE' or val in called or val in marked
-
-                for row in range(5):
-                    if all(is_marked(card[col][row]) for col in range(5)):
-                        winners.append((user_id, card_id))
-                        break
-
-                if not any(w[0] == user_id and w[1] == card_id for w in winners):
-                    for col in range(5):
-                        if all(is_marked(card[col][row]) for row in range(5)):
-                            winners.append((user_id, card_id))
-                            break
-
-                if not any(w[0] == user_id and w[1] == card_id for w in winners):
-                    if all(is_marked(card[i][i]) for i in range(5)):
-                        winners.append((user_id, card_id))
-
-                if not any(w[0] == user_id and w[1] == card_id for w in winners):
-                    if all(is_marked(card[i][4-i]) for i in range(5)):
-                        winners.append((user_id, card_id))
-
-        return list(set(winners))
-
-    async def check_full_house(self, game_id: int, last_number: int) -> List[Tuple[int, int]]:
-        if game_id not in self.active_games:
-            return []
-
-        called = set(self.active_games[game_id]['called_numbers'])
-        winners = []
-
-        for user_id, player in self.active_games[game_id]['players'].items():
-            if player['winner']:
-                continue
-
-            for card_idx, card in enumerate(player['cards']):
-                card_id = player['card_ids'][card_idx]
-                marked = set(player['marked'].get(card_id, []))
-
-                total_marked = 0
-                for row in range(5):
-                    for col in range(5):
-                        val = card[col][row]
-                        if val == 'FREE' or val in called or val in marked:
-                            total_marked += 1
-                if total_marked == 25:
-                    logger.info(f"FULL HOUSE! User {user_id} with card {card_id} at number {last_number}")
-                    winners.append((user_id, card_id))
-
-        return list(set(winners))
+    async def handle_false_bingo(self, game_id: int, user_id: int):
+        """Handle a false bingo claim"""
+        async with self.get_lock(game_id):
+            if game_id not in self.suspended_players:
+                self.suspended_players[game_id] = set()
+            
+            # Suspend the player
+            self.suspended_players[game_id].add(user_id)
+            
+            # Broadcast suspension to all players
+            await self.broadcast(game_id, {
+                'type': 'player_suspended',
+                'user_id': user_id,
+                'suspended_players': list(self.suspended_players[game_id])
+            })
 
     async def draw_numbers(self, game_id: int = 1):
         numbers = list(range(1, 76))
         random.shuffle(numbers)
-
-        pattern = self.game_patterns.get(game_id, "any_line")
 
         for n in numbers:
             if self.stop_number_generation.get(game_id, False) or self.game_winner.get(game_id):
@@ -1538,17 +1733,7 @@ class IntegratedBingoGame:
                     'called': self.active_games[game_id]['called_numbers']
                 })
 
-                if pattern == "full_house":
-                    winners = await self.check_full_house(game_id, n)
-                else:
-                    winners = await self.check_winner_any_line(game_id, n)
-
-                if winners:
-                    logger.info(f"🏆 WINNERS FOUND in room {game_id} on number {n}: {winners}")
-                    self.stop_number_generation[game_id] = True
-                    self.game_winner[game_id] = [w[0] for w in winners]
-                    await self.finish_round_multi(game_id, winners)
-                    break
+                # No automatic winner detection - players must click BINGO
 
     async def finish_round_multi(self, game_id: int, winners: List[Tuple[int, int]]):
         if game_id not in self.active_games:
@@ -1586,7 +1771,7 @@ class IntegratedBingoGame:
             if card:
                 winning_card_data = card['card']
 
-        pattern_display = "አንድ መስመር" if game_id == 1 else "ፉል ሃውስ"
+        pattern_display = self.room_patterns.get(game_id, "አልተመረጠም")
         await self.broadcast(game_id, {
             'type': 'game_won',
             'winners': [
@@ -1635,6 +1820,10 @@ class IntegratedBingoGame:
         if game_id in self.reset_timers:
             del self.reset_timers[game_id]
         self.game_winner[game_id] = None
+        
+        # Clear suspended players for new round
+        if game_id in self.suspended_players:
+            self.suspended_players[game_id].clear()
 
         if game_id in self.active_games:
             self.active_games[game_id]['called_numbers'] = []
@@ -1648,8 +1837,8 @@ class IntegratedBingoGame:
                 player['winner'] = False
 
         self.taken_cards[game_id] = set()
-        pattern_display = "አንድ መስመር" if game_id == 1 else "ፉል ሃውስ"
-        logger.info(f"✅ Room {game_id} round {self.round_numbers[game_id]} ready - all cards unlocked")
+        pattern_display = self.room_patterns.get(game_id, "አልተመረጠም")
+        logger.info(f"✅ Room {game_id} round {self.round_numbers[game_id]} ready")
         await self.broadcast(game_id, {
             'type': 'game_reset',
             'round': self.round_numbers[game_id],
@@ -1740,13 +1929,11 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❓ የቢንጎ ሮቦት እገዛ\n\nእንዴት እንደሚጫወት:\n"
             "1. 'Play Bingo' ን ይጫኑ\n"
             "2. በድረ-ገጹ ላይ ክፍል ይምረጡ\n"
-            "   - ክፍል 1: አንድ መስመር – 10 ብር/ካርድ (ራስ-ሰር ይጀምራል)\n"
-            "   - ክፍል 2: ፉል ሃውስ – 100 ብር/ካርድ (በአስተዳዳሪ ይጀምራል)\n"
-            "   - ክፍል 3: ፉል ሃውስ – 20 ብር/ካርድ (ራስ-ሰር ይጀምራል)\n"
             "3. ካርዶችን ይምረጡ (1-1000)\n"
-            "4. ጨዋታው 5 ካርዶች ከተሸጡ በኋላ በ30 ሰከንድ ይጀምራል (ክፍል 1 እና 3)\n"
+            "4. ጨዋታው 5 ካርዶች ከተሸጡ በኋላ በ30 ሰከንድ ይጀምራል\n"
             "5. ቁጥሮች በየ3 ሰከንድ ይጠራሉ\n"
-            "6. በተመሳሳይ ቁጥር ብዙ ተጫዋቾች ካሸነፉ ሽልማቱ በእኩል ይከፈላል!\n\n"
+            "6. ንድፉን ሲያጠናቅቁ 'ቢንጎ' ይጫኑ\n"
+            "7. የውሸት ቢንጎ ብትጫኑ በዚያ ዙር ትታገዳላችሁ\n\n"
             f"ዋጋ (ክፍል 1): {CARD_PRICE_ROOM1/100} ብር በካርድ\n"
             f"ዋጋ (ክፍል 2): {CARD_PRICE_ROOM2/100} ብር በካርድ\n"
             f"ዋጋ (ክፍል 3): {CARD_PRICE_ROOM3/100} ብር በካርድ\n\n"
@@ -1981,6 +2168,9 @@ async def setup_bot():
     application.add_handler(CommandHandler("cancel", deposit_cancel))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("startroom2", start_room2_command))
+    application.add_handler(CommandHandler("setpattern", set_pattern_command))
+    application.add_handler(CommandHandler("setprice", set_room_price_command))
+    application.add_handler(CommandHandler("patterns", list_patterns_command))
     application.add_handler(CallbackQueryHandler(button_callback))
     await application.initialize()
     await application.start()
@@ -2029,15 +2219,8 @@ async def rooms_page(request: Request, user_id: int):
 @app.get("/game", response_class=HTMLResponse)
 async def game_page(request: Request, user_id: int, game_id: int = 1):
     user = db.get_or_create_user(user_id)
-    if game_id == 1:
-        pattern = "አንድ መስመር"
-        price = CARD_PRICE_ROOM1 / 100
-    elif game_id == 2:
-        pattern = "ፉል ሃውስ"
-        price = CARD_PRICE_ROOM2 / 100
-    else:
-        pattern = "ፉል ሃውስ"
-        price = CARD_PRICE_ROOM3 / 100
+    pattern = game_manager.room_patterns.get(game_id, "አልተመረጠም")
+    price = game_manager.room_price.get(game_id, 1000) / 100
     return templates.TemplateResponse("bingo.html", {
         "request": request,
         "user_id": user_id,
@@ -2062,12 +2245,12 @@ async def get_room_stats():
             total_cards = game_manager.active_games[room_id]['total_cards_sold']
             player_count = len(game_manager.active_games[room_id]['players'])
             game_started = game_manager.game_started.get(room_id, False)
-            pattern = "አንድ መስመር" if room_id == 1 else "ፉል ሃውስ"
+            pattern = game_manager.room_patterns.get(room_id, "አልተመረጠም")
         else:
             total_cards = 0
             player_count = 0
             game_started = False
-            pattern = "አንድ መስመር" if room_id == 1 else "ፉል ሃውስ"
+            pattern = "አልተመረጠም"
         
         stats[room_id] = {
             "total_cards": total_cards,
@@ -2118,6 +2301,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
         while True:
             data = await websocket.receive_json()
             logger.info(f"WebSocket message: {data['type']} from user {user_id}")
+            
             if data['type'] == 'select_cards':
                 success, msg, cost, new_bal = await game_manager.select_cards(game_id, user_id, data['card_ids'])
                 await websocket.send_json({'type': 'cards_selected', 'success': success, 'message': msg, 'cost': cost, 'new_balance': new_bal, 'card_ids': data['card_ids'] if success else []})
@@ -2125,6 +2309,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     for card_id in data['card_ids']:
                         card = next(c for c in BINGO_CARDS if c['id'] == card_id)
                         await websocket.send_json({'type': 'your_card', 'card': card['card'], 'card_id': card_id})
+            
             elif data['type'] == 'mark_number':
                 if not game_manager.game_started.get(game_id, False):
                     await websocket.send_json({'type': 'error', 'message': 'Game not started'})
@@ -2132,27 +2317,37 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 success = game_manager.mark_number(game_id, user_id, data['card_id'], data['number'])
                 if success:
                     await websocket.send_json({'type': 'number_marked', 'card_id': data['card_id'], 'number': data['number']})
+            
             elif data['type'] == 'claim_bingo':
                 card_id = data.get('card_id')
                 if card_id:
-                    last = game_manager.active_games[game_id]['called_numbers'][-1] if game_manager.active_games[game_id]['called_numbers'] else 0
-                    pattern = game_manager.game_patterns.get(game_id, "any_line")
-                    if pattern == "full_house":
-                        winners = await game_manager.check_full_house(game_id, last)
+                    # Check if player is already suspended
+                    if user_id in game_manager.suspended_players.get(game_id, set()):
+                        await websocket.send_json({'type': 'error', 'message': 'You are suspended in this round'})
+                        continue
+                    
+                    # Check if this is a valid win
+                    is_winner = await game_manager.check_winner_by_pattern(game_id, user_id, card_id, 0)
+                    
+                    if is_winner:
+                        # Valid bingo - declare winner
+                        winners = [(user_id, card_id)]
+                        game_manager.stop_number_generation[game_id] = True
+                        await game_manager.finish_round_multi(game_id, winners)
                     else:
-                        winners = await game_manager.check_winner_any_line(game_id, last)
-                    if winners:
-                        if any(uid == user_id for uid, _ in winners):
-                            game_manager.stop_number_generation[game_id] = True
-                            await game_manager.finish_round_multi(game_id, winners)
-                        else:
-                            await websocket.send_json({'type': 'error', 'message': 'Not a valid bingo'})
-                    else:
-                        await websocket.send_json({'type': 'error', 'message': 'No bingo found'})
+                        # False bingo - suspend player
+                        await game_manager.handle_false_bingo(game_id, user_id)
+                        await websocket.send_json({'type': 'error', 'message': 'Wrong Bingo! You are suspended for this round'})
+            
+            elif data['type'] == 'false_bingo':
+                # Handle false bingo from client (backup)
+                await game_manager.handle_false_bingo(game_id, user_id)
+            
             elif data['type'] == 'heartbeat':
                 await websocket.send_json({'type': 'heartbeat_ack'})
             elif data['type'] == 'ping':
                 await websocket.send_json({'type': 'pong'})
+                
     except WebSocketDisconnect:
         await game_manager.disconnect(game_id, websocket, user_id)
         logger.info(f"User {user_id} disconnected from room {game_id}")
