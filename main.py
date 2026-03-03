@@ -59,14 +59,14 @@ AUTO_START_DELAY = 30
 HOUSE_PERCENT = 0.20
 ROUND_RESET_DELAY = 10
 
-# Payment methods with auto-approval settings
+# Payment methods with auto-approval settings - UPDATED TELEBIRR NUMBER
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
-        "account": "0983994214",
+        "account": "0982232677",  # ✅ Updated to new number
         "account_name": "Bingo Bot",
         "instructions": (
-            "Dial *127# and send money to 0983994214\n\n"
+            "Dial *127# and send money to 0982232677\n\n"  # ✅ Updated
             "📱 **የደረሰኝ ማረጋገጫ መስመር ላይ:**\n"
             "ክፍያዎን ከፍለው ከጨረሱ በኋላ የደረሰኝ ቁጥርዎን በመጠቀም ከዚህ ሊንክ ማረጋገጥ ይችላሉ፦\n"
             "`https://transactioninfo.ethiotelecom.et/receipt/{የደረሰኝ_ቁጥር}`\n\n"
@@ -77,9 +77,9 @@ PAYMENT_METHODS = {
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "0983994214",
+        "account": "0982232677",  # ✅ Updated to new number (same as Telebirr)
         "account_name": "Bingo Bot",
-        "instructions": "Dial *847# and send money to 0983994214",
+        "instructions": "Dial *847# and send money to 0982232677",  # ✅ Updated
         "auto_approve": False,
         "receipt_pattern": r'^[A-Z0-9]{6,20}$'
     }
@@ -87,6 +87,7 @@ PAYMENT_METHODS = {
 
 # Auto-approval settings
 MIN_AMOUNT_FOR_AUTO_APPROVE = 10
+YOUR_TELEBIRR_NUMBER = "0982232677"  # ✅ Updated
 
 # Conversation states
 SELECT_METHOD, SELECT_AMOUNT, WAIT_TRANSACTION = range(3)
@@ -141,26 +142,164 @@ os.makedirs("static", exist_ok=True)
 
 async def verify_telebirr_transaction(transaction_id: str, amount: int) -> Tuple[bool, str]:
     """
-    Verify a Telebirr transaction.
-    In a real implementation, this would call Ethio Telecom's API.
-    For now, we simulate verification with basic checks.
+    Real Telebirr verification using receipt scraping
+    Checks:
+    - Format validation
+    - Success status from receipt page
+    - Receiver account number
+    - Amount match
+    - Duplicate prevention
     """
-    # Simulate API call delay
-    await asyncio.sleep(1)
     
-    # Basic validation
-    if not transaction_id or len(transaction_id) < 6:
-        return False, "የተሳሳተ የደረሰኝ ቁጥር ቅርጸት"
+    transaction_id = transaction_id.strip().upper()
     
-    # Check if transaction ID matches expected pattern (alphanumeric, 6-20 chars)
-    if not re.match(r'^[A-Z0-9]{6,20}$', transaction_id.upper()):
-        return False, "የደረሰኝ ቁጥር ከ6-20 ፊደል እና ቁጥር ብቻ መሆን አለበት"
+    # =========================
+    # FORMAT VALIDATION
+    # =========================
+    if not re.match(r'^[A-Z0-9]{6,20}$', transaction_id):
+        return False, "❌ የደረሰኝ ቁጥር ትክክል አይደለም (ከ6-20 ፊደል እና ቁጥር ብቻ)"
+
+    # Prevent fake repeated strings (AAAAAA, 111111 etc.)
+    if len(set(transaction_id)) == 1:
+        return False, "❌ የደረሰኝ ቁጥር የተሳሳተ ነው (ተደጋጋሚ ፊደሎች)"
     
-    # Check if amount is valid
-    if amount < MIN_AMOUNT_FOR_AUTO_APPROVE:
-        return False, f"ራስ-ሰር ማረጋገጫ ዝቅተኛ መጠን {MIN_AMOUNT_FOR_AUTO_APPROVE} ብር ነው"
+    # Prevent obvious fake patterns
+    common_fakes = ["TEST", "DEMO", "SAMPLE", "FAKE", "TRX"]
+    if any(fake in transaction_id for fake in common_fakes):
+        return False, "❌ የደረሰኝ ቁጥር የተሳሳተ ነው"
     
-    # Check if transaction ID was already used
+    # =========================
+    # FETCH RECEIPT PAGE
+    # =========================
+    receipt_url = f"https://transactioninfo.ethiotelecom.et/receipt/{transaction_id}"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1"
+    }
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=20)
+        
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(receipt_url, headers=headers, allow_redirects=True) as response:
+                if response.status != 200:
+                    logger.warning(f"Receipt page returned status {response.status} for {transaction_id}")
+                    return False, "❌ የደረሰኝ መረጃ አልተገኘም (ሊጠፋ ወይም የተሳሳተ ቁጥር)"
+                
+                html = await response.text()
+                
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout fetching receipt {transaction_id}")
+        return False, "❌ የደረሰኝ ማረጋገጫ ጊዜ አልፏል"
+    except Exception as e:
+        logger.error(f"Receipt fetch error for {transaction_id}: {e}")
+        return False, "❌ የደረሰኝ ማረጋገጫ ስህተት (እባክዎ እንደገና ይሞክሩ)"
+
+    html_lower = html.lower()
+    
+    # =========================
+    # LOGGING FOR DEBUG (remove in production)
+    # =========================
+    logger.info(f"Receipt page length: {len(html)} characters")
+    
+    # =========================
+    # 1️⃣ CHECK SUCCESS STATUS
+    # =========================
+    success_indicators = [
+        "success", "completed", "successful", "ስኬት", "ተሳክቷል",
+        "status: completed", "transaction successful",
+        "payment successful", "ክፍያ ተሳክቷል"
+    ]
+    
+    found_success = False
+    for indicator in success_indicators:
+        if indicator in html_lower:
+            found_success = True
+            logger.info(f"Found success indicator: {indicator}")
+            break
+    
+    if not found_success:
+        # Check for failure indicators
+        failure_indicators = ["failed", "cancelled", "error", "አልተሳካም", "ተሰርዟል"]
+        for indicator in failure_indicators:
+            if indicator in html_lower:
+                return False, f"❌ ክፍያው {indicator} ነው"
+        
+        # If no clear success, try to detect based on typical page structure
+        if "receipt" not in html_lower and "ደረሰኝ" not in html_lower:
+            return False, "❌ የክፍያ መረጃ አልተገኘም"
+    
+    # =========================
+    # 2️⃣ CHECK RECEIVER NUMBER (UPDATED)
+    # =========================
+    YOUR_TELEBIRR_NUMBER = "0982232677"  # ✅ Updated
+    
+    # Check various formats of the number
+    number_variations = [
+        YOUR_TELEBIRR_NUMBER,
+        YOUR_TELEBIRR_NUMBER.replace("0", ""),  # 982232677
+        YOUR_TELEBIRR_NUMBER[1:],  # 982232677 (without leading 0)
+        f"0{int(YOUR_TELEBIRR_NUMBER)}",  # with leading zero
+        f"251{ YOUR_TELEBIRR_NUMBER[1:]}"  # 251982232677 (international format)
+    ]
+    
+    receiver_found = False
+    for variation in number_variations:
+        if variation in html.replace(" ", "").replace("-", "").replace("+", ""):
+            receiver_found = True
+            logger.info(f"Found receiver number: {variation}")
+            break
+    
+    if not receiver_found:
+        return False, "❌ ክፍያው ወደ ትክክለኛ አካውንት አልተላከም"
+    
+    # =========================
+    # 3️⃣ CHECK AMOUNT MATCH
+    # =========================
+    amount_str = str(amount)
+    amount_patterns = [
+        f"{amount}.00",
+        f"{amount}",
+        f"{amount:,}",
+        f"{amount} ETB",
+        f"{amount} ብር",
+        f"ETB {amount}",
+        f"{amount}birr",
+        f"{amount} br"
+    ]
+    
+    amount_found = False
+    for pattern in amount_patterns:
+        if pattern in html:
+            amount_found = True
+            logger.info(f"Found amount pattern: {pattern}")
+            break
+    
+    # Try with decimal variations
+    if not amount_found:
+        decimal_variations = [
+            f"{amount}.0",
+            f"{amount}.00",
+            f"{amount:,.2f}",
+            f"{amount:,}"
+        ]
+        for variation in decimal_variations:
+            if variation in html:
+                amount_found = True
+                logger.info(f"Found decimal amount: {variation}")
+                break
+    
+    if not amount_found:
+        return False, "❌ የክፍያ መጠን አይዛመድም"
+    
+    # =========================
+    # 4️⃣ CHECK DUPLICATE RECEIPT
+    # =========================
     conn = db.get_connection()
     try:
         cursor = conn.cursor()
@@ -169,27 +308,34 @@ async def verify_telebirr_transaction(transaction_id: str, amount: int) -> Tuple
             (transaction_id,)
         )
         if cursor.fetchone():
-            return False, "ይህ የደረሰኝ ቁጥር አስቀድሞ ጥቅም ላይ ውሏል"
+            return False, "❌ ይህ የደረሰኝ ቁጥር ተጠቅመዋል"
         
-        return True, "ክፍያ በተሳካ ሁኔታ ተረጋገጠ"
-    except Exception as e:
-        logger.error(f"Error checking transaction ID: {e}")
-        return False, "ክፍያ ማረጋገጥ ላይ ስህተት ተከስቷል"
+        # Also check if this receipt was used with any other transaction
+        cursor.execute(
+            "SELECT id FROM payment_proofs WHERE proof_data = ?",
+            (transaction_id,)
+        )
+        if cursor.fetchone():
+            return False, "❌ ይህ የደረሰኝ ቁጥር አስቀድሞ ተመዝግቧል"
+            
     finally:
         conn.close()
+    
+    return True, "✅ ክፍያ ተረጋገጠ"
 
 async def auto_approve_payment(user_id: int, amount: int, transaction_id: str, method: str) -> Tuple[bool, str, Optional[Dict]]:
     """
-    Automatically approve a payment if it passes verification.
-    Returns (success, message, balance_update)
+    Automatically approve a payment with real verification
     """
     logger.info(f"Auto-approving payment for user {user_id}, amount {amount}, method {method}")
     
-    # Verify transaction
     if method == "telebirr":
         verified, message = await verify_telebirr_transaction(transaction_id, amount)
         if not verified:
+            logger.warning(f"Auto-approval failed for user {user_id}: {message}")
             return False, message, None
+        
+        logger.info(f"Transaction {transaction_id} verified successfully")
     else:
         return False, "ራስ-ሰር ማረጋገጫ ለዚህ ዘዴ አይገኝም", None
     
@@ -208,14 +354,14 @@ async def auto_approve_payment(user_id: int, amount: int, transaction_id: str, m
     db.add_payment_proof(request_id, 'telebirr_receipt', transaction_id)
     
     # Update payment request status to auto-approved
-    db.update_payment_request_status(request_id, 'auto_approved', 'Auto-approved by system')
+    db.update_payment_request_status(request_id, 'auto_approved', 'Auto-approved by system via receipt verification')
     
     # Update user balance
     result = db.update_balance(
         user_id=user_id,
         amount=amount * 100,
         transaction_type='deposit',
-        description=f'Auto-approved payment - {request_id}'
+        description=f'Auto-approved payment - {request_id} (Receipt: {transaction_id})'
     )
     
     if not result:
@@ -456,7 +602,7 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode='HTML'
         )
         
-        # Attempt auto-approval
+        # Attempt auto-approval with real verification
         success, message, balance_update = await auto_approve_payment(
             user_id=user_id,
             amount=amount,
@@ -707,7 +853,7 @@ async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['withdraw_amount_etb'] = amount
 
         await update.message.reply_text(
-            "📱 <b>ስልክ ቁጥርዎን ያስገቡ</b> (በሞባይል ገንዘብዎ የተመዘገበው):\nምሳሌ: <code>0983994214</code>",
+            "📱 <b>ስልክ ቁጥርዎን ያስገቡ</b> (በሞባይል ገንዘብዎ የተመዘገበው):\nምሳሌ: <code>0982232677</code>",  # ✅ Updated example
             parse_mode='HTML'
         )
         return WITHDRAW_PHONE
@@ -1604,7 +1750,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"ዋጋ (ክፍል 1): {CARD_PRICE_ROOM1/100} ብር በካርድ\n"
             f"ዋጋ (ክፍል 2): {CARD_PRICE_ROOM2/100} ብር በካርድ\n"
             f"ዋጋ (ክፍል 3): {CARD_PRICE_ROOM3/100} ብር በካርድ\n\n"
-            "ተቀማጭ:\n• 'Deposit' ቁልፍን ይጫኑ\n• Telebirr ወይም CBE Birr ይምረጡ\n• መጠን ይምረጡ (50–10000 ብር)\n• ገንዘቡን ይላኩ እና የግብይት መለያውን ይላኩ\n\n"
+            "ተቀማጭ:\n• 'Deposit' ቁልፍን ይጫኑ\n• Telebirr ወይም CBE Birr ይምረጡ\n• መጠን ይምረጡ (50–10000 ብር)\n• ገንዘቡን ይላኩ እና የደረሰኝ ቁጥር ይላኩ\n\n"
             "ማውጣት:\n• 'Withdraw' ቁልፍን ይጫኑ\n• መጠን እና ስልክ ቁጥር ያስገቡ\n• አስተዳዳሪው ያረጋግጣል እና ገንዘቡን ይልካል\n\n"
             "🎁 ማስተዋወቂያ:\n• /refer በመጠቀም ጓደኞችዎን ይጋብዙ\n• እያንዳንዱ ጓደኛዎ ገንዘብ ሲሞላ 5 ብር ያግኙ\n\n"
             "💸 ማውጣት ሁኔታ:\n• ማውጣት ከመጀመር በፊት ቢያንስ 100 ብር መሙላት አለብዎት\n\n"
@@ -1710,8 +1856,7 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
                     chat_id=referrer_id,
                     text=f"🎁 **የማስተዋወቂያ ቦነስ!** 🎁\n\n"
                          f"የጋበዙት ሰው (ID: {request['user_id']}) የመጀመሪያ ገንዘባቸውን ሞልተዋል!\n"
-                         f"እርስዎ **5 ብር** ቦነስ አግኝተዋል!\n\n"
-                         f"💰 ቀሪ ሂሳብዎን ለማየት /balance ይጠቀሙ",
+                         f"እርስዎ **5 ብር** ቦነስ አግኝተዋል!",
                     parse_mode='Markdown'
                 )
             except Exception as e:
