@@ -4,6 +4,7 @@
     <title>MK-BINGO - ቢንጎ ጨዋታ</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
+        /* Keep all your existing CSS styles */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: Arial, sans-serif;
@@ -297,6 +298,20 @@
             border-radius: 15px;
             font-size: 10px;
             font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .called-badge:hover {
+            transform: scale(1.1);
+            background: #45a049;
+        }
+        .called-badge.marked {
+            background: #ff9800;
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        .called-badge.marked:hover {
+            transform: none;
         }
         
         /* Last Number */
@@ -317,10 +332,16 @@
             width: 180px;
         }
         
-        /* Auto-mark */
-        .auto-mark {
+        /* Manual marking instructions */
+        .manual-mark-info {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 5px;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 11px;
             margin-bottom: 8px;
-            font-size: 12px;
+            border: 1px solid #1976d2;
         }
         
         /* Auto-start timer display */
@@ -522,6 +543,7 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             transition: transform 0.2s;
             position: relative;
+            cursor: pointer;
         }
         .mini-card:hover {
             transform: translateY(-2px);
@@ -531,6 +553,7 @@
             opacity: 0.5;
             filter: grayscale(80%);
             border-color: #ff9800;
+            cursor: not-allowed;
         }
         .mini-card.suspended-card::after {
             content: "⛔";
@@ -582,13 +605,23 @@
             justify-content: center;
             font-size: 9px;
             font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .mini-bingo-cell:hover:not(.marked):not(.free) {
+            background-color: #e0e0e0;
         }
         .mini-bingo-cell.marked {
             background: #4CAF50;
             color: white;
+            cursor: default;
         }
         .mini-bingo-cell.free {
             background: #ffd700;
+            cursor: default;
+        }
+        .mini-bingo-cell.called {
+            border: 2px solid #ff9800;
         }
         
         /* Message */
@@ -705,6 +738,11 @@
             <div class="game-section">
                 <!-- Left Column -->
                 <div class="game-left">
+                    <!-- Manual Marking Instruction -->
+                    <div class="manual-mark-info">
+                        👆 ቁጥሩ ሲጠራ በካርድዎ ላይ ጠቅ ያድርጉ
+                    </div>
+                    
                     <!-- Winner Announcement -->
                     <div id="winner-announcement" class="winner-announcement">
                         <div id="winner-text"></div>
@@ -713,7 +751,7 @@
                     
                     <!-- Called Numbers -->
                     <div class="called-numbers-section">
-                        <div class="called-title">📞 የተጠሩ ቁጥሮች:</div>
+                        <div class="called-title">📞 የተጠሩ ቁጥሮች (ጠቅ ያድርጉ ለማመልከት):</div>
                         <div id="called-numbers-list" class="called-list"></div>
                     </div>
                     
@@ -723,13 +761,6 @@
                 
                 <!-- Right Column -->
                 <div class="game-right">
-                    <!-- Auto-mark -->
-                    <div class="auto-mark">
-                        <label>
-                            <input type="checkbox" id="autoDaub" onchange="toggleAutoDaub()"> 🤖 ራስ-ሰር ምልክት
-                        </label>
-                    </div>
-                    
                     <!-- Auto-start timer display -->
                     <div class="auto-start-timer" id="auto-start-timer">
                         ⏱️ በ <span id="timer-seconds">30</span> ሰከንድ ውስጥ ይጀምራል
@@ -752,7 +783,7 @@
             <!-- Player Cards Grid - Shows all cards -->
             <div class="player-cards-section" id="player-cards-section" style="display: none;">
                 <div class="player-cards-title">
-                    <span>🎴 የእርስዎ ካርዶች</span>
+                    <span>🎴 የእርስዎ ካርዶች (ቁጥር ለማመልከት ጠቅ ያድርጉ)</span>
                     <span class="player-cards-count" id="player-cards-count">0</span>
                 </div>
                 <div class="cards-grid-container" id="cards-grid-container">
@@ -784,34 +815,33 @@
         let selectedCards = [];
         let myCards = {}; // card_id -> card data
         let myCardIds = []; // array of card IDs
-        let marked = {}; // card_id -> array of marked numbers
-        let called = [];
+        let marked = {}; // card_id -> array of marked numbers (manually marked)
+        let called = []; // numbers called by the game
         let players = [];
         let takenCards = new Set();
         let gameStarted = false;
         let gameEnded = false;
         let currentRound = 1;
         let currentWinner = null;
-        let currentWinnerCardId = null; // store winning card id (as number)
-        let currentWinners = null; // store list of winners for multi-winner
+        let currentWinnerCardId = null;
+        let currentWinners = null;
         let balance = {{ initial_balance }};
         let activeGames = {{ initial_active_games }};
         let totalStake = {{ initial_stake }};
-        let totalCardsSold = 0; // Track total cards sold in the game
+        let totalCardsSold = 0;
         let winnerPrize = 0;
         let isReady = false;
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
         let isProcessing = false;
-        let autoDaubEnabled = false;
         let roundLocked = false;
         let autoStartTimer = null;
         let autoStartSeconds = AUTO_START_DELAY;
-        let winningCardTimeout = null; // for hiding winning card
+        let winningCardTimeout = null;
         
         // New state for suspended players
-        let suspended = false; // Whether current player is suspended
-        let suspendedPlayers = {}; // user_id -> boolean (server will send this)
+        let suspended = false;
+        let suspendedPlayers = {};
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -872,7 +902,7 @@
         function updateTotalCardsSold() {
             totalCardsSold = players.reduce((sum, player) => sum + (player.card_count || 0), 0);
             document.getElementById('total-cards-sold').textContent = totalCardsSold;
-            calculateWinnerPrize(); // Update winner prize whenever cards change
+            calculateWinnerPrize();
         }
         
         // Start auto-start timer
@@ -928,7 +958,7 @@
                     miniCard.classList.add('suspended-card');
                 }
                 
-                // Highlight if this is the winning card (convert to number for safety)
+                // Highlight if this is the winning card
                 if (currentWinnerCardId && parseInt(cardId) === parseInt(currentWinnerCardId)) {
                     miniCard.classList.add('winner-card');
                 }
@@ -954,12 +984,35 @@
                         let num = card[col]?.[row] || '?';
                         cell.textContent = num;
                         
+                        // Add data attributes for easy lookup
+                        cell.dataset.cardId = cardId;
+                        cell.dataset.number = num;
+                        cell.dataset.row = row;
+                        cell.dataset.col = col;
+                        
+                        // Mark FREE space
                         if (row === 2 && col === 2 || num === 'FREE') {
                             cell.classList.add('free');
                         }
                         
-                        if (called.includes(parseInt(num)) || markedNumbers.includes(parseInt(num))) {
+                        // Check if this number is marked
+                        if (markedNumbers.includes(parseInt(num))) {
                             cell.classList.add('marked');
+                        }
+                        
+                        // Add called class for visual indication (but not auto-mark)
+                        if (called.includes(parseInt(num))) {
+                            cell.classList.add('called');
+                        }
+                        
+                        // Add click handler for manual marking
+                        if (!suspended && gameStarted && num !== 'FREE' && !markedNumbers.includes(parseInt(num))) {
+                            cell.onclick = (e) => {
+                                e.stopPropagation();
+                                const num = parseInt(e.target.dataset.number);
+                                const cardId = parseInt(e.target.dataset.cardId);
+                                markNumber(cardId, num, e.target);
+                            };
                         }
                         
                         grid.appendChild(cell);
@@ -969,9 +1022,9 @@
                 miniCard.appendChild(grid);
                 
                 // Add click handler to check bingo on this card (only if not suspended)
-                miniCard.onclick = () => {
-                    if (gameStarted && !suspended) {
-                        checkBingoForCard(cardId);
+                miniCard.onclick = (e) => {
+                    if (gameStarted && !suspended && !e.target.classList.contains('mini-bingo-cell')) {
+                        checkBingoForCard(parseInt(cardId));
                     } else if (suspended) {
                         showMessage('እርስዎ ተከልክለዋል! ቀጣዩ ዙር ይጠብቁ', 'warning');
                     }
@@ -979,6 +1032,77 @@
                 
                 container.appendChild(miniCard);
             });
+        }
+        
+        // Manual mark number function
+        function markNumber(cardId, number, cellElement) {
+            if (!gameStarted) {
+                showMessage('ጨዋታው ገና አልተጀመረም', 'warning');
+                return;
+            }
+            
+            if (suspended) {
+                showMessage('እርስዎ ተከልክለዋል!', 'error');
+                return;
+            }
+            
+            // Check if number has been called
+            if (!called.includes(number)) {
+                showMessage(`ቁጥር ${number} ገና አልተጠራም`, 'warning');
+                return;
+            }
+            
+            // Check if already marked
+            if (marked[cardId] && marked[cardId].includes(number)) {
+                showMessage(`ቁጥር ${number} አስቀድሞ ተመልክቷል`, 'info');
+                return;
+            }
+            
+            // Send to server
+            ws.send(JSON.stringify({
+                type: 'mark_number',
+                card_id: cardId,
+                number: number
+            }));
+            
+            // Optimistic update
+            if (!marked[cardId]) {
+                marked[cardId] = [];
+            }
+            marked[cardId].push(number);
+            
+            // Update cell appearance
+            if (cellElement) {
+                cellElement.classList.add('marked');
+                cellElement.classList.remove('called');
+                cellElement.onclick = null; // Remove click handler
+            }
+            
+            // Check if this mark completes the pattern
+            checkPatternCompletion(cardId);
+        }
+        
+        // Check if pattern is completed
+        function checkPatternCompletion(cardId) {
+            const card = myCards[cardId];
+            const markedNumbers = marked[cardId] || [];
+            
+            // Check rows
+            for (let row = 0; row < 5; row++) {
+                let rowComplete = true;
+                for (let col = 0; col < 5; col++) {
+                    const val = card[col][row];
+                    if (val !== 'FREE' && !markedNumbers.includes(val)) {
+                        rowComplete = false;
+                        break;
+                    }
+                }
+                if (rowComplete) {
+                    showMessage(`✅ መስመር ተጠናቅቋል! ቢንጎ ይጫኑ`, 'success');
+                    return true;
+                }
+            }
+            return false;
         }
         
         // Show winning card to all players
@@ -1053,7 +1177,7 @@
                 let rowComplete = true;
                 for (let col = 0; col < 5; col++) {
                     const val = card[col][row];
-                    if (val !== 'FREE' && !markedNumbers.includes(val) && !called.includes(val)) {
+                    if (val !== 'FREE' && !markedNumbers.includes(val)) {
                         rowComplete = false;
                         break;
                     }
@@ -1068,7 +1192,10 @@
         
         // Check BINGO (called from button click)
         function checkBingo() {
-            if (!gameStarted) return;
+            if (!gameStarted) {
+                showMessage('ጨዋታው ገና አልተጀመረም', 'warning');
+                return;
+            }
             if (suspended) {
                 showMessage('እርስዎ ተከልክለዋል! ቀጣዩ ዙር ይጠብቁ', 'warning');
                 return;
@@ -1207,15 +1334,46 @@
                     updateCalledNumbers();
                     renderAllCards();
                     
-                    if (document.getElementById('autoDaub').checked && !suspended) {
-                        autoMarkNumber(data.number);
+                    // NO AUTO-MARKING - players must click manually
+                }
+                else if (data.type === 'mark_result') {
+                    if (data.success) {
+                        // Update local state
+                        if (!marked[data.card_id]) {
+                            marked[data.card_id] = [];
+                        }
+                        if (!marked[data.card_id].includes(data.number)) {
+                            marked[data.card_id].push(data.number);
+                        }
+                        
+                        showMessage(data.message, 'success');
+                        renderAllCards();
+                        
+                        // If pattern completed, highlight bingo button
+                        if (data.pattern_completed) {
+                            document.getElementById('bingo-btn').style.animation = 'pulse 0.5s infinite';
+                            showMessage('🎯 ንድፉ ተጠናቋል! ቢንጎ ይጫኑ!', 'success');
+                        }
+                    } else {
+                        if (!data.already_marked) {
+                            showMessage(data.message, 'error');
+                        }
                     }
                 }
-                else if (data.type === 'number_marked') {
-                    if (marked[data.card_id]) {
-                        marked[data.card_id].push(data.number);
+                else if (data.type === 'pattern_completed') {
+                    showMessage(data.message, 'success');
+                    document.getElementById('bingo-btn').style.animation = 'pulse 0.5s infinite';
+                }
+                else if (data.type === 'false_bingo_result') {
+                    if (data.success) {
+                        showMessage(data.message, 'warning');
+                        if (data.new_status) {
+                            suspended = data.new_status.fully_suspended || false;
+                        }
+                        document.getElementById('bingo-btn').disabled = true;
+                    } else {
+                        showMessage(data.message, 'error');
                     }
-                    renderAllCards();
                 }
                 else if (data.type === 'player_suspended') {
                     // Update suspended status from server
@@ -1230,6 +1388,15 @@
                     }
                     updatePlayersList();
                     renderAllCards();
+                }
+                else if (data.type === 'card_suspended') {
+                    if (data.user_id === userId) {
+                        showMessage(data.message, 'warning');
+                        if (data.remaining_cards === 0) {
+                            suspended = true;
+                            document.getElementById('bingo-btn').disabled = true;
+                        }
+                    }
                 }
                 else if (data.type === 'game_won') {
                     gameStarted = false;
@@ -1264,7 +1431,7 @@
                         winnerDiv.style.display = 'none';
                         currentWinnerCardId = null;
                         currentWinners = null;
-                        suspended = false; // Reset suspension for next round
+                        suspended = false;
                         renderAllCards();
                     }, 10000);
                 }
@@ -1276,7 +1443,7 @@
                     currentWinner = null;
                     currentWinnerCardId = null;
                     currentWinners = null;
-                    suspended = false; // Reset suspension for new round
+                    suspended = false;
                     suspendedPlayers = {};
                     
                     document.getElementById('winning-card-section').style.display = 'none';
@@ -1293,6 +1460,7 @@
                     
                     document.getElementById('status').textContent = '⏳ በመጠበቅ ላይ';
                     document.getElementById('bingo-btn').disabled = true;
+                    document.getElementById('bingo-btn').style.animation = 'pulse 1.5s infinite';
                     document.getElementById('last-number').textContent = '🎲 ዝግጁ';
                     document.getElementById('winner-announcement').style.display = 'none';
                     document.getElementById('auto-start-timer').style.display = 'none';
@@ -1381,6 +1549,11 @@
                 return;
             }
             
+            if (suspended) {
+                showMessage('እርስዎ ተከልክለዋል!', 'error');
+                return;
+            }
+            
             const index = selectedCards.indexOf(cardId);
             if (index >= 0) {
                 selectedCards.splice(index, 1);
@@ -1445,6 +1618,31 @@
                     const badge = document.createElement('span');
                     badge.className = 'called-badge';
                     badge.textContent = num;
+                    badge.dataset.number = num;
+                    
+                    // Add click handler for manual marking from called numbers list
+                    if (gameStarted && !suspended) {
+                        badge.onclick = () => {
+                            // Find first card that has this number
+                            for (let cardId of myCardIds) {
+                                const card = myCards[cardId];
+                                for (let col = 0; col < 5; col++) {
+                                    for (let row = 0; row < 5; row++) {
+                                        if (card[col][row] === num && !marked[cardId]?.includes(num)) {
+                                            // Find the cell element
+                                            const cell = document.querySelector(
+                                                `.mini-bingo-cell[data-card-id="${cardId}"][data-number="${num}"]`
+                                            );
+                                            markNumber(cardId, num, cell);
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                            showMessage(`ቁጥር ${num} በካርዶችዎ ላይ የለም`, 'warning');
+                        };
+                    }
+                    
                     list.appendChild(badge);
                 });
             } else {
@@ -1489,32 +1687,6 @@
                 badge.textContent = 'ገና ተጫዋቾች የሉም';
                 list.appendChild(badge);
             }
-        }
-        
-        function autoMarkNumber(number) {
-            if (suspended) return; // Don't auto-mark if suspended
-            
-            const num = parseInt(number);
-            Object.keys(myCards).forEach(cardId => {
-                const card = myCards[cardId];
-                for (let col = 0; col < 5; col++) {
-                    for (let row = 0; row < 5; row++) {
-                        if (card[col]?.[row] === num && !marked[cardId].includes(num)) {
-                            ws.send(JSON.stringify({
-                                type: 'mark_number',
-                                card_id: parseInt(cardId),
-                                number: num
-                            }));
-                            return;
-                        }
-                    }
-                }
-            });
-        }
-        
-        function toggleAutoDaub() {
-            autoDaubEnabled = document.getElementById('autoDaub').checked;
-            showMessage(autoDaubEnabled ? 'ራስ-ሰር ምልክት በርቷል' : 'ራስ-ሰር ምልክት ጠፍቷል', 'info');
         }
         
         function showMessage(text, type) {
