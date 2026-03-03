@@ -67,10 +67,10 @@ PAYMENT_METHODS = {
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "0983994214",
+        "account": "ለግዜው በcbebirr አልጀመርንም በቴሌብር ይሞኩሩ",
         "account_name": "Bingo Bot",
-        "instructions": "Dial *847# and send money to 0983994214"
-    }
+        "instructions": "Dial *847# and send money to "
+ ለግዜው በcbebirr አልጀመርንም በቴሌብር ይሞኩሩ",   }
 }
 
 # Conversation states
