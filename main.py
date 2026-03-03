@@ -61,16 +61,15 @@ ROUND_RESET_DELAY = 10
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
-        "account": "0983994214",
+        "account": "0947330067",
         "account_name": "Bingo Bot",
-        "instructions": "Dial *127# and send money to 0983994214"
+        "instructions": "Dial *127# and send money to 0947330067"
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "ለግዜው በcbebirr አልጀመርንም በቴሌብር ይሞኩሩ",
+        "account": "000000000000",
         "account_name": "Bingo Bot",
-        "instructions": "Dial *847# and send money to "
- ለግዜው በcbebirr አልጀመርንም በቴሌብር ይሞኩሩ",   }
+        "instructions": "Dial *847# and send money to "0000000000",   }
 }
 
 # Conversation states
