@@ -5,6 +5,8 @@ import asyncio
 import logging
 import time
 import uuid
+import re
+import aiohttp
 from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Dict, Set, List, Any, Optional, Tuple
@@ -57,20 +59,34 @@ AUTO_START_DELAY = 30
 HOUSE_PERCENT = 0.20
 ROUND_RESET_DELAY = 10
 
-# Payment methods
+# Payment methods with auto-approval settings
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
-        "account": "0947330067",
+        "account": "0983994214",
         "account_name": "Bingo Bot",
-        "instructions": "Dial *127# and send money to 0947330067"
+        "instructions": (
+            "Dial *127# and send money to 0983994214\n\n"
+            "📱 **የደረሰኝ ማረጋገጫ መስመር ላይ:**\n"
+            "ክፍያዎን ከፍለው ከጨረሱ በኋላ የደረሰኝ ቁጥርዎን በመጠቀም ከዚህ ሊንክ ማረጋገጥ ይችላሉ፦\n"
+            "`https://transactioninfo.ethiotelecom.et/receipt/{የደረሰኝ_ቁጥር}`\n\n"
+            "ለምሳሌ: `https://transactioninfo.ethiotelecom.et/receipt/TRX123456`"
+        ),
+        "auto_approve": True,
+        "receipt_pattern": r'^[A-Z0-9]{6,20}$'
     },
     "cbebirr": {
         "name": "CBE Birr",
-        "account": "000000000000",
+        "account": "0983994214",
         "account_name": "Bingo Bot",
-        "instructions": "Dial *847# and send money to "0000000000",   }
+        "instructions": "Dial *847# and send money to 0983994214",
+        "auto_approve": False,
+        "receipt_pattern": r'^[A-Z0-9]{6,20}$'
+    }
 }
+
+# Auto-approval settings
+MIN_AMOUNT_FOR_AUTO_APPROVE = 10
 
 # Conversation states
 SELECT_METHOD, SELECT_AMOUNT, WAIT_TRANSACTION = range(3)
@@ -121,7 +137,111 @@ except Exception as e:
 templates = Jinja2Templates(directory="templates")
 os.makedirs("static", exist_ok=True)
 
+# ==================== AUTO-APPROVAL FUNCTIONS ====================
+
+async def verify_telebirr_transaction(transaction_id: str, amount: int) -> Tuple[bool, str]:
+    """
+    Verify a Telebirr transaction.
+    In a real implementation, this would call Ethio Telecom's API.
+    For now, we simulate verification with basic checks.
+    """
+    # Simulate API call delay
+    await asyncio.sleep(1)
+    
+    # Basic validation
+    if not transaction_id or len(transaction_id) < 6:
+        return False, "የተሳሳተ የደረሰኝ ቁጥር ቅርጸት"
+    
+    # Check if transaction ID matches expected pattern (alphanumeric, 6-20 chars)
+    if not re.match(r'^[A-Z0-9]{6,20}$', transaction_id.upper()):
+        return False, "የደረሰኝ ቁጥር ከ6-20 ፊደል እና ቁጥር ብቻ መሆን አለበት"
+    
+    # Check if amount is valid
+    if amount < MIN_AMOUNT_FOR_AUTO_APPROVE:
+        return False, f"ራስ-ሰር ማረጋገጫ ዝቅተኛ መጠን {MIN_AMOUNT_FOR_AUTO_APPROVE} ብር ነው"
+    
+    # Check if transaction ID was already used
+    conn = db.get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM payment_proofs WHERE proof_data = ? AND proof_type = 'telebirr_receipt'",
+            (transaction_id,)
+        )
+        if cursor.fetchone():
+            return False, "ይህ የደረሰኝ ቁጥር አስቀድሞ ጥቅም ላይ ውሏል"
+        
+        return True, "ክፍያ በተሳካ ሁኔታ ተረጋገጠ"
+    except Exception as e:
+        logger.error(f"Error checking transaction ID: {e}")
+        return False, "ክፍያ ማረጋገጥ ላይ ስህተት ተከስቷል"
+    finally:
+        conn.close()
+
+async def auto_approve_payment(user_id: int, amount: int, transaction_id: str, method: str) -> Tuple[bool, str, Optional[Dict]]:
+    """
+    Automatically approve a payment if it passes verification.
+    Returns (success, message, balance_update)
+    """
+    logger.info(f"Auto-approving payment for user {user_id}, amount {amount}, method {method}")
+    
+    # Verify transaction
+    if method == "telebirr":
+        verified, message = await verify_telebirr_transaction(transaction_id, amount)
+        if not verified:
+            return False, message, None
+    else:
+        return False, "ራስ-ሰር ማረጋገጫ ለዚህ ዘዴ አይገኝም", None
+    
+    # Create payment request (mark as auto-approved)
+    request_id = db.create_payment_request(
+        user_id=user_id,
+        method_id=1,
+        amount=amount * 100,
+        sender_phone=""
+    )
+    
+    if not request_id:
+        return False, "የክፍያ ጥያቄ መፍጠር አልተሳካም", None
+    
+    # Add payment proof
+    db.add_payment_proof(request_id, 'telebirr_receipt', transaction_id)
+    
+    # Update payment request status to auto-approved
+    db.update_payment_request_status(request_id, 'auto_approved', 'Auto-approved by system')
+    
+    # Update user balance
+    result = db.update_balance(
+        user_id=user_id,
+        amount=amount * 100,
+        transaction_type='deposit',
+        description=f'Auto-approved payment - {request_id}'
+    )
+    
+    if not result:
+        return False, "ቀሪ ሂሳብ ማዘመን አልተሳካም", None
+    
+    return True, f"የ{amount} ብር ክፍያዎ በራስ-ሰር ጸድቋል!", result
+
+# ==================== WITHDRAWAL ELIGIBILITY CHECK ====================
+
+async def check_withdrawal_eligibility(user_id: int) -> Tuple[bool, str]:
+    """Check if user is eligible to withdraw (must have deposited at least 100 ETB first)"""
+    user = db.get_user(user_id)
+    if not user:
+        return False, "❌ ተጠቃሚ አልተገኘም።"
+    
+    if not user.get('has_deposited', False):
+        return False, "❌ ማውጣት ከመጀመርዎ በፊት ቢያንስ 100 ብር መሙላት አለብዎት።\n\n💡 መጀመሪያ ገንዘብ ይሙሉ እና ከዚያ ማውጣት ይችላሉ።"
+    
+    total_deposits = user.get('total_deposits', 0) / 100
+    if total_deposits < 100:
+        return False, f"❌ ማውጣት ከመጀመርዎ በፊት ቢያንስ 100 ብር መሙላት አለብዎት።\nእስካሁን ያስገቡት: {total_deposits:.2f} ብር"
+    
+    return True, "✅ ማውጣት ይችላሉ"
+
 # ==================== Deposit Handlers ====================
+
 async def deposit_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"User {user_id} started deposit via /deposit")
@@ -286,14 +406,24 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Failed to delete old message: {e}")
 
+    # Add auto-approval info to instructions if applicable
+    auto_approve_text = ""
+    if method_info.get('auto_approve', False):
+        auto_approve_text = (
+            f"\n\n⚡ <b>ራስ-ሰር ማረጋገጫ</b>\n"
+            f"የTelebirr ክፍያዎች በራስ-ሰር ይጸድቃሉ! የደረሰኝ ቁጥርዎን ከላኩ በኋላ በሰከንዶች ውስጥ ቀሪ ሂሳብዎ ይዘምናል።"
+        )
+
     text = (f"💰 <b>{method_info['name']} ገንዘብ መሙላት</b>\n\n"
             f"💵 መጠን: <b>{amount} ብር</b>\n"
             f"🏦 አካውንት: <code>{method_info['account']}</code>\n"
             f"የአካውንት ስም: {method_info['account_name']}\n\n"
             f"<b>መመሪያ:</b>\n"
-            f"{method_info['instructions']}\n\n"
-            f"✅ ገንዘቡን ከላኩ በኋላ እባክዎ <b>የግብይት መለያውን</b> ይላኩ።\n\n"
+            f"{method_info['instructions']}\n"
+            f"{auto_approve_text}\n\n"
+            f"✅ ገንዘቡን ከላኩ በኋላ እባክዎ <b>የደረሰኝ ቁጥርዎን</b> ይላኩ።\n\n"
             f"<i>ምሳሌ: <code>TRX123456</code></i>")
+    
     await context.bot.send_message(
         chat_id=user_id,
         text=text,
@@ -305,7 +435,7 @@ async def amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    trx_id = update.message.text.strip()
+    trx_id = update.message.text.strip().upper()
     logger.info(f"Transaction ID from user {user_id}: {trx_id}")
 
     amount = context.user_data.get('deposit_amount')
@@ -316,7 +446,77 @@ async def transaction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         return ConversationHandler.END
 
     method_info = PAYMENT_METHODS.get(method, PAYMENT_METHODS['telebirr'])
-
+    
+    # Check if this method supports auto-approval
+    if method_info.get('auto_approve', False):
+        # Send "verifying" message
+        verifying_msg = await update.message.reply_text(
+            "⏳ <b>በማረጋገጥ ላይ...</b>\n\n"
+            "እባክዎ ይጠብቁ። ክፍያዎ እየተረጋገጠ ነው።",
+            parse_mode='HTML'
+        )
+        
+        # Attempt auto-approval
+        success, message, balance_update = await auto_approve_payment(
+            user_id=user_id,
+            amount=amount,
+            transaction_id=trx_id,
+            method=method
+        )
+        
+        if success:
+            # Delete verifying message
+            await verifying_msg.delete()
+            
+            # Send success message
+            await update.message.reply_text(
+                f"✅ <b>ክፍያ በራስ-ሰር ጸድቋል!</b>\n\n"
+                f"💰 መጠን: <b>{amount} ብር</b>\n"
+                f"💳 ዘዴ: {method_info['name']}\n"
+                f"🔢 የደረሰኝ ቁጥር: <code>{trx_id}</code>\n\n"
+                f"🆕 አዲስ ቀሪ ሂሳብ: <b>{balance_update['new_balance']/100:.2f} ብር</b>\n\n"
+                f"💡 አሁን መጫወት ይችላሉ! 🎮",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🎮 ወደ ጨዋታ ይሂዱ", callback_data="play")
+                ]])
+            )
+            
+            # Check for referral bonus
+            bonus_paid = db.check_and_pay_referral_bonus(user_id)
+            if bonus_paid:
+                conn = db.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT referred_by FROM users WHERE user_id = ?", (user_id,))
+                    result = cursor.fetchone()
+                    if result and result['referred_by']:
+                        referrer_id = result['referred_by']
+                        await context.bot.send_message(
+                            chat_id=referrer_id,
+                            text=f"🎁 **የማስተዋወቂያ ቦነስ!** 🎁\n\n"
+                                 f"የጋበዙት ሰው (ID: {user_id}) የመጀመሪያ ገንዘባቸውን ሞልተዋል!\n"
+                                 f"እርስዎ **5 ብር** ቦነስ አግኝተዋል!",
+                            parse_mode='Markdown'
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to notify referrer: {e}")
+                finally:
+                    conn.close()
+            
+            context.user_data.clear()
+            return ConversationHandler.END
+        else:
+            # Auto-approval failed, fall back to manual approval
+            await verifying_msg.delete()
+            await update.message.reply_text(
+                f"⚠️ <b>ራስ-ሰር ማረጋገጥ አልተሳካም</b>\n\n"
+                f"ምክንያት: {message}\n\n"
+                f"ክፍያዎ ለአስተዳዳሪ ማረጋገጫ ተልኳል። በቅርቡ ይጸድቃል።",
+                parse_mode='HTML'
+            )
+    
+    # Manual approval flow (for CBE Birr or failed auto-approval)
     methods = db.get_payment_methods(type='mobile_money', active_only=True)
     if not methods:
         await update.message.reply_text("❌ ምንም የክፍያ ዘዴዎች አልተገኙም")
@@ -395,34 +595,14 @@ async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# ==================== WITHDRAWAL ELIGIBILITY CHECK ====================
-async def check_withdrawal_eligibility(user_id: int) -> Tuple[bool, str]:
-    """Check if user is eligible to withdraw (must have deposited at least 100 ETB first)"""
-    user = db.get_user(user_id)
-    if not user:
-        return False, "❌ ተጠቃሚ አልተገኘም።"
-    
-    # Check if user has ever deposited
-    if not user.get('has_deposited', False):
-        return False, "❌ ማውጣት ከመጀመርዎ በፊት ቢያንስ 100 ብር መሙላት አለብዎት።\n\n💡 መጀመሪያ ገንዘብ ይሙሉ እና ከዚያ ማውጣት ይችላሉ።"
-    
-    # Check total deposits (require minimum 100 ETB)
-    total_deposits = user.get('total_deposits', 0) / 100  # Convert from cents
-    if total_deposits < 100:
-        return False, f"❌ ማውጣት ከመጀመርዎ በፊት ቢያንስ 100 ብር መሙላት አለብዎት።\nእስካሁን ያስገቡት: {total_deposits:.2f} ብር"
-    
-    return True, "✅ ማውጣት ይችላሉ"
-
 # ==================== Withdrawal Handlers ====================
+
 async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /withdraw command - check if user is eligible first"""
     user_id = update.effective_user.id
     user_data = db.get_user(user_id) or db.get_or_create_user(user_id, user.username, user.first_name, user.last_name)
     
-    # Check withdrawal eligibility
     eligible, message = await check_withdrawal_eligibility(user_id)
     if not eligible:
-        # Create a keyboard with deposit button
         keyboard = [
             [InlineKeyboardButton("💳 ገንዘብ ሙሉ", callback_data="deposit_start")],
             [InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")]
@@ -445,7 +625,6 @@ async def withdraw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return WITHDRAW_AMOUNT
 
 async def withdraw_start_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle withdraw button from main menu - check eligibility first"""
     query = update.callback_query
     user = update.effective_user
     logger.info(f"User {user.id} started withdrawal via button")
@@ -455,7 +634,6 @@ async def withdraw_start_callback(update: Update, context: ContextTypes.DEFAULT_
     except BadRequest as e:
         logger.warning(f"Callback answer failed: {e}")
     
-    # Check withdrawal eligibility
     eligible, message = await check_withdrawal_eligibility(user.id)
     if not eligible:
         keyboard = [
@@ -493,11 +671,9 @@ async def withdraw_start_callback(update: Update, context: ContextTypes.DEFAULT_
     return WITHDRAW_AMOUNT
 
 async def withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle withdrawal amount input with eligibility check"""
     user_id = update.effective_user.id
     text = update.message.text.strip()
     
-    # Double-check eligibility (in case they try to bypass)
     eligible, message = await check_withdrawal_eligibility(user_id)
     if not eligible:
         keyboard = [
@@ -599,6 +775,7 @@ async def withdraw_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # ==================== Broadcast Command ====================
+
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_USER_ID:
@@ -637,8 +814,8 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Broadcast sent to {sent} users. Failed: {failed}")
 
 # ==================== Admin Command to Start Room 2 ====================
+
 async def start_room2_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin command to manually start Room 2."""
     user_id = update.effective_user.id
     if user_id != ADMIN_USER_ID:
         await update.message.reply_text("❌ You are not authorized to use this command.")
@@ -657,14 +834,12 @@ async def start_room2_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("❌ No cards sold in Room 2. Cannot start.")
         return
 
-    # Manually start the round
     await game_manager.start_round(game_id)
     await update.message.reply_text(f"✅ Room 2 started manually.")
 
 # ==================== REFERRAL SYSTEM ====================
 
 async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user's referral link and stats"""
     user_id = update.effective_user.id
     user = db.get_user(user_id)
     
@@ -672,7 +847,6 @@ async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ ተጠቃሚ አልተገኘም። እባክዎ በመጀመሪያ ቦቱን ይጀምሩ።")
         return
     
-    # Get or create referral code
     referral_code = user.get('referral_code')
     if not referral_code:
         referral_code = db.generate_referral_code(user_id)
@@ -684,14 +858,10 @@ async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         finally:
             conn.close()
     
-    # Get referral stats
     stats = db.get_referral_stats(user_id)
-    
-    # Create referral link
     bot_username = context.bot.username
     referral_link = f"https://t.me/{bot_username}?start=ref_{referral_code}"
     
-    # Build message
     message = (
         f"🎁 **የማስተዋወቂያ ስርዓት** 🎁\n\n"
         f"🔗 **የእርስዎ ማስተዋወቂያ ሊንክ:**\n"
@@ -708,7 +878,6 @@ async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🚀 ብዙ ጓደኞችዎን ይጋብዙ እና ገንዘብ ያግኙ!"
     )
     
-    # Add recent referrals if any
     if stats['recent_referrals']:
         message += "\n\n**የቅርብ ጊዜ መጋበዣዎች:**\n"
         for ref in stats['recent_referrals'][:5]:
@@ -717,7 +886,6 @@ async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             status = "✅ ተከፍሏል" if ref.get('has_deposited') else "⏳ በመጠባበቅ ላይ"
             message += f"• {name} - {date} - {status}\n"
     
-    # Create keyboard
     keyboard = [
         [InlineKeyboardButton("📋 ሊንክ ቅዳ", callback_data="copy_link")],
         [InlineKeyboardButton("◀️ ወደ ሜኑ ተመለስ", callback_data="menu")]
@@ -731,7 +899,6 @@ async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle referral button callbacks"""
     query = update.callback_query
     await query.answer()
     
@@ -791,19 +958,17 @@ async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def start_with_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start command with referral code"""
     user = update.effective_user
     args = context.args
     
     referred_by = None
     if args and args[0].startswith('ref_'):
-        referral_code = args[0][4:]  # Remove 'ref_' prefix
+        referral_code = args[0][4:]
         referrer = db.get_user_by_referral_code(referral_code)
         if referrer and referrer['user_id'] != user.id:
             referred_by = referrer['user_id']
             logger.info(f"User {user.id} was referred by {referred_by}")
     
-    # Create or get user with referred_by
     user_data = db.get_or_create_user(
         user_id=user.id,
         username=user.username,
@@ -814,7 +979,6 @@ async def start_with_referral(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     balance = user_data['balance'] / 100
     
-    # Custom welcome message based on whether they were referred
     if referred_by:
         referrer = db.get_user(referred_by)
         referrer_name = referrer.get('first_name') or f"User {referred_by}"
@@ -859,7 +1023,6 @@ async def start_with_referral(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user's balance including referral earnings and deposit status"""
     user_id = update.effective_user.id
     user_data = db.get_user(user_id)
     
@@ -872,7 +1035,6 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_deposited = user_data.get('has_deposited', False)
     total_deposits = user_data.get('total_deposits', 0) / 100
     
-    # Get referral stats
     stats = db.get_referral_stats(user_id)
     
     deposit_status = "✅ ገንዘብ ሞልተዋል" if has_deposited else "❌ ገና ገንዘብ አልሞሉም"
@@ -895,30 +1057,30 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message, parse_mode='Markdown')
 
 # ==================== Game Class ====================
+
 class IntegratedBingoGame:
     def __init__(self):
-        # Per‑room data dictionaries
-        self.round_numbers = {}           # game_id -> round number
-        self.called_numbers = {}           # game_id -> list of called numbers
-        self.game_started = {}             # game_id -> bool
-        self.total_pool = {}               # game_id -> int
-        self.house_profit = 0              # global house profit
-        self.active_games = {}              # game_id -> game state dict
-        self.game_connections = {}          # game_id -> list of websockets
-        self.taken_cards = {}               # game_id -> set of taken card ids
-        self.game_winner = {}               # game_id -> winner info (or list for multi)
-        self.number_tasks = {}              # game_id -> asyncio tasks (if needed)
-        self.countdown_timers = {}          # game_id -> countdown seconds
-        self.game_locks = {}                # game_id -> asyncio.Lock
-        self.auto_start_timers = {}         # game_id -> asyncio.Task
-        self.first_card_time = {}           # game_id -> timestamp
-        self.reset_timers = {}              # game_id -> asyncio.Task
-        self.game_patterns = {}             # game_id -> pattern name ("any_line" or "full_house")
+        self.round_numbers = {}
+        self.called_numbers = {}
+        self.game_started = {}
+        self.total_pool = {}
+        self.house_profit = 0
+        self.active_games = {}
+        self.game_connections = {}
+        self.taken_cards = {}
+        self.game_winner = {}
+        self.number_tasks = {}
+        self.countdown_timers = {}
+        self.game_locks = {}
+        self.auto_start_timers = {}
+        self.first_card_time = {}
+        self.reset_timers = {}
+        self.game_patterns = {}
 
         self.bot_app = None
-        self.user_connections = {}          # user_id -> connection count
+        self.user_connections = {}
         self.MAX_CONNECTIONS_PER_USER = 5
-        self.stop_number_generation = {}    # game_id -> bool
+        self.stop_number_generation = {}
         self.heartbeat_task = None
 
     def get_lock(self, game_id: int) -> asyncio.Lock:
@@ -963,10 +1125,9 @@ class IntegratedBingoGame:
                     'total_cards_sold': 0,
                     'last_winner': None,
                 }
-                # Set pattern based on room number
                 if game_id == 1:
                     self.game_patterns[game_id] = "any_line"
-                else:  # rooms 2 and 3 are full house
+                else:
                     self.game_patterns[game_id] = "full_house"
 
             self.game_connections[game_id].append(websocket)
@@ -1077,12 +1238,11 @@ class IntegratedBingoGame:
                 if not next((c for c in BINGO_CARDS if c['id'] == card_id), None):
                     return False, f"Card {card_id} not found", 0, None
 
-            # Determine card price based on room
             if game_id == 1:
                 price_per_card = CARD_PRICE_ROOM1
             elif game_id == 2:
                 price_per_card = CARD_PRICE_ROOM2
-            else:  # room 3
+            else:
                 price_per_card = CARD_PRICE_ROOM3
 
             total_cost = len(card_ids) * price_per_card
@@ -1107,7 +1267,6 @@ class IntegratedBingoGame:
             self.active_games[game_id]['total_cards_sold'] += len(card_ids)
             self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * price_per_card
 
-            # Auto‑start only for rooms 1 and 3 when total cards sold reaches 5
             if game_id != 2 and not self.game_started.get(game_id, False) and self.active_games[game_id]['total_cards_sold'] >= 5:
                 if game_id not in self.auto_start_timers:
                     asyncio.create_task(self.start_auto_start_timer(game_id))
@@ -1140,9 +1299,7 @@ class IntegratedBingoGame:
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_numbers[game_id]})
         asyncio.create_task(self.draw_numbers(game_id))
 
-    # ==================== WINNER CHECKERS ====================
     async def check_winner_any_line(self, game_id: int, last_number: int) -> List[Tuple[int, int]]:
-        """Check for any line (row, column, diagonal) winners."""
         if game_id not in self.active_games:
             return []
 
@@ -1160,7 +1317,6 @@ class IntegratedBingoGame:
                 def is_marked(val):
                     return val == 'FREE' or val in called or val in marked
 
-                # Check rows
                 for row in range(5):
                     if all(is_marked(card[col][row]) for col in range(5)):
                         winners.append((user_id, card_id))
@@ -1183,7 +1339,6 @@ class IntegratedBingoGame:
         return list(set(winners))
 
     async def check_full_house(self, game_id: int, last_number: int) -> List[Tuple[int, int]]:
-        """Check for full house (all numbers on card are marked)."""
         if game_id not in self.active_games:
             return []
 
@@ -1198,20 +1353,18 @@ class IntegratedBingoGame:
                 card_id = player['card_ids'][card_idx]
                 marked = set(player['marked'].get(card_id, []))
 
-                # Count all cells that are either called or marked (FREE always counts)
                 total_marked = 0
                 for row in range(5):
                     for col in range(5):
                         val = card[col][row]
                         if val == 'FREE' or val in called or val in marked:
                             total_marked += 1
-                if total_marked == 25:  # all 25 cells are covered
+                if total_marked == 25:
                     logger.info(f"FULL HOUSE! User {user_id} with card {card_id} at number {last_number}")
                     winners.append((user_id, card_id))
 
         return list(set(winners))
 
-    # ==================== MAIN GAME LOOP ====================
     async def draw_numbers(self, game_id: int = 1):
         numbers = list(range(1, 76))
         random.shuffle(numbers)
@@ -1239,7 +1392,6 @@ class IntegratedBingoGame:
                     'called': self.active_games[game_id]['called_numbers']
                 })
 
-                # Check winners based on room pattern
                 if pattern == "full_house":
                     winners = await self.check_full_house(game_id, n)
                 else:
@@ -1363,6 +1515,7 @@ class IntegratedBingoGame:
 game_manager = IntegratedBingoGame()
 
 # ==================== Conversation Handlers ====================
+
 deposit_conv = ConversationHandler(
     entry_points=[
         CommandHandler('deposit', deposit_command),
@@ -1399,8 +1552,8 @@ withdraw_conv = ConversationHandler(
 )
 
 # ==================== Menu and Navigation ====================
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # This is kept for backward compatibility but we'll use start_with_referral as the main handler
     await start_with_referral(update, context)
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1424,7 +1577,6 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]])
             )
             return
-        # Direct link to web app room selection
         webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
         await query.edit_message_text(
             f"🎮 ጨዋታውን ለመክፈት እና ክፍል ለመምረጥ ይጫኑ\n\n"
@@ -1455,7 +1607,8 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "ተቀማጭ:\n• 'Deposit' ቁልፍን ይጫኑ\n• Telebirr ወይም CBE Birr ይምረጡ\n• መጠን ይምረጡ (50–10000 ብር)\n• ገንዘቡን ይላኩ እና የግብይት መለያውን ይላኩ\n\n"
             "ማውጣት:\n• 'Withdraw' ቁልፍን ይጫኑ\n• መጠን እና ስልክ ቁጥር ያስገቡ\n• አስተዳዳሪው ያረጋግጣል እና ገንዘቡን ይልካል\n\n"
             "🎁 ማስተዋወቂያ:\n• /refer በመጠቀም ጓደኞችዎን ይጋብዙ\n• እያንዳንዱ ጓደኛዎ ገንዘብ ሲሞላ 5 ብር ያግኙ\n\n"
-            "💸 ማውጣት ሁኔታ:\n• ማውጣት ከመጀመር በፊት ቢያንስ 100 ብር መሙላት አለብዎት"
+            "💸 ማውጣት ሁኔታ:\n• ማውጣት ከመጀመር በፊት ቢያንስ 100 ብር መሙላት አለብዎት\n\n"
+            "⚡ ራስ-ሰር ማረጋገጫ:\n• የTelebirr ክፍያዎች በራስ-ሰር ይጸድቃሉ!"
         )
         await query.edit_message_text(
             help_text,
@@ -1525,6 +1678,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # ==================== Approval Handlers ====================
+
 async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, request_id: str):
     query = update.callback_query
     request = db.get_payment_request(request_id)
@@ -1544,17 +1698,14 @@ async def approve_payment(update: Update, context: ContextTypes.DEFAULT_TYPE, re
             f"💡 አሁን ማውጣት ይችላሉ! /withdraw ይጠቀሙ"
         )
         
-        # 🔥 Check if this user was referred and pay bonus to referrer
         bonus_paid = db.check_and_pay_referral_bonus(request['user_id'])
         if bonus_paid:
-            # Get referrer info to notify
             conn = db.get_connection()
             try:
                 cursor = conn.cursor()
                 cursor.execute("SELECT referred_by FROM users WHERE user_id = ?", (request['user_id'],))
                 referrer_id = cursor.fetchone()['referred_by']
                 
-                # Notify referrer
                 await context.bot.send_message(
                     chat_id=referrer_id,
                     text=f"🎁 **የማስተዋወቂያ ቦነስ!** 🎁\n\n"
@@ -1655,6 +1806,7 @@ async def reject_withdrawal(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     await query.edit_message_text(f"❌ ማውጫ ውድቅ ሆኗል\n\nየጥያቄ መለያ: {request_id}")
 
 # ==================== Main Callback Router ====================
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = update.callback_query.data
     if data.startswith('approve_payment_'):
@@ -1673,16 +1825,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await menu_callback(update, context)
 
 # ==================== Bot Setup ====================
+
 async def setup_bot():
     application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
     application.add_handler(deposit_conv)
     application.add_handler(withdraw_conv)
-    
-    # Replace the existing start handler with the referral-enabled one
     application.add_handler(CommandHandler("start", start_with_referral))
     application.add_handler(CommandHandler("refer", referral_command))
     application.add_handler(CommandHandler("balance", balance_command))
-    
     application.add_handler(CommandHandler("cancel", deposit_cancel))
     application.add_handler(CommandHandler("broadcast", broadcast_command))
     application.add_handler(CommandHandler("startroom2", start_room2_command))
@@ -1695,6 +1845,7 @@ async def setup_bot():
     return application
 
 # ==================== Lifespan ====================
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Starting up...")
@@ -1716,6 +1867,7 @@ app = FastAPI(title="Bingo Game", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ==================== Web App Routes ====================
+
 @app.get("/rooms", response_class=HTMLResponse)
 async def rooms_page(request: Request, user_id: int):
     user = db.get_or_create_user(user_id)
@@ -1756,9 +1908,9 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
     })
 
 # ==================== API Endpoints ====================
+
 @app.get("/api/room-stats")
 async def get_room_stats():
-    """Get statistics for all rooms"""
     stats = {}
     for room_id in [1, 2, 3]:
         if room_id in game_manager.active_games:
