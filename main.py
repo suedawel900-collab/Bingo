@@ -7,7 +7,7 @@ import time
 import uuid
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from typing import Dict, Set, List, Any, Optional, Tuple
 
@@ -72,6 +72,7 @@ AUTO_START_DELAY = 30
 AUTO_CALL_INTERVAL = 3  # seconds
 HOUSE_PERCENT = 0.20
 ROUND_RESET_DELAY = 10
+ADMIN_CONTROL_TIMEOUT = 10  # seconds before auto-start
 
 logger.info(f"✅ Configuration loaded - BASE_URL: {BASE_URL}")
 
@@ -332,7 +333,7 @@ def check_pattern(marked_positions, pattern_name):
     
     return False
 
-# ==================== Game Class with New Features ====================
+# ==================== Game Class with Admin Controls ====================
 
 class IntegratedBingoGame:
     def __init__(self):
@@ -353,13 +354,17 @@ class IntegratedBingoGame:
         self.reset_timers = {}
         self.number_pool = {}  # For manual number calling
         
-        # NEW: Track last called number per game
+        # NEW: Admin control timers
+        self.admin_control_timer = {}  # game_id -> asyncio.Task
+        self.admin_control_timeout = ADMIN_CONTROL_TIMEOUT
+        
+        # Track last called number per game
         self.last_called_number = {}  # game_id -> last number called
         
-        # NEW: Track blocked cards (permanent for the round)
+        # Track blocked cards (permanent for the round)
         self.blocked_cards = {}  # game_id -> {user_id: set(blocked_card_ids)}
         
-        # NEW: Track if a card has already won (to prevent multiple claims)
+        # Track if a card has already won (to prevent multiple claims)
         self.won_cards = {}  # game_id -> set(card_ids that have already won)
         
         # Pattern system
@@ -399,21 +404,20 @@ class IntegratedBingoGame:
 
     async def start_auto_settings_timer(self, game_id: int):
         """Auto-set pattern and price after 10 seconds if not set by admin"""
-        await asyncio.sleep(10)
+        await asyncio.sleep(self.admin_control_timeout)
         
         async with self.get_lock(game_id):
             if not self.room_pattern_locked.get(game_id, False):
-                # Auto-set random pattern and default price
+                # Auto-set random pattern and default price (10 ETB)
                 self.room_patterns[game_id] = random.choice(PATTERNS)
                 self.room_pattern_locked[game_id] = True
-                if game_id == 1:
-                    self.room_price[game_id] = CARD_PRICE_ROOM1
-                elif game_id == 2:
-                    self.room_price[game_id] = CARD_PRICE_ROOM2
-                else:
-                    self.room_price[game_id] = CARD_PRICE_ROOM3
+                self.room_price[game_id] = 1000  # 10 ETB default
                 
-                logger.info(f"Room {game_id} auto-set pattern: {self.room_patterns[game_id]}")
+                logger.info(f"Room {game_id} auto-set pattern: {self.room_patterns[game_id]}, price: 10 ETB")
+                
+                # Auto-start the game if enough cards are sold
+                if self.active_games[game_id]['total_cards_sold'] >= 5:
+                    asyncio.create_task(self.start_round(game_id))
 
     async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
         """Handle new WebSocket connection"""
@@ -440,7 +444,7 @@ class IntegratedBingoGame:
                 self.number_pool[game_id] = list(range(1, 76))
                 random.shuffle(self.number_pool[game_id])
                 
-                # NEW: Initialize new tracking structures
+                # Initialize new tracking structures
                 self.last_called_number[game_id] = None
                 self.blocked_cards[game_id] = {}
                 self.won_cards[game_id] = set()
@@ -460,8 +464,8 @@ class IntegratedBingoGame:
                     'last_winner': None,
                 }
                 
-                # Start auto-settings timer for new room
-                asyncio.create_task(self.start_auto_settings_timer(game_id))
+                # Start admin control timer
+                self.start_admin_control_timer(game_id)
 
             self.game_connections[game_id].append(websocket)
             if user_id not in self.active_games[game_id]['players']:
@@ -484,7 +488,7 @@ class IntegratedBingoGame:
                 if user_id not in self.user_selected_cards[game_id]:
                     self.user_selected_cards[game_id][user_id] = set()
                 
-                # NEW: Initialize blocked cards for this user
+                # Initialize blocked cards for this user
                 if user_id not in self.blocked_cards[game_id]:
                     self.blocked_cards[game_id][user_id] = set()
 
@@ -493,6 +497,9 @@ class IntegratedBingoGame:
 
             pattern_display = self.room_patterns.get(game_id, "any_line")
             pattern_name = get_pattern_name(pattern_display)
+            
+            # Get room price
+            room_price = self.room_price.get(game_id, 1000) / 100
             
             # Send initial connection data
             await websocket.send_json({
@@ -512,7 +519,9 @@ class IntegratedBingoGame:
                 'pattern': pattern_display,
                 'pattern_name': pattern_name,
                 'pattern_locked': self.room_pattern_locked.get(game_id, False),
-                'manual_marking': True
+                'room_price': room_price,
+                'manual_marking': True,
+                'admin_control_timeout': self.admin_control_timeout
             })
 
             # Send player's cards with their marked numbers
@@ -527,7 +536,7 @@ class IntegratedBingoGame:
                         card_id in self.player_marked_numbers[game_id][user_id]):
                         marked_numbers = list(self.player_marked_numbers[game_id][user_id][card_id])
                     
-                    # NEW: Check if card is blocked
+                    # Check if card is blocked
                     is_blocked = card_id in self.blocked_cards.get(game_id, {}).get(user_id, set())
                     
                     await websocket.send_json({
@@ -535,7 +544,7 @@ class IntegratedBingoGame:
                         'card': card_data['card'],
                         'card_id': card_id,
                         'marked': marked_numbers,
-                        'suspended': is_blocked,  # Use blocked status
+                        'suspended': is_blocked,
                         'blocked': is_blocked
                     })
 
@@ -543,6 +552,81 @@ class IntegratedBingoGame:
             await self.broadcast(game_id, {'type': 'player_joined', 'players': self.get_players(game_id)})
 
         return True
+
+    def start_admin_control_timer(self, game_id: int):
+        """Start timer for admin control timeout"""
+        if game_id in self.admin_control_timer:
+            self.admin_control_timer[game_id].cancel()
+        
+        async def timer():
+            await asyncio.sleep(self.admin_control_timeout)
+            async with self.get_lock(game_id):
+                if not self.room_pattern_locked.get(game_id, False):
+                    # Auto-set random pattern and default price
+                    self.room_patterns[game_id] = random.choice(PATTERNS)
+                    self.room_pattern_locked[game_id] = True
+                    self.room_price[game_id] = 1000  # 10 ETB
+                    
+                    logger.info(f"Room {game_id} auto-set pattern: {self.room_patterns[game_id]}, price: 10 ETB")
+                    
+                    # Broadcast update to all players
+                    await self.broadcast(game_id, {
+                        'type': 'room_settings_updated',
+                        'pattern': self.room_patterns[game_id],
+                        'pattern_name': get_pattern_name(self.room_patterns[game_id]),
+                        'price': self.room_price[game_id] / 100,
+                        'pattern_locked': True
+                    })
+        
+        self.admin_control_timer[game_id] = asyncio.create_task(timer())
+
+    async def set_room_settings(self, game_id: int, admin_id: int, pattern: str = None, price: int = None):
+        """Admin sets room pattern and price"""
+        if str(admin_id) != str(ADMIN_USER_ID):
+            return False, "Unauthorized"
+        
+        async with self.get_lock(game_id):
+            if pattern and pattern in PATTERNS:
+                self.room_patterns[game_id] = pattern
+                self.room_pattern_locked[game_id] = True
+            
+            if price:
+                self.room_price[game_id] = price * 100  # Convert to cents
+            
+            # Cancel admin control timer
+            if game_id in self.admin_control_timer:
+                self.admin_control_timer[game_id].cancel()
+                del self.admin_control_timer[game_id]
+            
+            # Broadcast update to all players
+            await self.broadcast(game_id, {
+                'type': 'room_settings_updated',
+                'pattern': self.room_patterns.get(game_id, "any_line"),
+                'pattern_name': get_pattern_name(self.room_patterns.get(game_id, "any_line")),
+                'price': self.room_price.get(game_id, 1000) / 100,
+                'pattern_locked': True
+            })
+            
+            logger.info(f"Admin set room {game_id} pattern: {pattern}, price: {price} ETB")
+            return True, "Settings updated"
+
+    async def admin_start_game(self, game_id: int, admin_id: int):
+        """Admin manually starts the game"""
+        if str(admin_id) != str(ADMIN_USER_ID):
+            return False, "Unauthorized"
+        
+        async with self.get_lock(game_id):
+            if game_id not in self.active_games:
+                return False, "Game not found"
+            
+            if self.game_started.get(game_id, False):
+                return False, "Game already started"
+            
+            if self.active_games[game_id]['total_cards_sold'] == 0:
+                return False, "No cards sold"
+            
+            await self.start_round(game_id)
+            return True, "Game started"
 
     async def disconnect(self, game_id: int, websocket: WebSocket, user_id: int):
         """Handle WebSocket disconnection"""
@@ -631,7 +715,7 @@ class IntegratedBingoGame:
                     return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0, None
                 
                 # Validate all cards exist and are available
-                price_per_card = self.room_price.get(game_id, CARD_PRICE_ROOM1)
+                price_per_card = self.room_price.get(game_id, 1000)
                 available_cards = []
                 
                 for card_id in card_ids:
@@ -679,7 +763,7 @@ class IntegratedBingoGame:
                 if user_id not in self.suspended_cards.get(game_id, {}):
                     self.suspended_cards.setdefault(game_id, {})[user_id] = set()
                 
-                # NEW: Initialize blocked cards for this user if needed
+                # Initialize blocked cards for this user if needed
                 if game_id not in self.blocked_cards:
                     self.blocked_cards[game_id] = {}
                 if user_id not in self.blocked_cards[game_id]:
@@ -765,7 +849,16 @@ class IntegratedBingoGame:
             self.auto_start_timers[game_id].cancel()
             del self.auto_start_timers[game_id]
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_numbers[game_id]})
+        
+        # Start auto-calling numbers
+        asyncio.create_task(self.auto_call_numbers(game_id))
         logger.info(f"Room {game_id} started")
+
+    async def auto_call_numbers(self, game_id: int):
+        """Automatically call numbers every 3 seconds"""
+        while self.game_started.get(game_id, False) and not self.stop_number_generation.get(game_id, False):
+            await asyncio.sleep(AUTO_CALL_INTERVAL)
+            await self.call_next_number(game_id)
 
     async def call_next_number(self, game_id: int):
         """Call the next number in the sequence"""
@@ -781,7 +874,7 @@ class IntegratedBingoGame:
             
             number = self.number_pool[game_id].pop()
             
-            # NEW: Store last called number
+            # Store last called number
             self.last_called_number[game_id] = number
             
             # Add to called numbers
@@ -835,7 +928,7 @@ class IntegratedBingoGame:
                     result['message'] = 'You are suspended from this round'
                     return result
                 
-                # NEW: Check if card is blocked
+                # Check if card is blocked
                 if (game_id in self.blocked_cards and 
                     user_id in self.blocked_cards[game_id] and 
                     card_id in self.blocked_cards[game_id][user_id]):
@@ -942,7 +1035,7 @@ class IntegratedBingoGame:
                     return False, "You are suspended from this round", None
                 
                 # Get price
-                price_per_card = self.room_price.get(game_id, CARD_PRICE_ROOM1)
+                price_per_card = self.room_price.get(game_id, 1000)
                 
                 # Check balance
                 user = db.get_user(user_id)
@@ -1123,13 +1216,13 @@ class IntegratedBingoGame:
                     result['message'] = 'Card does not belong to you'
                     return result
                 
-                # NEW: Initialize blocked cards tracking for this game/user
+                # Initialize blocked cards tracking for this game/user
                 if game_id not in self.blocked_cards:
                     self.blocked_cards[game_id] = {}
                 if user_id not in self.blocked_cards[game_id]:
                     self.blocked_cards[game_id][user_id] = set()
                 
-                # NEW: Initialize won cards tracking
+                # Initialize won cards tracking
                 if game_id not in self.won_cards:
                     self.won_cards[game_id] = set()
                 
@@ -1183,6 +1276,18 @@ class IntegratedBingoGame:
                     # Update database
                     db.update_suspension_status(user_id, game_id, [card_id], "false_bingo")
                     
+                    # Save win/loss record
+                    db.save_game_result(
+                        user_id=user_id,
+                        game_id=game_id,
+                        card_id=card_id,
+                        won=False,
+                        pattern=pattern,
+                        called_numbers=self.called_numbers.get(game_id, []),
+                        marked_numbers=list(marked_set),
+                        reason="false_bingo"
+                    )
+                    
                     result['false_bingo'] = True
                     result['type'] = 'card_suspended'
                     result['message'] = f'❌ Wrong Bingo! Card {card_id} has been blocked for this round'
@@ -1214,9 +1319,29 @@ class IntegratedBingoGame:
                 # VALID WIN! Mark card as won
                 self.won_cards[game_id].add(card_id)
                 
+                # Calculate prize
+                prize_pool = self.active_games[game_id]['prize_pool']
+                house_cut = int(prize_pool * HOUSE_PERCENT)
+                prize_amount = prize_pool - house_cut
+                
+                # Save win record
+                db.save_game_result(
+                    user_id=user_id,
+                    game_id=game_id,
+                    card_id=card_id,
+                    won=True,
+                    prize_amount=prize_amount,
+                    pattern=pattern,
+                    called_numbers=self.called_numbers.get(game_id, []),
+                    marked_numbers=list(marked_set),
+                    winning_number=last_number,
+                    reason="valid_bingo"
+                )
+                
                 result['success'] = True
                 result['type'] = 'winner'
                 result['message'] = f'🎉 BINGO! Card {card_id} wins!'
+                result['prize'] = prize_amount / 100
                 
                 logger.info(f"User {user_id} valid bingo on card {card_id}")
                 
@@ -1238,7 +1363,7 @@ class IntegratedBingoGame:
             
             player = self.active_games[game_id]['players'][user_id]
             
-            # NEW: Get blocked cards
+            # Get blocked cards
             blocked = set()
             if game_id in self.blocked_cards and user_id in self.blocked_cards[game_id]:
                 blocked = self.blocked_cards[game_id][user_id]
@@ -1303,7 +1428,7 @@ class IntegratedBingoGame:
             if user_id in self.suspended_players.get(game_id, set()):
                 return False
             
-            # NEW: Check if card is blocked
+            # Check if card is blocked
             if (game_id in self.blocked_cards and 
                 user_id in self.blocked_cards[game_id] and 
                 card_id in self.blocked_cards[game_id][user_id]):
@@ -1446,7 +1571,7 @@ class IntegratedBingoGame:
         if game_id in self.user_selected_cards:
             del self.user_selected_cards[game_id]
         
-        # NEW: Clear blocked cards and won cards
+        # Clear blocked cards and won cards
         if game_id in self.blocked_cards:
             del self.blocked_cards[game_id]
         if game_id in self.won_cards:
@@ -1456,6 +1581,11 @@ class IntegratedBingoGame:
         if game_id in self.suspended_players:
             del self.suspended_players[game_id]
         
+        # Clear admin control timer
+        if game_id in self.admin_control_timer:
+            self.admin_control_timer[game_id].cancel()
+            del self.admin_control_timer[game_id]
+        
         # Reset round numbers
         self.round_numbers[game_id] = self.round_numbers.get(game_id, 1) + 1
         self.called_numbers[game_id] = []
@@ -1464,8 +1594,14 @@ class IntegratedBingoGame:
         self.number_pool[game_id] = list(range(1, 76))
         random.shuffle(self.number_pool[game_id])
         
-        # NEW: Clear last called number
+        # Clear last called number
         self.last_called_number[game_id] = None
+        
+        # Reset pattern lock
+        self.room_pattern_locked[game_id] = False
+        
+        # Start new admin control timer
+        self.start_admin_control_timer(game_id)
         
         # Cancel timers
         if game_id in self.auto_start_timers:
@@ -1599,19 +1735,25 @@ async def get_room_stats():
                 game_started = game_manager.game_started.get(room_id, False)
                 pattern = game_manager.room_patterns.get(room_id, "any_line")
                 pattern_name = get_pattern_name(pattern)
+                pattern_locked = game_manager.room_pattern_locked.get(room_id, False)
+                price = game_manager.room_price.get(room_id, 1000) / 100
             else:
                 total_cards = 0
                 player_count = 0
                 game_started = False
                 pattern = "any_line"
                 pattern_name = "Any Line"
+                pattern_locked = False
+                price = 50
             
             stats[room_id] = {
                 "total_cards": total_cards,
                 "players": player_count,
                 "game_started": game_started,
                 "pattern": pattern,
-                "pattern_name": pattern_name
+                "pattern_name": pattern_name,
+                "pattern_locked": pattern_locked,
+                "price": price
             }
         return stats
     except Exception as e:
@@ -1714,10 +1856,16 @@ async def get_pending_payments(user_id: int):
     try:
         payments = db.get_pending_payment_requests(limit=50)
         withdrawals = db.get_pending_withdrawal_requests(limit=50)
+        payment_history = db.get_payment_history(limit=50)
+        withdrawal_history = db.get_withdrawal_history(limit=50)
+        game_history = db.get_game_history(limit=50)
         
         return JSONResponse(content={
             "payments": payments,
-            "withdrawals": withdrawals
+            "withdrawals": withdrawals,
+            "payment_history": payment_history,
+            "withdrawal_history": withdrawal_history,
+            "game_history": game_history
         })
     except Exception as e:
         logger.error(f"Error getting pending payments: {e}")
@@ -1823,6 +1971,38 @@ async def reject_withdrawal(request: Request):
         logger.error(f"Error rejecting withdrawal: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+@app.post("/api/admin/set-room-settings")
+async def set_room_settings(request: Request):
+    """Admin sets room pattern and price"""
+    try:
+        data = await request.json()
+        admin_id = data.get('admin_id')
+        game_id = data.get('game_id')
+        pattern = data.get('pattern')
+        price = data.get('price')
+        
+        success, message = await game_manager.set_room_settings(game_id, admin_id, pattern, price)
+        
+        return JSONResponse(content={"success": success, "message": message})
+    except Exception as e:
+        logger.error(f"Error setting room settings: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/admin/start-game")
+async def admin_start_game(request: Request):
+    """Admin manually starts the game"""
+    try:
+        data = await request.json()
+        admin_id = data.get('admin_id')
+        game_id = data.get('game_id')
+        
+        success, message = await game_manager.admin_start_game(game_id, admin_id)
+        
+        return JSONResponse(content={"success": success, "message": message})
+    except Exception as e:
+        logger.error(f"Error starting game: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 # ==================== WebSocket Endpoint ====================
 
 @app.websocket("/ws/{game_id}/{user_id}")
@@ -1887,7 +2067,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     })
                     continue
                 
-                # NEW: Use the new handler with all rules
+                # Use the new handler with all rules
                 result = await game_manager.handle_claim_bingo(game_id, user_id, card_id)
                 
                 if result['success']:
@@ -1929,10 +2109,6 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'message': message,
                     'new_balance': new_balance
                 })
-                if success:
-                    # Send the new card data
-                    # This would need to be implemented to return the actual card
-                    pass
             
             elif data['type'] == 'get_card_status':
                 status = await game_manager.get_player_card_status(game_id, user_id)
@@ -2147,7 +2323,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👥 ተጠቃሚዎች: {stats['total_users']}\n"
             f"💰 ጠቅላላ ቀሪ: {stats['total_balance']/100:.2f} ብር\n"
             f"⏳ በመጠባበቅ ላይ ያሉ ክፍያዎች: {stats.get('pending_payments', 0)}\n"
-            f"💸 በመጠባበቅ ላይ ያሉ ማውጫዎች: {stats.get('pending_withdrawals', 0)}\n\n"
+            f"💸 በመጠባበቅ ላይ ያሉ ማውጫዎች: {stats.get('pending_withdrawals', 0)}\n"
+            f"📊 ጠቅላላ ጨዋታዎች: {stats.get('total_games', 0)}\n"
+            f"🏆 አሸናፊዎች: {stats.get('total_winners', 0)}\n\n"
             f"ክፍያዎችን ለማረጋገጥ ወደ ዌብ አፕ ይሂዱ 👇"
         )
         
