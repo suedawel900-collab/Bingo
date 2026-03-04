@@ -664,51 +664,96 @@ body{
   color:var(--text);
   border-color:rgba(255,255,255,0.14);
 }
-.admin-deposit-card{
+
+/* Admin Sections */
+.admin-section-title{
+  font-size:1.1rem;
+  font-weight:900;
+  margin:20px 0 10px 0;
+  color:var(--text);
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.admin-section-title:first-of-type{
+  margin-top:0;
+}
+
+/* Payment Cards with Approve/Reject Buttons */
+.admin-payment-card{
   background:var(--surface2);
   border-radius:12px;
   padding:16px;
   margin-bottom:12px;
   border:1px solid var(--border);
 }
-.admin-deposit-header{
+.admin-payment-header{
   display:flex;
   justify-content:space-between;
   margin-bottom:8px;
+  flex-wrap:wrap;
+  gap:8px;
 }
-.admin-deposit-user{
+.admin-payment-user{
   font-weight:900;
   font-size:0.95rem;
+  color:var(--text);
 }
-.admin-deposit-time{
-  font-size:0.72rem;
+.admin-payment-user small{
+  font-weight:normal;
+  font-size:0.75rem;
   color:var(--muted);
+  margin-left:5px;
 }
-.admin-deposit-amount{
-  font-family:monospace;
-  font-size:1.1rem;
-  color:var(--green);
+.admin-payment-amount{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:1.2rem;
   font-weight:700;
 }
-.admin-deposit-txid{
-  font-family:monospace;
-  font-size:0.8rem;
-  color:var(--muted);
-  margin-bottom:6px;
+.admin-payment-amount.deposit{
+  color:var(--green);
 }
-.admin-deposit-note{
-  font-size:0.82rem;
-  padding:8px 12px;
+.admin-payment-amount.withdrawal{
+  color:var(--red);
+}
+.admin-payment-details{
+  background:rgba(0,0,0,0.2);
   border-radius:8px;
-  background:rgba(255,255,255,0.03);
-  margin-bottom:10px;
+  padding:10px;
+  margin:10px 0;
+  font-size:0.85rem;
 }
-.admin-deposit-status{
+.admin-payment-row{
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:4px;
+  flex-wrap:wrap;
+  gap:5px;
+}
+.admin-payment-label{
+  color:var(--muted);
+}
+.admin-payment-value{
+  font-family:'IBM Plex Mono',monospace;
+  color:var(--text);
+  font-weight:600;
+}
+.admin-payment-txid{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:0.8rem;
+  color:var(--gold);
+  background:rgba(255,217,61,0.1);
+  padding:2px 8px;
+  border-radius:4px;
+  display:inline-block;
+}
+.admin-payment-status{
   display:inline-block;
   padding:3px 10px;
   border-radius:20px;
   font-size:0.7rem;
   font-weight:700;
+  margin-right:8px;
 }
 .status-pending{
   background:rgba(245,158,11,0.15);
@@ -721,6 +766,109 @@ body{
 .status-rejected{
   background:rgba(239,68,68,0.15);
   color:#ef4444;
+}
+
+/* Approve/Reject Buttons */
+.admin-action-buttons{
+  display:flex;
+  gap:8px;
+  margin-top:12px;
+  flex-wrap:wrap;
+}
+.admin-approve-btn{
+  flex:1;
+  background:rgba(16,185,129,0.15);
+  border:1px solid rgba(16,185,129,0.3);
+  color:#10b981;
+  padding:10px;
+  border-radius:8px;
+  font-weight:700;
+  font-size:0.85rem;
+  cursor:pointer;
+  transition:all 0.15s;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+}
+.admin-approve-btn:hover{
+  background:rgba(16,185,129,0.25);
+  border-color:#10b981;
+}
+.admin-reject-btn{
+  flex:1;
+  background:rgba(239,68,68,0.15);
+  border:1px solid rgba(239,68,68,0.3);
+  color:#ef4444;
+  padding:10px;
+  border-radius:8px;
+  font-weight:700;
+  font-size:0.85rem;
+  cursor:pointer;
+  transition:all 0.15s;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+}
+.admin-reject-btn:hover{
+  background:rgba(239,68,68,0.25);
+  border-color:#ef4444;
+}
+.admin-view-btn{
+  background:rgba(77,150,255,0.15);
+  border:1px solid rgba(77,150,255,0.3);
+  color:#4d96ff;
+  padding:10px;
+  border-radius:8px;
+  font-weight:700;
+  font-size:0.85rem;
+  cursor:pointer;
+  text-align:center;
+}
+.admin-view-btn:hover{
+  background:rgba(77,150,255,0.25);
+}
+
+/* History Section */
+.admin-history-card{
+  background:rgba(255,255,255,0.03);
+  border-radius:10px;
+  padding:12px;
+  margin-bottom:8px;
+  border:1px solid var(--border);
+}
+.admin-history-header{
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:4px;
+  font-size:0.85rem;
+}
+.admin-history-user{
+  font-weight:700;
+}
+.admin-history-amount{
+  font-family:'IBM Plex Mono',monospace;
+  font-weight:700;
+}
+.admin-history-amount.win{
+  color:var(--gold);
+}
+.admin-history-details{
+  font-size:0.75rem;
+  color:var(--muted);
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:4px;
+}
+
+/* Empty State */
+.admin-empty{
+  text-align:center;
+  color:var(--muted);
+  padding:40px 0;
+  font-size:0.9rem;
 }
 
 /* ══ OVERLAY MODALS ══ */
@@ -897,7 +1045,7 @@ canvas#confetti{
      data-base-url="{{ base_url }}"
      style="display:none;"></div>
 
-<!-- ═══════ TAB BAR ═══════ -->
+<!-- ═══════ TAB BAR - WALLET first, then CARDS, GAME, PATTERNS, ADMIN ═══════ -->
 <div class="tab-bar">
   <div class="tab active" id="tab-wallet" onclick="switchTab('wallet')">
     <span class="tab-icon">💰</span>WALLET
@@ -1132,7 +1280,7 @@ canvas#confetti{
   </div>
 </div>
 
-<!-- ═══════ ADMIN SCREEN (Admin only) ═══════ -->
+<!-- ═══════ ADMIN SCREEN (Admin only) with Approve/Reject Buttons ═══════ -->
 <div class="screen" id="screen-admin">
   <div class="admin-container">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">
@@ -1140,6 +1288,7 @@ canvas#confetti{
       <button class="preset-btn" style="padding:8px 14px;" onclick="loadAdminData()">↺ Refresh</button>
     </div>
     
+    <!-- Stats Grid -->
     <div class="admin-stats-grid">
       <div class="admin-stat-box">
         <div class="admin-stat-value" id="admin-pending">0</div>
@@ -1155,14 +1304,45 @@ canvas#confetti{
       </div>
     </div>
     
+    <!-- Filter Tabs -->
     <div class="admin-filter-tabs">
-      <button class="admin-filter-btn active" onclick="filterDeposits('all',this)">All</button>
-      <button class="admin-filter-btn" onclick="filterDeposits('pending',this)">⏳ Pending</button>
-      <button class="admin-filter-btn" onclick="filterDeposits('approved',this)">✅ Approved</button>
-      <button class="admin-filter-btn" onclick="filterDeposits('rejected',this)">❌ Rejected</button>
+      <button class="admin-filter-btn active" onclick="filterAdminData('all',this)">All</button>
+      <button class="admin-filter-btn" onclick="filterAdminData('pending',this)">⏳ Pending</button>
+      <button class="admin-filter-btn" onclick="filterAdminData('approved',this)">✅ Approved</button>
+      <button class="admin-filter-btn" onclick="filterAdminData('rejected',this)">❌ Rejected</button>
     </div>
     
-    <div id="admin-deposit-list"></div>
+    <!-- Pending Deposits Section -->
+    <div class="admin-section-title">
+      <span>💰 Pending Deposits</span>
+    </div>
+    <div id="admin-pending-deposits" class="admin-empty">
+      Loading deposits...
+    </div>
+    
+    <!-- Pending Withdrawals Section -->
+    <div class="admin-section-title">
+      <span>💸 Pending Withdrawals</span>
+    </div>
+    <div id="admin-pending-withdrawals" class="admin-empty">
+      Loading withdrawals...
+    </div>
+    
+    <!-- Payment History Section -->
+    <div class="admin-section-title">
+      <span>📋 Payment History</span>
+    </div>
+    <div id="admin-payment-history" class="admin-empty">
+      Loading history...
+    </div>
+    
+    <!-- Game History Section -->
+    <div class="admin-section-title">
+      <span>🎮 Game History</span>
+    </div>
+    <div id="admin-game-history" class="admin-empty">
+      Loading game history...
+    </div>
   </div>
 </div>
 
@@ -1251,6 +1431,15 @@ let totalCardsSold = 0;
 let ws = null;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
+
+// Admin state
+let adminData = {
+  payments: [],
+  withdrawals: [],
+  paymentHistory: [],
+  gameHistory: []
+};
+let currentAdminFilter = 'all';
 
 // Deposit state
 let selectedAmount = 100;
@@ -1445,10 +1634,7 @@ function handleYourCard(data) {
     cards.push({
       id: data.card_id,
       card: data.card,
-      marked: data.marked.reduce((obj, num) => {
-        // Convert marked numbers array to marked grid
-        return obj;
-      }, Array(5).fill().map(() => Array(5).fill(false))),
+      marked: Array(5).fill().map(() => Array(5).fill(false)),
       won: false,
       suspended: data.suspended,
       winLine: null
@@ -2001,60 +2187,368 @@ function selectPatternFromModal(id) {
 }
 
 // ═══════════════════════════════════════════════════════
-// ADMIN FUNCTIONS
+// ADMIN FUNCTIONS with Approve/Reject Buttons
 // ═══════════════════════════════════════════════════════
-function loadAdminData() {
+async function loadAdminData() {
   if (!isAdmin) {
     switchTab('wallet');
     return;
   }
   
-  const pendingCount = deposits.filter(d => d.status === 'pending').length;
-  const totalDeposited = deposits.reduce((sum, d) => sum + d.amount, 0);
-  const uniqueUsers = new Set(deposits.map(d => d.userId)).size;
-  
-  document.getElementById('admin-pending').textContent = pendingCount;
-  document.getElementById('admin-total').textContent = totalDeposited;
-  document.getElementById('admin-users').textContent = uniqueUsers || 1;
-  
-  renderDeposits(deposits);
+  try {
+    // In a real app, this would fetch from your API
+    // For demo, we'll use mock data
+    adminData = {
+      payments: [
+        {
+          id: 'PAY001',
+          user_id: 8741250511,
+          user_name: 'Abebe',
+          amount: 200,
+          txid: 'TEL123456',
+          method: 'Telebirr',
+          status: 'pending',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'PAY002',
+          user_id: 8741250512,
+          user_name: 'Tigist',
+          amount: 500,
+          txid: 'CBE789012',
+          method: 'CBE Birr',
+          status: 'pending',
+          created_at: new Date(Date.now() - 3600000).toISOString()
+        }
+      ],
+      withdrawals: [
+        {
+          id: 'WIT001',
+          user_id: 8741250513,
+          user_name: 'Dawit',
+          amount: 300,
+          phone: '0987654321',
+          status: 'pending',
+          created_at: new Date().toISOString()
+        }
+      ],
+      paymentHistory: [
+        {
+          id: 'HIS001',
+          user_id: 8741250514,
+          user_name: 'Sara',
+          amount: 100,
+          type: 'deposit',
+          status: 'approved',
+          approved_by: 'Admin',
+          created_at: new Date(Date.now() - 86400000).toISOString()
+        },
+        {
+          id: 'HIS002',
+          user_id: 8741250515,
+          user_name: 'Mekdes',
+          amount: 50,
+          type: 'withdrawal',
+          status: 'rejected',
+          created_at: new Date(Date.now() - 172800000).toISOString()
+        }
+      ],
+      gameHistory: [
+        {
+          id: 'GAME001',
+          user_id: 8741250511,
+          user_name: 'Abebe',
+          won: true,
+          prize: 500,
+          pattern: 'any_line',
+          created_at: new Date(Date.now() - 3600000).toISOString()
+        },
+        {
+          id: 'GAME002',
+          user_id: 8741250512,
+          user_name: 'Tigist',
+          won: false,
+          pattern: 'full_house',
+          reason: 'false_bingo',
+          created_at: new Date(Date.now() - 7200000).toISOString()
+        }
+      ]
+    };
+    
+    // Update stats
+    const pendingCount = adminData.payments.filter(p => p.status === 'pending').length + 
+                        adminData.withdrawals.filter(w => w.status === 'pending').length;
+    const totalDeposited = adminData.paymentHistory
+      .filter(h => h.type === 'deposit' && h.status === 'approved')
+      .reduce((sum, h) => sum + h.amount, 0);
+    const uniqueUsers = new Set([
+      ...adminData.payments.map(p => p.user_id),
+      ...adminData.withdrawals.map(w => w.user_id),
+      ...adminData.paymentHistory.map(h => h.user_id),
+      ...adminData.gameHistory.map(g => g.user_id)
+    ]).size;
+    
+    document.getElementById('admin-pending').textContent = pendingCount;
+    document.getElementById('admin-total').textContent = totalDeposited;
+    document.getElementById('admin-users').textContent = uniqueUsers || 1;
+    
+    renderAdminData();
+    
+  } catch (error) {
+    console.error('Error loading admin data:', error);
+    showToast('Error loading admin data', 'error');
+  }
 }
 
-function filterDeposits(filter, btn) {
+function filterAdminData(filter, btn) {
   document.querySelectorAll('.admin-filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  
-  let filtered = deposits;
-  if (filter !== 'all') {
-    filtered = deposits.filter(d => d.status === filter);
-  }
-  
-  renderDeposits(filtered);
+  currentAdminFilter = filter;
+  renderAdminData();
 }
 
-function renderDeposits(depositsList) {
-  const container = document.getElementById('admin-deposit-list');
+function renderAdminData() {
+  renderPendingDeposits();
+  renderPendingWithdrawals();
+  renderPaymentHistory();
+  renderGameHistory();
+}
+
+function renderPendingDeposits() {
+  const container = document.getElementById('admin-pending-deposits');
   
-  if (!depositsList.length) {
-    container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px 0">No deposits found</div>';
+  const filteredPayments = adminData.payments.filter(p => {
+    if (currentAdminFilter === 'all') return true;
+    return p.status === currentAdminFilter;
+  });
+  
+  if (!filteredPayments.length) {
+    container.innerHTML = '<div class="admin-empty">No pending deposits found</div>';
     return;
   }
   
-  container.innerHTML = depositsList.map(d => `
-    <div class="admin-deposit-card">
-      <div class="admin-deposit-header">
-        <div>
-          <div class="admin-deposit-user">User #${d.userId || 'Unknown'}</div>
-          <div class="admin-deposit-time">${d.date}</div>
+  container.innerHTML = filteredPayments.map(p => `
+    <div class="admin-payment-card">
+      <div class="admin-payment-header">
+        <div class="admin-payment-user">
+          👤 ${p.user_name} <small>(ID: ${p.user_id})</small>
         </div>
-        <div class="admin-deposit-amount">+${d.amount} ETB</div>
+        <div class="admin-payment-amount deposit">+${p.amount} ETB</div>
       </div>
-      <div class="admin-deposit-txid">${d.txid}</div>
-      <span class="admin-deposit-status status-${d.status}">
-        ${d.status === 'pending' ? '⏳ Pending' : d.status === 'approved' ? '✅ Approved' : '❌ Rejected'}
-      </span>
+      <div class="admin-payment-details">
+        <div class="admin-payment-row">
+          <span class="admin-payment-label">📝 Transaction ID:</span>
+          <span class="admin-payment-txid">${p.txid}</span>
+        </div>
+        <div class="admin-payment-row">
+          <span class="admin-payment-label">💳 Method:</span>
+          <span class="admin-payment-value">${p.method}</span>
+        </div>
+        <div class="admin-payment-row">
+          <span class="admin-payment-label">⏱️ Requested:</span>
+          <span class="admin-payment-value">${new Date(p.created_at).toLocaleString()}</span>
+        </div>
+      </div>
+      <span class="admin-payment-status status-pending">⏳ Pending</span>
+      <div class="admin-action-buttons">
+        <button class="admin-approve-btn" onclick="approvePayment('${p.id}')">
+          ✅ Approve
+        </button>
+        <button class="admin-reject-btn" onclick="rejectPayment('${p.id}')">
+          ❌ Reject
+        </button>
+      </div>
     </div>
   `).join('');
+}
+
+function renderPendingWithdrawals() {
+  const container = document.getElementById('admin-pending-withdrawals');
+  
+  const filteredWithdrawals = adminData.withdrawals.filter(w => {
+    if (currentAdminFilter === 'all') return true;
+    return w.status === currentAdminFilter;
+  });
+  
+  if (!filteredWithdrawals.length) {
+    container.innerHTML = '<div class="admin-empty">No pending withdrawals found</div>';
+    return;
+  }
+  
+  container.innerHTML = filteredWithdrawals.map(w => `
+    <div class="admin-payment-card">
+      <div class="admin-payment-header">
+        <div class="admin-payment-user">
+          👤 ${w.user_name} <small>(ID: ${w.user_id})</small>
+        </div>
+        <div class="admin-payment-amount withdrawal">-${w.amount} ETB</div>
+      </div>
+      <div class="admin-payment-details">
+        <div class="admin-payment-row">
+          <span class="admin-payment-label">📱 Phone:</span>
+          <span class="admin-payment-value">${w.phone}</span>
+        </div>
+        <div class="admin-payment-row">
+          <span class="admin-payment-label">⏱️ Requested:</span>
+          <span class="admin-payment-value">${new Date(w.created_at).toLocaleString()}</span>
+        </div>
+      </div>
+      <span class="admin-payment-status status-pending">⏳ Pending</span>
+      <div class="admin-action-buttons">
+        <button class="admin-approve-btn" onclick="approveWithdrawal('${w.id}')">
+          ✅ Approve
+        </button>
+        <button class="admin-reject-btn" onclick="rejectWithdrawal('${w.id}')">
+          ❌ Reject
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderPaymentHistory() {
+  const container = document.getElementById('admin-payment-history');
+  
+  const filteredHistory = adminData.paymentHistory.filter(h => {
+    if (currentAdminFilter === 'all') return true;
+    return h.status === currentAdminFilter;
+  });
+  
+  if (!filteredHistory.length) {
+    container.innerHTML = '<div class="admin-empty">No payment history found</div>';
+    return;
+  }
+  
+  container.innerHTML = filteredHistory.map(h => `
+    <div class="admin-history-card">
+      <div class="admin-history-header">
+        <span class="admin-history-user">👤 ${h.user_name}</span>
+        <span class="admin-history-amount ${h.type === 'deposit' ? 'win' : ''}">
+          ${h.type === 'deposit' ? '+' : '-'}${h.amount} ETB
+        </span>
+      </div>
+      <div class="admin-history-details">
+        <span>📝 ${h.type}</span>
+        <span class="admin-payment-status status-${h.status}">${h.status}</span>
+        <span>⏱️ ${new Date(h.created_at).toLocaleDateString()}</span>
+        ${h.approved_by ? `<span>✅ by ${h.approved_by}</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderGameHistory() {
+  const container = document.getElementById('admin-game-history');
+  
+  const filteredGames = adminData.gameHistory; // Games don't have status filter
+  
+  if (!filteredGames.length) {
+    container.innerHTML = '<div class="admin-empty">No game history found</div>';
+    return;
+  }
+  
+  container.innerHTML = filteredGames.map(g => `
+    <div class="admin-history-card">
+      <div class="admin-history-header">
+        <span class="admin-history-user">👤 ${g.user_name}</span>
+        <span class="admin-history-amount ${g.won ? 'win' : ''}">
+          ${g.won ? `🏆 +${g.prize} ETB` : '❌ Lost'}
+        </span>
+      </div>
+      <div class="admin-history-details">
+        <span>🎯 ${g.pattern}</span>
+        <span>⏱️ ${new Date(g.created_at).toLocaleString()}</span>
+        ${g.reason ? `<span>📋 ${g.reason}</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// Admin Action Functions
+async function approvePayment(paymentId) {
+  if (!confirm('Approve this payment?')) return;
+  
+  // In a real app, this would call your API
+  showToast(`✅ Payment ${paymentId} approved!`, 'success');
+  
+  // Update local data
+  const payment = adminData.payments.find(p => p.id === paymentId);
+  if (payment) {
+    payment.status = 'approved';
+    adminData.paymentHistory.unshift({
+      user_name: payment.user_name,
+      amount: payment.amount,
+      type: 'deposit',
+      status: 'approved',
+      approved_by: 'Admin',
+      created_at: new Date().toISOString()
+    });
+    adminData.payments = adminData.payments.filter(p => p.id !== paymentId);
+    loadAdminData(); // Refresh view
+  }
+}
+
+async function rejectPayment(paymentId) {
+  if (!confirm('Reject this payment?')) return;
+  
+  showToast(`❌ Payment ${paymentId} rejected`, 'info');
+  
+  const payment = adminData.payments.find(p => p.id === paymentId);
+  if (payment) {
+    payment.status = 'rejected';
+    adminData.paymentHistory.unshift({
+      user_name: payment.user_name,
+      amount: payment.amount,
+      type: 'deposit',
+      status: 'rejected',
+      approved_by: 'Admin',
+      created_at: new Date().toISOString()
+    });
+    adminData.payments = adminData.payments.filter(p => p.id !== paymentId);
+    loadAdminData();
+  }
+}
+
+async function approveWithdrawal(withdrawalId) {
+  if (!confirm('Approve this withdrawal?')) return;
+  
+  showToast(`✅ Withdrawal ${withdrawalId} approved!`, 'success');
+  
+  const withdrawal = adminData.withdrawals.find(w => w.id === withdrawalId);
+  if (withdrawal) {
+    withdrawal.status = 'approved';
+    adminData.paymentHistory.unshift({
+      user_name: withdrawal.user_name,
+      amount: withdrawal.amount,
+      type: 'withdrawal',
+      status: 'approved',
+      approved_by: 'Admin',
+      created_at: new Date().toISOString()
+    });
+    adminData.withdrawals = adminData.withdrawals.filter(w => w.id !== withdrawalId);
+    loadAdminData();
+  }
+}
+
+async function rejectWithdrawal(withdrawalId) {
+  if (!confirm('Reject this withdrawal?')) return;
+  
+  showToast(`❌ Withdrawal ${withdrawalId} rejected`, 'info');
+  
+  const withdrawal = adminData.withdrawals.find(w => w.id === withdrawalId);
+  if (withdrawal) {
+    withdrawal.status = 'rejected';
+    adminData.paymentHistory.unshift({
+      user_name: withdrawal.user_name,
+      amount: withdrawal.amount,
+      type: 'withdrawal',
+      status: 'rejected',
+      approved_by: 'Admin',
+      created_at: new Date().toISOString()
+    });
+    adminData.withdrawals = adminData.withdrawals.filter(w => w.id !== withdrawalId);
+    loadAdminData();
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2172,6 +2666,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initAvailableCards();
   renderPatternsPage();
   connectWebSocket();
+  
+  // Load admin data if user is admin
+  if (isAdmin) {
+    loadAdminData();
+  }
 });
 </script>
 </body>
