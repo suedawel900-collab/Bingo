@@ -23,7 +23,7 @@ body{
     radial-gradient(ellipse 60% 50% at 85% 100%,rgba(77,150,255,0.07) 0%,transparent 60%);
 }
 
-/* ══ TAB BAR - Cards first, then Game, Patterns, Wallet, Admin ══ */
+/* ══ TAB BAR ══ */
 .tab-bar{
   display:flex;background:var(--surface);
   border-bottom:1px solid var(--border);
@@ -403,71 +403,325 @@ body{
 .wallet-balance{font-family:'IBM Plex Mono',monospace;font-size:3rem;font-weight:700;color:var(--gold);}
 .wallet-balance-unit{font-size:1rem;color:var(--muted);}
 
-.stat-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.stat-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-bottom:20px;
+}
 .stat-box{
-  background:var(--surface);border:1px solid var(--border);border-radius:14px;
-  padding:14px;text-align:center;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:16px;
+  text-align:center;
 }
-.stat-val{font-family:'IBM Plex Mono',monospace;font-size:1.5rem;font-weight:700;color:var(--text);}
-.stat-lbl{font-size:0.7rem;color:var(--muted);text-transform:uppercase;margin-top:4px;}
+.stat-label{
+  font-size:0.7rem;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:0.07em;
+  margin-bottom:4px;
+}
+.stat-value{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:2rem;
+  font-weight:700;
+  color:var(--text);
+}
 
+/* Deposit Section */
 .deposit-section{
-  background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:20px;
+  margin-bottom:16px;
 }
-.deposit-title{font-weight:900;margin-bottom:12px;}
+.deposit-title{
+  font-size:1.2rem;
+  font-weight:900;
+  margin-bottom:16px;
+  color:var(--text);
+}
 .account-box{
-  background:rgba(0,166,81,0.08);border:1px solid rgba(0,166,81,0.25);border-radius:10px;
-  padding:12px;text-align:center;margin-bottom:12px;
+  background:rgba(0,166,81,0.08);
+  border:1px solid rgba(0,166,81,0.25);
+  border-radius:12px;
+  padding:16px;
+  text-align:center;
+  margin-bottom:16px;
 }
-.account-label{font-size:0.8rem;color:var(--muted);}
+.account-label{
+  font-size:0.8rem;
+  color:var(--muted);
+  margin-bottom:4px;
+}
 .account-number{
-  font-family:'IBM Plex Mono',monospace;font-size:1.8rem;font-weight:700;
-  color:var(--telebirr);letter-spacing:0.1em;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:2rem;
+  font-weight:700;
+  color:var(--telebirr);
+  letter-spacing:0.05em;
+}
+.amount-presets{
+  display:flex;
+  gap:8px;
+  margin-bottom:12px;
+  flex-wrap:wrap;
+}
+.preset-btn{
+  padding:8px 16px;
+  border-radius:20px;
+  border:1px solid var(--border);
+  background:var(--surface2);
+  color:var(--muted);
+  cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:0.9rem;
+  font-weight:700;
+  transition:all 0.15s;
+  min-width:60px;
+}
+.preset-btn:hover{
+  background:rgba(77,150,255,0.15);
+  color:#4d96ff;
+  border-color:rgba(77,150,255,0.3);
+}
+.preset-btn.active{
+  background:rgba(0,166,81,0.2);
+  color:var(--telebirr);
+  border-color:rgba(0,166,81,0.4);
 }
 .amount-input{
-  width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;
-  color:var(--text);padding:12px 16px;font-size:1.1rem;font-family:'IBM Plex Mono',monospace;
-  font-weight:700;outline:none;margin-bottom:10px;
+  width:100%;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  color:var(--text);
+  padding:14px 16px;
+  font-size:1.1rem;
+  font-family:'IBM Plex Mono',monospace;
+  font-weight:700;
+  outline:none;
+  margin-bottom:12px;
 }
-.amount-input:focus{border-color:rgba(77,150,255,0.4);}
-.amount-presets{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
-.preset-btn{
-  padding:6px 14px;border-radius:20px;border:1px solid var(--border);
-  background:var(--surface2);color:var(--muted);cursor:pointer;
-  font-family:'IBM Plex Mono',monospace;font-size:0.82rem;font-weight:700;transition:all 0.15s;
+.amount-input:focus{
+  border-color:rgba(0,166,81,0.5);
 }
-.preset-btn:active{background:rgba(77,150,255,0.15);color:#4d96ff;border-color:rgba(77,150,255,0.3);}
+.txid-input{
+  width:100%;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  color:var(--text);
+  padding:14px 16px;
+  font-size:1rem;
+  font-family:'IBM Plex Mono',monospace;
+  outline:none;
+  margin-bottom:16px;
+}
+.txid-input:focus{
+  border-color:rgba(0,166,81,0.5);
+}
 .deposit-btn{
-  width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;
-  background:linear-gradient(135deg,#00a651,#008542);color:#fff;
-  font-family:'Boogaloo',cursive;font-size:1.3rem;letter-spacing:0.04em;
+  width:100%;
+  padding:16px;
+  border-radius:12px;
+  border:none;
+  cursor:pointer;
+  background:linear-gradient(135deg,#00a651,#008542);
+  color:#fff;
+  font-family:'Boogaloo',cursive;
+  font-size:1.3rem;
+  letter-spacing:0.04em;
   transition:all 0.15s;
 }
-.deposit-btn:active{transform:scale(0.97);}
+.deposit-btn:active{
+  transform:scale(0.98);
+}
+.deposit-status{
+  background:rgba(77,150,255,0.1);
+  border:1px solid rgba(77,150,255,0.2);
+  border-radius:10px;
+  padding:12px;
+  margin-top:12px;
+  text-align:center;
+  font-size:0.85rem;
+  color:#4d96ff;
+  display:none;
+}
+.deposit-status.show{
+  display:block;
+}
+.deposit-status.success{
+  background:rgba(16,185,129,0.1);
+  border-color:rgba(16,185,129,0.2);
+  color:#10b981;
+}
+.deposit-status.error{
+  background:rgba(239,68,68,0.1);
+  border-color:rgba(239,68,68,0.2);
+  color:#ef4444;
+}
 
-.withdraw-form{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;}
-.withdraw-title{font-weight:900;margin-bottom:12px;}
-.withdraw-btn{
-  width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;
-  background:linear-gradient(135deg,#10b981,#059669);color:#fff;
-  font-family:'Boogaloo',cursive;font-size:1.3rem;letter-spacing:0.04em;
-  transition:all 0.15s;
+/* Withdraw Section */
+.withdraw-section{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:20px;
 }
-.withdraw-btn:active{transform:scale(0.97);}
-.withdraw-note{font-size:0.72rem;color:var(--muted);margin-top:8px;text-align:center;}
+.withdraw-title{
+  font-size:1.2rem;
+  font-weight:900;
+  margin-bottom:16px;
+  color:var(--text);
+}
+.withdraw-input{
+  width:100%;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  color:var(--text);
+  padding:14px 16px;
+  font-size:1.1rem;
+  font-family:'IBM Plex Mono',monospace;
+  font-weight:700;
+  outline:none;
+  margin-bottom:12px;
+}
+.withdraw-btn{
+  width:100%;
+  padding:16px;
+  border-radius:12px;
+  border:none;
+  cursor:pointer;
+  background:linear-gradient(135deg,#10b981,#059669);
+  color:#fff;
+  font-family:'Boogaloo',cursive;
+  font-size:1.3rem;
+  letter-spacing:0.04em;
+  transition:all 0.15s;
+  margin-top:8px;
+}
+.withdraw-btn:active{
+  transform:scale(0.98);
+}
+.withdraw-note{
+  font-size:0.75rem;
+  color:var(--muted);
+  margin-top:12px;
+  text-align:center;
+}
 
 /* ══ ADMIN SCREEN (Admin only) ══ */
 .admin-container{padding:16px;}
-.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px;}
-.stat-box2{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;text-align:center;}
-.filter-tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
-.ftab{
-  padding:7px 13px;border-radius:20px;border:1px solid var(--border);
-  background:transparent;color:var(--muted);cursor:pointer;
-  font-family:'Nunito',sans-serif;font-size:0.8rem;font-weight:700;transition:all 0.2s;
+.admin-stats-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:14px;
+  margin-bottom:22px;
 }
-.ftab.active{background:var(--surface2);color:var(--text);border-color:rgba(255,255,255,0.14);}
-.deposit-card{background:var(--surface2);border-radius:12px;padding:16px;margin-bottom:12px;border:1px solid var(--border);}
+.admin-stat-box{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:18px;
+  text-align:center;
+}
+.admin-stat-value{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:1.8rem;
+  font-weight:700;
+  color:var(--gold);
+}
+.admin-stat-label{
+  font-size:0.7rem;
+  color:var(--muted);
+  text-transform:uppercase;
+  margin-top:4px;
+}
+.admin-filter-tabs{
+  display:flex;
+  gap:8px;
+  margin-bottom:16px;
+  flex-wrap:wrap;
+}
+.admin-filter-btn{
+  padding:7px 13px;
+  border-radius:20px;
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--muted);
+  cursor:pointer;
+  font-size:0.8rem;
+  font-weight:700;
+  transition:all 0.2s;
+}
+.admin-filter-btn.active{
+  background:var(--surface2);
+  color:var(--text);
+  border-color:rgba(255,255,255,0.14);
+}
+.admin-deposit-card{
+  background:var(--surface2);
+  border-radius:12px;
+  padding:16px;
+  margin-bottom:12px;
+  border:1px solid var(--border);
+}
+.admin-deposit-header{
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:8px;
+}
+.admin-deposit-user{
+  font-weight:900;
+  font-size:0.95rem;
+}
+.admin-deposit-time{
+  font-size:0.72rem;
+  color:var(--muted);
+}
+.admin-deposit-amount{
+  font-family:monospace;
+  font-size:1.1rem;
+  color:var(--green);
+  font-weight:700;
+}
+.admin-deposit-txid{
+  font-family:monospace;
+  font-size:0.8rem;
+  color:var(--muted);
+  margin-bottom:6px;
+}
+.admin-deposit-note{
+  font-size:0.82rem;
+  padding:8px 12px;
+  border-radius:8px;
+  background:rgba(255,255,255,0.03);
+  margin-bottom:10px;
+}
+.admin-deposit-status{
+  display:inline-block;
+  padding:3px 10px;
+  border-radius:20px;
+  font-size:0.7rem;
+  font-weight:700;
+}
+.status-pending{
+  background:rgba(245,158,11,0.15);
+  color:#f59e0b;
+}
+.status-approved{
+  background:rgba(16,185,129,0.15);
+  color:#10b981;
+}
+.status-rejected{
+  background:rgba(239,68,68,0.15);
+  color:#ef4444;
+}
 
 /* ══ OVERLAY MODALS ══ */
 .overlay{
@@ -481,55 +735,153 @@ body{
 /* Win overlay */
 .win-emoji{font-size:5rem;animation:popIn 0.5s cubic-bezier(.34,1.56,.64,1);}
 @keyframes popIn{from{transform:scale(0) rotate(-15deg);opacity:0;}to{transform:scale(1);opacity:1;}}
-.win-big{font-family:'Boogaloo',cursive;font-size:clamp(3rem,10vw,6rem);
+.win-big{
+  font-family:'Boogaloo',cursive;
+  font-size:clamp(3rem,10vw,6rem);
   background:linear-gradient(135deg,#ffd93d,#ff9f0a,#ff6b6b);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;text-align:center;}
-.win-sub{color:rgba(255,255,255,0.6);font-size:1rem;text-align:center;}
-.win-prize-display{font-family:'IBM Plex Mono',monospace;font-size:2.5rem;font-weight:700;color:var(--gold);}
-.overlay-btns{display:flex;flex-direction:column;gap:10px;width:100%;max-width:300px;}
-.o-btn{
-  padding:14px;border-radius:12px;border:none;cursor:pointer;
-  font-family:'Boogaloo',cursive;font-size:1.2rem;letter-spacing:0.04em;
-  transition:all 0.15s;text-align:center;
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  text-align:center;
 }
-.o-btn-primary{background:linear-gradient(135deg,#4d96ff,#7c3aed);color:#fff;}
-.o-btn-ghost{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);border:1px solid var(--border);}
+.win-sub{color:rgba(255,255,255,0.6);font-size:1rem;text-align:center;}
+.win-prize-display{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:2.5rem;
+  font-weight:700;
+  color:var(--gold);
+}
+.overlay-btns{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  width:100%;
+  max-width:300px;
+}
+.o-btn{
+  padding:14px;
+  border-radius:12px;
+  border:none;
+  cursor:pointer;
+  font-family:'Boogaloo',cursive;
+  font-size:1.2rem;
+  letter-spacing:0.04em;
+  transition:all 0.15s;
+  text-align:center;
+}
+.o-btn-primary{
+  background:linear-gradient(135deg,#4d96ff,#7c3aed);
+  color:#fff;
+}
+.o-btn-ghost{
+  background:rgba(255,255,255,0.06);
+  color:rgba(255,255,255,0.5);
+  border:1px solid var(--border);
+}
 
 /* Suspend overlay */
 .susp-overlay-icon{font-size:4rem;animation:shake 0.5s ease;}
 @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-8px);}75%{transform:translateX(8px);}}
-.susp-title{font-family:'Boogaloo',cursive;font-size:2.5rem;color:var(--red);text-align:center;}
-.susp-msg{color:rgba(255,255,255,0.6);font-size:0.9rem;text-align:center;line-height:1.6;max-width:280px;}
+.susp-title{
+  font-family:'Boogaloo',cursive;
+  font-size:2.5rem;
+  color:var(--red);
+  text-align:center;
+}
+.susp-msg{
+  color:rgba(255,255,255,0.6);
+  font-size:0.9rem;
+  text-align:center;
+  line-height:1.6;
+  max-width:280px;
+}
 
 /* Pattern modal */
 .pattern-modal{
-  background:var(--surface);border:1px solid var(--border);border-radius:20px;
-  padding:20px;max-width:340px;width:100%;max-height:80vh;overflow-y:auto;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:20px;
+  max-width:340px;
+  width:100%;
+  max-height:80vh;
+  overflow-y:auto;
 }
-.pm-title{font-family:'Boogaloo',cursive;font-size:1.4rem;margin-bottom:16px;text-align:center;}
-.pm-list{display:flex;flex-direction:column;gap:8px;}
+.pm-title{
+  font-family:'Boogaloo',cursive;
+  font-size:1.4rem;
+  margin-bottom:16px;
+  text-align:center;
+}
+.pm-list{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
 .pm-item{
-  padding:12px 14px;border-radius:12px;border:1px solid var(--border);
-  background:var(--surface2);cursor:pointer;transition:all 0.15s;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--surface2);
+  cursor:pointer;
+  transition:all 0.15s;
 }
-.pm-item:active{border-color:#4d96ff;background:rgba(77,150,255,0.08);}
-.pm-item.current{border-color:rgba(77,150,255,0.4);background:rgba(77,150,255,0.08);}
-.pm-name{font-weight:900;font-size:0.9rem;}
-.pm-hint{font-size:0.75rem;color:var(--muted);margin-top:3px;}
+.pm-item:hover{
+  border-color:#4d96ff;
+  background:rgba(77,150,255,0.08);
+}
+.pm-item.current{
+  border-color:rgba(77,150,255,0.4);
+  background:rgba(77,150,255,0.08);
+}
+.pm-name{
+  font-weight:900;
+  font-size:0.9rem;
+}
+.pm-hint{
+  font-size:0.75rem;
+  color:var(--muted);
+  margin-top:3px;
+}
 
 /* ══ TOAST ══ */
 #toast{
-  position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(60px);
-  background:var(--surface2);border:1px solid rgba(77,150,255,0.3);
-  color:#4d96ff;padding:9px 18px;border-radius:30px;font-weight:700;font-size:0.82rem;
-  z-index:700;transition:transform 0.3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;
-  white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis;
+  position:fixed;
+  bottom:70px;
+  left:50%;
+  transform:translateX(-50%) translateY(60px);
+  background:var(--surface2);
+  border:1px solid rgba(77,150,255,0.3);
+  color:#4d96ff;
+  padding:9px 18px;
+  border-radius:30px;
+  font-weight:700;
+  font-size:0.82rem;
+  z-index:700;
+  transition:transform 0.3s cubic-bezier(.34,1.56,.64,1);
+  pointer-events:none;
+  white-space:nowrap;
+  max-width:90vw;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
-#toast.show{transform:translateX(-50%) translateY(0);}
-#toast.error{border-color:rgba(239,68,68,0.4);color:var(--red);}
-#toast.success{border-color:rgba(16,185,129,0.4);color:var(--green);}
+#toast.show{
+  transform:translateX(-50%) translateY(0);
+}
+#toast.error{
+  border-color:rgba(239,68,68,0.4);
+  color:var(--red);
+}
+#toast.success{
+  border-color:rgba(16,185,129,0.4);
+  color:var(--green);
+}
 
-canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
+canvas#confetti{
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:600;
+}
 </style>
 </head>
 <body>
@@ -542,11 +894,15 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
      data-price="{{ price_per_card }}"
      data-max-cards="{{ max_cards }}"
      data-is-admin="{{ is_admin }}"
+     data-base-url="{{ base_url }}"
      style="display:none;"></div>
 
-<!-- ═══════ TAB BAR - Cards first, then Game, Patterns, Wallet, Admin ═══════ -->
+<!-- ═══════ TAB BAR ═══════ -->
 <div class="tab-bar">
-  <div class="tab active" id="tab-select" onclick="switchTab('select')">
+  <div class="tab active" id="tab-wallet" onclick="switchTab('wallet')">
+    <span class="tab-icon">💰</span>WALLET
+  </div>
+  <div class="tab" id="tab-select" onclick="switchTab('select')">
     <span class="tab-icon">🃏</span>CARDS
   </div>
   <div class="tab" id="tab-game" onclick="switchTab('game')">
@@ -555,16 +911,92 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
   <div class="tab" id="tab-patterns" onclick="switchTab('patterns')">
     <span class="tab-icon">🎯</span>PATTERNS
   </div>
-  <div class="tab" id="tab-wallet" onclick="switchTab('wallet')">
-    <span class="tab-icon">💰</span>WALLET
-  </div>
   <div class="tab admin-tab" id="tab-admin" onclick="switchTab('admin')">
     <span class="tab-icon">⚙️</span>ADMIN
   </div>
 </div>
 
-<!-- ═══════ CARD SELECTION SCREEN (First screen) ═══════ -->
-<div class="screen active" id="screen-select">
+<!-- ═══════ WALLET SCREEN (Default active) ═══════ -->
+<div class="screen active" id="screen-wallet">
+  <div class="topbar">
+    <div class="logo">💰 Wallet</div>
+    <div class="bal-pill">💰 <span id="bal-val2">{{ initial_balance }}</span> ETB</div>
+  </div>
+  <div class="wallet-section">
+    <!-- Wallet balance card -->
+    <div class="wallet-card">
+      <div class="wallet-balance-lbl">Available Balance</div>
+      <div class="wallet-balance"><span id="wallet-bal">{{ initial_balance }}</span> <span class="wallet-balance-unit">ETB</span></div>
+    </div>
+
+    <!-- Stats row: WINS | GAMES -->
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-label">WINS</div>
+        <div class="stat-value" id="stat-wins">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">GAMES</div>
+        <div class="stat-value" id="stat-games">0</div>
+      </div>
+    </div>
+
+    <!-- Deposit Section -->
+    <div class="deposit-section">
+      <div class="deposit-title">Deposit</div>
+      
+      <!-- Account display -->
+      <div class="account-box">
+        <div class="account-label">Telebirr / CBE Birr</div>
+        <div class="account-number">0982372677</div>
+      </div>
+
+      <!-- Amount presets -->
+      <div class="amount-presets">
+        <button class="preset-btn" onclick="selectAmount(50)">50</button>
+        <button class="preset-btn" onclick="selectAmount(100)">100</button>
+        <button class="preset-btn" onclick="selectAmount(200)">200</button>
+        <button class="preset-btn" onclick="selectAmount(500)">500</button>
+        <button class="preset-btn" onclick="selectAmount(1000)">1000</button>
+        <button class="preset-btn" onclick="selectAmount(2000)">2000</button>
+        <button class="preset-btn" onclick="selectAmount(5000)">5000</button>
+      </div>
+
+      <!-- Amount input -->
+      <input class="amount-input" id="deposit-amount" type="number" placeholder="Enter amount" min="10" value="100">
+
+      <!-- Transaction ID input -->
+      <input class="txid-input" id="txid-input" type="text" placeholder="Transaction ID / Receipt number">
+
+      <!-- Deposit button -->
+      <button class="deposit-btn" onclick="submitDeposit()">✅ Verify & Deposit</button>
+
+      <!-- Status message -->
+      <div id="deposit-status" class="deposit-status"></div>
+    </div>
+
+    <!-- Withdraw Winners Section -->
+    <div class="withdraw-section">
+      <div class="withdraw-title">Withdraw Winners</div>
+      
+      <input class="withdraw-input" id="withdraw-amount" type="number" placeholder="Enter amount (min 100 ETB)" min="100">
+
+      <div class="amount-presets">
+        <button class="preset-btn" onclick="setWithdrawAmount(100)">100</button>
+        <button class="preset-btn" onclick="setWithdrawAmount(200)">200</button>
+        <button class="preset-btn" onclick="setWithdrawAmount(500)">500</button>
+        <button class="preset-btn" onclick="setWithdrawAmount(1000)">1000</button>
+        <button class="preset-btn" onclick="setWithdrawAmount('all')">ALL</button>
+      </div>
+
+      <button class="withdraw-btn" onclick="submitWithdraw()">💸 Withdraw</button>
+      <div class="withdraw-note">Minimum 100 ETB · Processed within 24 hours</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ CARD SELECTION SCREEN ═══════ -->
+<div class="screen" id="screen-select">
   <div class="select-container">
     <div class="step-header">
       <div class="step-title">🃏 Choose Your Cards</div>
@@ -666,7 +1098,7 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
 
   <!-- BINGO button -->
   <div class="bingo-btn-wrap">
-    <button class="bingo-btn" id="bingo-btn" onclick="claimBingo()">🎉 BINGO!</button>
+    <button class="bingo-btn" id="bingo-btn" onclick="claimBingo()" disabled>🎉 BINGO!</button>
   </div>
 
   <!-- Auto-mark toggle -->
@@ -700,92 +1132,37 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
   </div>
 </div>
 
-<!-- ═══════ WALLET SCREEN ═══════ -->
-<div class="screen" id="screen-wallet">
-  <div class="topbar">
-    <div class="logo">💰 Wallet</div>
-    <div class="bal-pill">💰 <span id="bal-val2">{{ initial_balance }}</span> ETB</div>
-  </div>
-  <div class="wallet-section">
-    <div class="wallet-card">
-      <div class="wallet-balance-lbl">Available Balance</div>
-      <div class="wallet-balance"><span id="wallet-bal">{{ initial_balance }}</span> <span class="wallet-balance-unit">ETB</span></div>
-    </div>
-
-    <div class="stat-row">
-      <div class="stat-box">
-        <div class="stat-val" id="stat-wins">0</div>
-        <div class="stat-lbl">🏆 Wins</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-val" id="stat-games">0</div>
-        <div class="stat-lbl">🎲 Games</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-val" id="stat-susps">0</div>
-        <div class="stat-lbl">⛔ Suspensions</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-val" id="stat-status">🟢</div>
-        <div class="stat-lbl">Status</div>
-      </div>
-    </div>
-
-    <!-- Deposit section - Updated numbers -->
-    <div class="deposit-section">
-      <div class="deposit-title">📱 Deposit</div>
-      <div class="account-box">
-        <div class="account-label">Telebirr / CBE Birr</div>
-        <div class="account-number">0982372677</div>
-      </div>
-      <div class="amount-presets" style="margin-bottom:8px;">
-        <button class="preset-btn" onclick="selAmount(50)">50</button>
-        <button class="preset-btn" onclick="selAmount(100)">100</button>
-        <button class="preset-btn" onclick="selAmount(200)">200</button>
-        <button class="preset-btn" onclick="selAmount(500)">500</button>
-        <button class="preset-btn" onclick="selAmount(1000)">1000</button>
-      </div>
-      <input class="amount-input" id="dep-amount" placeholder="Custom amount" type="number" min="10" style="margin-bottom:8px;">
-      <input class="amount-input" id="txid-input" placeholder="Transaction ID (DEMO123 for test)" style="margin-bottom:8px;">
-      <button class="deposit-btn" onclick="submitDeposit()">✅ Verify & Deposit</button>
-    </div>
-
-    <!-- Withdraw section -->
-    <div class="withdraw-form">
-      <div class="withdraw-title">💸 Withdraw Winnings</div>
-      <input class="amount-input" type="number" id="withdraw-amount" placeholder="Enter amount (min 100 ETB)" min="100">
-      <div class="amount-presets">
-        <button class="preset-btn" onclick="setWithdraw(100)">100</button>
-        <button class="preset-btn" onclick="setWithdraw(200)">200</button>
-        <button class="preset-btn" onclick="setWithdraw(500)">500</button>
-        <button class="preset-btn" onclick="setWithdrawAll()">ALL</button>
-      </div>
-      <button class="withdraw-btn" onclick="doWithdraw()">💸 Withdraw</button>
-      <div class="withdraw-note">Minimum 100 ETB · Processed within 24 hours</div>
-    </div>
-  </div>
-</div>
-
 <!-- ═══════ ADMIN SCREEN (Admin only) ═══════ -->
 <div class="screen" id="screen-admin">
   <div class="admin-container">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">
       <div style="font-weight:900;font-size:1.4rem">⚙️ Admin Panel</div>
-      <button class="preset-btn" style="padding:8px 14px;" onclick="loadAdmin()">↺ Refresh</button>
+      <button class="preset-btn" style="padding:8px 14px;" onclick="loadAdminData()">↺ Refresh</button>
     </div>
-    <div class="stats-grid">
-      <div class="stat-box2"><div class="stat-val" id="s-pending" style="color:#f59e0b">2</div><div class="stat-lbl">⏳ Pending</div></div>
-      <div class="stat-box2"><div class="stat-val" id="s-total" style="color:#10b981">0</div><div class="stat-lbl">ETB Deposited</div></div>
-      <div class="stat-box2"><div class="stat-val" id="s-users" style="color:#3b82f6">0</div><div class="stat-lbl">👥 Players</div></div>
+    
+    <div class="admin-stats-grid">
+      <div class="admin-stat-box">
+        <div class="admin-stat-value" id="admin-pending">0</div>
+        <div class="admin-stat-label">⏳ Pending</div>
+      </div>
+      <div class="admin-stat-box">
+        <div class="admin-stat-value" id="admin-total">0</div>
+        <div class="admin-stat-label">ETB Deposited</div>
+      </div>
+      <div class="admin-stat-box">
+        <div class="admin-stat-value" id="admin-users">0</div>
+        <div class="admin-stat-label">👥 Players</div>
+      </div>
     </div>
-    <div class="filter-tabs">
-      <button class="ftab active" onclick="filterDep('all',this)">All</button>
-      <button class="ftab" onclick="filterDep('pending',this)">⏳ Pending</button>
-      <button class="ftab" onclick="filterDep('auto_verified',this)">🔍 Auto</button>
-      <button class="ftab" onclick="filterDep('approved',this)">✅ Approved</button>
-      <button class="ftab" onclick="filterDep('rejected',this)">❌ Rejected</button>
+    
+    <div class="admin-filter-tabs">
+      <button class="admin-filter-btn active" onclick="filterDeposits('all',this)">All</button>
+      <button class="admin-filter-btn" onclick="filterDeposits('pending',this)">⏳ Pending</button>
+      <button class="admin-filter-btn" onclick="filterDeposits('approved',this)">✅ Approved</button>
+      <button class="admin-filter-btn" onclick="filterDeposits('rejected',this)">❌ Rejected</button>
     </div>
-    <div id="admin-dep-list"></div>
+    
+    <div id="admin-deposit-list"></div>
   </div>
 </div>
 
@@ -796,8 +1173,8 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
   <div class="win-sub" id="win-sub">You won!</div>
   <div class="win-prize-display" id="win-prize-val">0 ETB</div>
   <div class="overlay-btns">
-    <button class="o-btn o-btn-primary" onclick="collectWin()">💰 Collect Winnings</button>
-    <button class="o-btn o-btn-ghost" onclick="closeWin()">← Continue</button>
+    <button class="o-btn o-btn-primary" onclick="collectWinnings()">💰 Collect Winnings</button>
+    <button class="o-btn o-btn-ghost" onclick="closeWinOverlay()">← Continue</button>
   </div>
 </div>
 
@@ -833,591 +1210,715 @@ const gameId = templateData ? parseInt(templateData.dataset.gameId) : 1;
 const pricePerCard = templateData ? parseFloat(templateData.dataset.price) : 50;
 const maxCards = templateData ? parseInt(templateData.dataset.maxCards) : 8;
 const isAdmin = templateData ? templateData.dataset.isAdmin === 'True' : false;
+const baseUrl = templateData ? templateData.dataset.baseUrl : '';
 
 const CARD_COST = pricePerCard;
 const MAX_CARDS = maxCards;
 const AUTO_START_DELAY = 30;
-const AUTO_CALL_INTERVAL = 3000; // 3 seconds
+const AUTO_CALL_INTERVAL = 3000;
 
 const LETTERS = ['B','I','N','G','O'];
-const COLORS  = {B:'#ff6b6b',I:'#ffd93d',N:'#6bcb77',G:'#4d96ff',O:'#c084fc'};
-const RANGES  = [[1,15],[16,30],[31,45],[46,60],[61,75]];
+const COLORS = {B:'#ff6b6b',I:'#ffd93d',N:'#6bcb77',G:'#4d96ff',O:'#c084fc'};
+const RANGES = [[1,15],[16,30],[31,45],[46,60],[61,75]];
 const BASE_PRIZE = 200;
 
-// Show/hide admin tab based on user role
+// Show admin tab only for admin users
 if (isAdmin) {
   document.querySelector('.admin-tab').style.display = 'block';
 }
 
-// ── 20 Win Patterns ──
-const WIN_PATTERNS = [
-  { id:'any_row',      name:'📏 Any Row',          hint:'Complete any horizontal line of 5 numbers across your card.' },
-  { id:'any_col',      name:'📏 Any Column',        hint:'Complete any vertical line of 5 numbers down your card.' },
-  { id:'diag_tl',      name:'↘ Diagonal TL→BR',    hint:'The diagonal from top-left to bottom-right (B1→O5).' },
-  { id:'diag_tr',      name:'↙ Diagonal TR→BL',    hint:'The diagonal from top-right to bottom-left (O1→B5).' },
-  { id:'any_line',     name:'🎯 Any Line',          hint:'Complete any row, column, or diagonal — whichever comes first!' },
-  { id:'full_house',   name:'🏠 Full House',        hint:'Mark all 24 numbers plus the FREE space on your card.' },
-  { id:'four_corners', name:'🔲 Four Corners',      hint:'Mark the four corner squares: B-row1, O-row1, B-row5, O-row5.' },
-  { id:'x_pattern',    name:'✖ X Pattern',         hint:'Complete both diagonals together to form an X across the card.' },
-  { id:'plus_pattern', name:'➕ Plus Sign',         hint:'Complete the middle row AND the middle column to form a + shape.' },
-  { id:'t_pattern',    name:'🔝 T Pattern',         hint:'Complete the entire top row and the middle column going downward.' },
-  { id:'l_pattern',    name:'🔡 L Pattern',         hint:'Complete the left (B) column and the entire bottom row to form L.' },
-  { id:'u_pattern',    name:'🔵 U Pattern',         hint:'Complete both side columns and the bottom row to form a U shape.' },
-  { id:'frame',        name:'🖼 Frame',             hint:'Mark all 16 numbers around the outer border of the card.' },
-  { id:'blackout',     name:'⬛ Blackout',          hint:'Mark EVERY single number on the card — the ultimate challenge!' },
-  { id:'two_rows',     name:'📏📏 Two Rows',        hint:'Complete any 2 complete horizontal rows anywhere on the card.' },
-  { id:'two_cols',     name:'📏📏 Two Columns',     hint:'Complete any 2 complete vertical columns anywhere on the card.' },
-  { id:'top_bottom',   name:'🔝🔚 Top & Bottom',   hint:'Complete the top row AND the bottom row simultaneously.' },
-  { id:'center_col',   name:'🎯 Center Column',     hint:'Complete only the N (middle) column from row 1 to row 5.' },
-  { id:'b_o_cols',     name:'🅱🅾 B & O Columns', hint:'Complete both the B (left) column and O (right) column.' },
-  { id:'six_pack',     name:'🍺 Six Pack',          hint:'Mark any connected 2×3 block of cells anywhere on the card.' },
-];
-
-// Pattern cell highlighters for mini preview
-function getPatternCells(id) {
-  const all=[];for(let c=0;c<5;c++)for(let r=0;r<5;r++)all.push({c,r});
-  const p={
-    any_row:      [{c:0,r:1},{c:1,r:1},{c:2,r:1},{c:3,r:1},{c:4,r:1}],
-    any_col:      [{c:2,r:0},{c:2,r:1},{c:2,r:2},{c:2,r:3},{c:2,r:4}],
-    diag_tl:      [0,1,2,3,4].map(i=>({c:i,r:i})),
-    diag_tr:      [0,1,2,3,4].map(i=>({c:i,r:4-i})),
-    any_line:     [{c:0,r:2},{c:1,r:2},{c:2,r:2},{c:3,r:2},{c:4,r:2}],
-    full_house:   all,
-    four_corners: [{c:0,r:0},{c:4,r:0},{c:0,r:4},{c:4,r:4}],
-    x_pattern:    [...[0,1,2,3,4].map(i=>({c:i,r:i})),...[0,1,3,4].map(i=>({c:i,r:4-i}))],
-    plus_pattern: [...[0,1,2,3,4].map(c=>({c,r:2})),...[0,1,3,4].map(r=>({c:2,r}))],
-    t_pattern:    [...[0,1,2,3,4].map(c=>({c,r:0})),...[1,2,3,4].map(r=>({c:2,r}))],
-    l_pattern:    [...[0,1,2,3,4].map(r=>({c:0,r})),...[1,2,3,4].map(c=>({c,r:4}))],
-    u_pattern:    [...[0,1,2,3,4].flatMap(r=>[{c:0,r},{c:4,r}]),...[1,2,3].map(c=>({c,r:4}))],
-    frame:        all.filter(({c,r})=>c===0||c===4||r===0||r===4),
-    blackout:     all,
-    two_rows:     [...[0,1,2,3,4].map(c=>({c,r:0})),...[0,1,2,3,4].map(c=>({c,r:2}))],
-    two_cols:     [...[0,1,2,3,4].map(r=>({c:0,r})),...[0,1,2,3,4].map(r=>({c:2,r}))],
-    top_bottom:   [...[0,1,2,3,4].map(c=>({c,r:0})),...[0,1,2,3,4].map(c=>({c,r:4}))],
-    center_col:   [0,1,2,3,4].map(r=>({c:2,r})),
-    b_o_cols:     [...[0,1,2,3,4].map(r=>({c:0,r})),...[0,1,2,3,4].map(r=>({c:4,r}))],
-    six_pack:     [{c:1,r:1},{c:2,r:1},{c:1,r:2},{c:2,r:2},{c:1,r:3},{c:2,r:3}],
-  };
-  return p[id]||[];
-}
-
-// Pattern win checkers
-const CHECKERS = {
-  any_row:(m)=>{for(let r=0;r<5;r++)if([0,1,2,3,4].every(c=>m[c][r]))return[0,1,2,3,4].map(c=>({c,r}));return null;},
-  any_col:(m)=>{for(let c=0;c<5;c++)if([0,1,2,3,4].every(r=>m[c][r]))return[0,1,2,3,4].map(r=>({c,r}));return null;},
-  diag_tl:(m)=>[0,1,2,3,4].every(i=>m[i][i])?[0,1,2,3,4].map(i=>({c:i,r:i})):null,
-  diag_tr:(m)=>[0,1,2,3,4].every(i=>m[i][4-i])?[0,1,2,3,4].map(i=>({c:i,r:4-i})):null,
-  any_line:(m)=>CHECKERS.any_row(m)||CHECKERS.any_col(m)||CHECKERS.diag_tl(m)||CHECKERS.diag_tr(m),
-  full_house:(m)=>{const c=[];for(let x=0;x<5;x++)for(let y=0;y<5;y++){if(!m[x][y])return null;c.push({c:x,r:y});}return c;},
-  four_corners:(m)=>m[0][0]&&m[4][0]&&m[0][4]&&m[4][4]?[{c:0,r:0},{c:4,r:0},{c:0,r:4},{c:4,r:4}]:null,
-  x_pattern:(m)=>{const cells=[];for(let i=0;i<5;i++){if(!m[i][i])return null;cells.push({c:i,r:i});}for(let i=0;i<5;i++){if(i===2)continue;if(!m[i][4-i])return null;cells.push({c:i,r:4-i});}return cells;},
-  plus_pattern:(m)=>{const c=[];for(let x=0;x<5;x++){if(!m[x][2])return null;c.push({c:x,r:2});}for(let y=0;y<5;y++){if(y===2)continue;if(!m[2][y])return null;c.push({c:2,r:y});}return c;},
-  t_pattern:(m)=>{for(let x=0;x<5;x++)if(!m[x][0])return null;for(let y=0;y<5;y++)if(!m[2][y])return null;return[...[0,1,2,3,4].map(x=>({c:x,r:0})),...[1,2,3,4].map(y=>({c:2,r:y}))];},
-  l_pattern:(m)=>{for(let y=0;y<5;y++)if(!m[0][y])return null;for(let x=0;x<5;x++)if(!m[x][4])return null;return[...[0,1,2,3,4].map(y=>({c:0,r:y})),...[1,2,3,4].map(x=>({c:x,r:4}))];},
-  u_pattern:(m)=>{for(let y=0;y<5;y++)if(!m[0][y]||!m[4][y])return null;for(let x=1;x<4;x++)if(!m[x][4])return null;const c=[...[0,1,2,3,4].flatMap(y=>[{c:0,r:y},{c:4,r:y}]),...[1,2,3].map(x=>({c:x,r:4}))];return c;},
-  frame:(m)=>{const c=[];for(let x=0;x<5;x++)for(let y=0;y<5;y++)if(x===0||x===4||y===0||y===4){if(!m[x][y])return null;c.push({c:x,r:y});}return c;},
-  blackout:(m)=>{const c=[];for(let x=0;x<5;x++)for(let y=0;y<5;y++){if(!m[x][y])return null;c.push({c:x,r:y});}return c;},
-  two_rows:(m)=>{const done=[];for(let r=0;r<5;r++)if([0,1,2,3,4].every(c=>m[c][r]))done.push(r);if(done.length>=2)return done.slice(0,2).flatMap(r=>[0,1,2,3,4].map(c=>({c,r})));return null;},
-  two_cols:(m)=>{const done=[];for(let c=0;c<5;c++)if([0,1,2,3,4].every(r=>m[c][r]))done.push(c);if(done.length>=2)return done.slice(0,2).flatMap(c=>[0,1,2,3,4].map(r=>({c,r})));return null;},
-  top_bottom:(m)=>{for(let x=0;x<5;x++)if(!m[x][0]||!m[x][4])return null;return[0,1,2,3,4].flatMap(x=>[{c:x,r:0},{c:x,r:4}]);},
-  center_col:(m)=>[0,1,2,3,4].every(r=>m[2][r])?[0,1,2,3,4].map(r=>({c:2,r})):null,
-  b_o_cols:(m)=>{for(let y=0;y<5;y++)if(!m[0][y]||!m[4][y])return null;return[0,1,2,3,4].flatMap(y=>[{c:0,r:y},{c:4,r:y}]);},
-  six_pack:(m)=>{for(let cx=0;cx<=3;cx++)for(let ry=0;ry<=2;ry++){let ok=true;const cells=[];for(let dx=0;dx<2;dx++)for(let dy=0;dy<3;dy++){if(!m[cx+dx][ry+dy]){ok=false;break;}cells.push({c:cx+dx,r:ry+dy});}if(ok)return cells;}return null;},
-};
-
-// ═══════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════
+// State
 let balance = {{ initial_balance }};
 let prizePool = BASE_PRIZE;
 let allAvailableCards = [];
 let selectedIds = [];
-let cards = [];        // [{id, card, marked, won, suspended, winLine}]
-let pool = [], called = [];
+let cards = [];
+let pool = [];
+let called = [];
 let autoMark = true;
 let gameStarted = false;
 let gameOver = false;
 let suspended = false;
 let suspendedCards = new Set();
-let wins = 0, games = 0, suspCount = 0;
+let wins = 0;
+let games = 0;
+let suspCount = 0;
 let activePatternId = 'any_line';
 let autoStartTimer = null;
 let autoStartSeconds = AUTO_START_DELAY;
 let autoCallInterval = null;
 let totalCardsSold = 0;
-let players = [];
-
-// WebSocket connection (if using real-time)
 let ws = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+
+// Deposit state
+let selectedAmount = 100;
+let deposits = [];
+
+// ═══════════════════════════════════════════════════════
+// WIN PATTERNS
+// ═══════════════════════════════════════════════════════
+const WIN_PATTERNS = [
+  { id:'any_row', name:'📏 Any Row', hint:'Complete any horizontal line of 5 numbers' },
+  { id:'any_col', name:'📏 Any Column', hint:'Complete any vertical line of 5 numbers' },
+  { id:'diag_tl', name:'↘ Diagonal TL→BR', hint:'Diagonal from top-left to bottom-right' },
+  { id:'diag_tr', name:'↙ Diagonal TR→BL', hint:'Diagonal from top-right to bottom-left' },
+  { id:'any_line', name:'🎯 Any Line', hint:'Complete any row, column, or diagonal' },
+  { id:'full_house', name:'🏠 Full House', hint:'Mark all 24 numbers plus FREE space' },
+  { id:'four_corners', name:'🔲 Four Corners', hint:'Mark the four corner squares' },
+  { id:'x_pattern', name:'✖ X Pattern', hint:'Complete both diagonals' },
+  { id:'plus_pattern', name:'➕ Plus Sign', hint:'Complete middle row and column' },
+  { id:'t_pattern', name:'🔝 T Pattern', hint:'Complete top row and middle column' },
+  { id:'l_pattern', name:'🔡 L Pattern', hint:'Complete left column and bottom row' },
+  { id:'u_pattern', name:'🔵 U Pattern', hint:'Complete side columns and bottom row' },
+  { id:'frame', name:'🖼 Frame', hint:'Mark all outer border numbers' },
+  { id:'blackout', name:'⬛ Blackout', hint:'Mark every single number' },
+  { id:'two_rows', name:'📏📏 Two Rows', hint:'Complete any 2 rows' },
+  { id:'two_cols', name:'📏📏 Two Columns', hint:'Complete any 2 columns' },
+  { id:'top_bottom', name:'🔝🔚 Top & Bottom', hint:'Complete top and bottom rows' },
+  { id:'center_col', name:'🎯 Center Column', hint:'Complete the N column' },
+  { id:'b_o_cols', name:'🅱🅾 B & O Columns', hint:'Complete left and right columns' },
+  { id:'six_pack', name:'🍺 Six Pack', hint:'Complete any 2x3 block' }
+];
+
+// Pattern win checkers (simplified for demo)
+const CHECKERS = {
+  any_row: (m) => {
+    for(let r=0; r<5; r++) {
+      if([0,1,2,3,4].every(c => m[c][r])) return true;
+    }
+    return false;
+  },
+  any_line: (m) => {
+    // Check rows
+    for(let r=0; r<5; r++) {
+      if([0,1,2,3,4].every(c => m[c][r])) return true;
+    }
+    // Check columns
+    for(let c=0; c<5; c++) {
+      if([0,1,2,3,4].every(r => m[c][r])) return true;
+    }
+    // Check diagonals
+    if([0,1,2,3,4].every(i => m[i][i])) return true;
+    if([0,1,2,3,4].every(i => m[i][4-i])) return true;
+    return false;
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════
+function getLetter(n) {
+  if (n <= 15) return 'B';
+  if (n <= 30) return 'I';
+  if (n <= 45) return 'N';
+  if (n <= 60) return 'G';
+  return 'O';
+}
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+function generateCardData() {
+  const card = [];
+  for (let col = 0; col < 5; col++) {
+    const colNumbers = [];
+    const min = col * 15 + 1;
+    const max = (col + 1) * 15;
+    const numbers = Array.from({length: max - min + 1}, (_, i) => min + i);
+    shuffleArray(numbers);
+    for (let row = 0; row < 5; row++) {
+      colNumbers.push(numbers[row]);
+    }
+    card.push(colNumbers);
+  }
+  card[2][2] = 0; // FREE space
+  return card;
+}
+
+function getPattern(id) {
+  return WIN_PATTERNS.find(p => p.id === id) || WIN_PATTERNS[4];
+}
+
+function updateBalanceDisplay() {
+  document.getElementById('bal-val').textContent = balance;
+  document.getElementById('bal-val2').textContent = balance;
+  document.getElementById('wallet-bal').textContent = balance;
+}
+
+// ═══════════════════════════════════════════════════════
+// WEBSOCKET CONNECTION
+// ═══════════════════════════════════════════════════════
 function connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/${gameId}/${userId}`;
-    ws = new WebSocket(wsUrl);
-    
-    ws.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        handleWebSocketMessage(data);
-    };
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws/${gameId}/${userId}`;
+  
+  ws = new WebSocket(wsUrl);
+  
+  ws.onopen = function() {
+    console.log('✅ WebSocket connected');
+    reconnectAttempts = 0;
+    showToast('Connected to game server', 'success');
+  };
+  
+  ws.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    handleWebSocketMessage(data);
+  };
+  
+  ws.onclose = function() {
+    console.log('❌ WebSocket disconnected');
+    if (reconnectAttempts < maxReconnectAttempts) {
+      reconnectAttempts++;
+      const delay = 2000 * Math.pow(2, reconnectAttempts - 1);
+      setTimeout(connectWebSocket, delay);
+    }
+  };
 }
 
 function handleWebSocketMessage(data) {
-    switch(data.type) {
-        case 'number_called':
-            handleNumberCalled(data.number);
-            break;
-        case 'game_won':
-            triggerWin(data.winners[0]);
-            break;
-        case 'card_suspended':
-            handleCardSuspended(data);
-            break;
-        case 'player_joined':
-            players = data.players;
-            updatePlayersList();
-            break;
-    }
+  switch(data.type) {
+    case 'connected':
+      handleConnected(data);
+      break;
+    case 'your_card':
+      handleYourCard(data);
+      break;
+    case 'cards_selected':
+      handleCardsSelected(data);
+      break;
+    case 'game_started':
+      handleGameStarted(data);
+      break;
+    case 'number_called':
+      handleNumberCalled(data);
+      break;
+    case 'mark_result':
+      handleMarkResult(data);
+      break;
+    case 'pattern_completed':
+      handlePatternCompleted(data);
+      break;
+    case 'game_won':
+      handleGameWon(data);
+      break;
+    case 'card_suspended':
+      handleCardSuspended(data);
+      break;
+    case 'player_suspended':
+      handlePlayerSuspended(data);
+      break;
+    case 'game_reset':
+      handleGameReset(data);
+      break;
+    case 'error':
+      showToast(data.message, 'error');
+      break;
+    case 'heartbeat':
+      // Ignore heartbeats
+      break;
+  }
 }
 
-// ═══════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════
-function getLetter(n){if(n<=15)return'B';if(n<=30)return'I';if(n<=45)return'N';if(n<=60)return'G';return'O';}
-function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}}
-function randId(){
-  const L='ABCDEFGHJKLMNPQRSTUVWXYZ',N='0123456789';
-  return 'BNG-'+L[Math.floor(Math.random()*L.length)]+L[Math.floor(Math.random()*L.length)]+N[Math.floor(Math.random()*10)]+N[Math.floor(Math.random()*10)]+N[Math.floor(Math.random()*10)];
+function handleConnected(data) {
+  gameStarted = data.game_started || false;
+  called = data.called_numbers || [];
+  currentRound = data.round || 1;
+  
+  document.getElementById('active-game-display').textContent = currentRound;
+  updateCalledNumbers();
+  
+  if (gameStarted) {
+    document.getElementById('status').textContent = '🎮 Playing';
+    document.getElementById('bingo-btn').disabled = false;
+  }
 }
-function generateCardData(){
-  const c=RANGES.map(([lo,hi])=>{const p=Array.from({length:hi-lo+1},(_,i)=>lo+i);const col=[];while(col.length<5){const i=Math.floor(Math.random()*p.length);col.push(p.splice(i,1)[0]);}return col;});
-  c[2][2]=0;return c;
+
+function handleYourCard(data) {
+  if (!cards.find(c => c.id === data.card_id)) {
+    cards.push({
+      id: data.card_id,
+      card: data.card,
+      marked: data.marked.reduce((obj, num) => {
+        // Convert marked numbers array to marked grid
+        return obj;
+      }, Array(5).fill().map(() => Array(5).fill(false))),
+      won: false,
+      suspended: data.suspended,
+      winLine: null
+    });
+  }
+  renderCardsGrid();
 }
-function getPattern(id){return WIN_PATTERNS.find(p=>p.id===id)||WIN_PATTERNS[4];}
-function updateBalanceDisplay(){
-  document.getElementById('bal-val').textContent=balance;
-  document.getElementById('bal-val2').textContent=balance;
-  document.getElementById('wallet-bal').textContent=balance;
+
+function handleCardsSelected(data) {
+  if (data.success) {
+    showToast(data.message, 'success');
+    if (data.new_balance !== undefined) {
+      balance = data.new_balance / 100;
+      updateBalanceDisplay();
+    }
+  } else {
+    showToast(data.message, 'error');
+  }
+}
+
+function handleGameStarted(data) {
+  gameStarted = true;
+  document.getElementById('status').textContent = '🎮 Playing';
+  document.getElementById('bingo-btn').disabled = false;
+  document.getElementById('auto-start-timer').style.display = 'none';
+  showToast('Game started!', 'success');
+}
+
+function handleNumberCalled(data) {
+  called = data.called || [];
+  document.getElementById('last-number').textContent = `🎲 ${data.number}`;
+  document.getElementById('called-cnt').textContent = called.length;
+  updateCalledNumbers();
+  renderCardsGrid();
+}
+
+function handleMarkResult(data) {
+  if (data.success) {
+    // Update local marked state
+    const card = cards.find(c => c.id === data.card_id);
+    if (card) {
+      // Find and mark the cell
+      for(let col=0; col<5; col++) {
+        for(let row=0; row<5; row++) {
+          if(card.card[col][row] === data.number) {
+            card.marked[col][row] = true;
+            break;
+          }
+        }
+      }
+    }
+    renderCardsGrid();
+    
+    if (data.pattern_completed) {
+      showToast(data.message, 'success');
+      document.getElementById('bingo-btn').style.animation = 'pulse 0.5s infinite';
+    }
+  }
+}
+
+function handlePatternCompleted(data) {
+  showToast(data.message, 'success');
+  document.getElementById('bingo-btn').style.animation = 'pulse 0.5s infinite';
+}
+
+function handleGameWon(data) {
+  gameStarted = false;
+  gameOver = true;
+  wins++;
+  
+  document.getElementById('status').textContent = '🏆 Winner!';
+  document.getElementById('bingo-btn').disabled = true;
+  
+  let winnerNames = data.winners.map(w => w.name).join(', ');
+  document.getElementById('win-sub').innerHTML = `🏆 ${winnerNames} won! 🏆`;
+  document.getElementById('win-prize-val').textContent = `${data.total_prize} ETB`;
+  document.getElementById('win-overlay').classList.add('show');
+  
+  launchConfetti();
+  renderCardsGrid();
+}
+
+function handleCardSuspended(data) {
+  if (data.user_id === userId) {
+    const card = cards.find(c => c.id === data.suspended_card_id);
+    if (card) card.suspended = true;
+    showToast(`Card #${data.suspended_card_id} suspended!`, 'warning');
+    renderCardsGrid();
+  }
+}
+
+function handlePlayerSuspended(data) {
+  if (data.user_id === userId) {
+    suspended = true;
+    document.getElementById('bingo-btn').disabled = true;
+    showToast('You have been suspended!', 'error');
+  }
+}
+
+function handleGameReset(data) {
+  gameStarted = false;
+  gameOver = false;
+  called = [];
+  cards = [];
+  suspended = false;
+  suspendedCards.clear();
+  
+  document.getElementById('status').textContent = '⏳ Waiting';
+  document.getElementById('bingo-btn').disabled = true;
+  document.getElementById('last-number').textContent = '🎲 Ready';
+  document.getElementById('win-overlay').classList.remove('show');
+  
+  updateCalledNumbers();
+  renderCardsGrid();
 }
 
 // ═══════════════════════════════════════════════════════
 // TAB NAVIGATION
 // ═══════════════════════════════════════════════════════
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById('tab-'+tab).classList.add('active');
-  document.getElementById('screen-'+tab).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('screen-' + tab).classList.add('active');
   
-  if(tab==='select'){initAvailableCards();}
-  if(tab==='patterns'){renderPatternsPage();}
-  if(tab==='admin' && isAdmin){loadAdmin();}
-  if(tab==='wallet'){updateWalletStats();}
+  if (tab === 'select') initAvailableCards();
+  if (tab === 'patterns') renderPatternsPage();
+  if (tab === 'admin' && isAdmin) loadAdminData();
 }
 
 // ═══════════════════════════════════════════════════════
-// AUTO-START TIMER
+// DEPOSIT FUNCTIONS
 // ═══════════════════════════════════════════════════════
-function startAutoStartTimer() {
-  if (autoStartTimer) clearInterval(autoStartTimer);
-  autoStartSeconds = AUTO_START_DELAY;
-  document.getElementById('auto-start-timer').style.display = 'flex';
-  document.getElementById('timer-seconds').textContent = autoStartSeconds;
+function selectAmount(amount) {
+  selectedAmount = amount;
+  document.getElementById('deposit-amount').value = amount;
   
-  autoStartTimer = setInterval(() => {
-    autoStartSeconds--;
-    document.getElementById('timer-seconds').textContent = autoStartSeconds;
-    
-    if (autoStartSeconds <= 0) {
-      clearInterval(autoStartTimer);
-      document.getElementById('auto-start-timer').style.display = 'none';
-      startGame();
-    }
-  }, 1000);
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+  event.target.classList.add('active');
 }
 
-function startGame() {
-  gameStarted = true;
-  document.getElementById('bingo-btn').disabled = false;
-  document.getElementById('call-status').textContent = 'Game started!';
+function submitDeposit() {
+  const amount = parseInt(document.getElementById('deposit-amount').value);
+  const txid = document.getElementById('txid-input').value.trim();
   
-  // Start auto-calling numbers every 3 seconds
-  if (autoCallInterval) clearInterval(autoCallInterval);
-  autoCallInterval = setInterval(() => {
-    callNumber();
-  }, AUTO_CALL_INTERVAL);
-}
-
-// ═══════════════════════════════════════════════════════
-// CARD SELECTION (100×10 grid)
-// ═══════════════════════════════════════════════════════
-function initAvailableCards(){
-  allAvailableCards=[];
-  const used=new Set();
-  for(let i=1;i<=1000;i++){
-    allAvailableCards.push({id:i,card:generateCardData()});
+  if (!amount || amount < 10) {
+    showToast('❌ Minimum deposit is 10 ETB', 'error');
+    return;
   }
-  selectedIds=[];
+  
+  if (!txid || txid.length < 4) {
+    showToast('❌ Please enter a valid transaction ID', 'error');
+    return;
+  }
+  
+  const statusEl = document.getElementById('deposit-status');
+  statusEl.textContent = '⏳ Processing your deposit...';
+  statusEl.className = 'deposit-status show';
+  
+  // Simulate API call
+  setTimeout(() => {
+    if (txid.toUpperCase().includes('DEMO')) {
+      balance += amount;
+      updateBalanceDisplay();
+      
+      statusEl.textContent = '✅ Deposit verified and credited!';
+      statusEl.classList.add('success');
+      
+      showToast(`✅ ${amount} ETB credited!`, 'success');
+      document.getElementById('txid-input').value = '';
+      
+      deposits.unshift({
+        id: 'DEP' + Date.now(),
+        userId: userId,
+        amount: amount,
+        txid: txid,
+        status: 'approved',
+        date: new Date().toLocaleString()
+      });
+    } else {
+      statusEl.textContent = '⏳ Deposit pending admin verification';
+      statusEl.classList.add('show');
+      
+      showToast('📋 Deposit submitted for verification', 'info');
+      
+      deposits.unshift({
+        id: 'DEP' + Date.now(),
+        userId: userId,
+        amount: amount,
+        txid: txid,
+        status: 'pending',
+        date: new Date().toLocaleString()
+      });
+    }
+    
+    if (isAdmin) loadAdminData();
+  }, 1500);
+}
+
+// ═══════════════════════════════════════════════════════
+// WITHDRAW FUNCTIONS
+// ═══════════════════════════════════════════════════════
+function setWithdrawAmount(value) {
+  if (value === 'all') {
+    document.getElementById('withdraw-amount').value = balance;
+  } else {
+    document.getElementById('withdraw-amount').value = value;
+  }
+}
+
+function submitWithdraw() {
+  const amount = parseInt(document.getElementById('withdraw-amount').value);
+  
+  if (!amount || amount < 100) {
+    showToast('❌ Minimum withdrawal is 100 ETB', 'error');
+    return;
+  }
+  
+  if (amount > balance) {
+    showToast('❌ Insufficient balance', 'error');
+    return;
+  }
+  
+  balance -= amount;
+  updateBalanceDisplay();
+  
+  showToast(`✅ Withdrawal of ${amount} ETB requested!`, 'success');
+  document.getElementById('withdraw-amount').value = '';
+}
+
+// ═══════════════════════════════════════════════════════
+// CARD SELECTION FUNCTIONS
+// ═══════════════════════════════════════════════════════
+function initAvailableCards() {
+  allAvailableCards = [];
+  for (let i = 1; i <= 1000; i++) {
+    allAvailableCards.push({ id: i, card: generateCardData() });
+  }
+  selectedIds = [];
   renderPatternPills();
-  renderAvailable();
-  updateSelSummary();
+  renderAvailableCards();
+  updateSelectionSummary();
 }
 
-function renderPatternPills(){
-  const wrap=document.getElementById('pattern-pills');
-  wrap.innerHTML=WIN_PATTERNS.map(p=>`<button class="p-pill${p.id===activePatternId?' active':''}" onclick="selectPatternForGame('${p.id}')">${p.name}</button>`).join('');
+function renderPatternPills() {
+  const wrap = document.getElementById('pattern-pills');
+  wrap.innerHTML = WIN_PATTERNS.map(p => 
+    `<button class="p-pill${p.id === activePatternId ? ' active' : ''}" onclick="selectPattern('${p.id}')">${p.name}</button>`
+  ).join('');
 }
 
-function selectPatternForGame(id){
-  activePatternId=id;
-  const pat=getPattern(id);
-  document.getElementById('sel-pat-name').textContent=pat.name;
-  document.getElementById('sel-pat-hint').textContent=pat.hint;
-  document.getElementById('pattern-name-short').textContent=pat.name;
-  document.getElementById('pattern-hint-text').textContent=pat.hint;
+function selectPattern(id) {
+  activePatternId = id;
+  const pat = getPattern(id);
+  document.getElementById('sel-pat-name').textContent = pat.name;
+  document.getElementById('sel-pat-hint').textContent = pat.hint;
+  document.getElementById('pattern-name-short').textContent = pat.name;
+  document.getElementById('pattern-hint-text').textContent = pat.hint;
   renderPatternPills();
   renderPatternsPage();
 }
 
-function renderAvailable(){
-  const grid=document.getElementById('available-grid');
-  grid.innerHTML='';
-  allAvailableCards.forEach(entry=>{
-    const isSel=selectedIds.includes(entry.id);
-    const div=document.createElement('div');
-    div.className='card-option'+(isSel?' selected':'');
-    div.onclick=()=>toggleSelect(entry.id);
+function renderAvailableCards() {
+  const grid = document.getElementById('available-grid');
+  grid.innerHTML = '';
+  
+  allAvailableCards.forEach(card => {
+    const isSelected = selectedIds.includes(card.id);
+    const div = document.createElement('div');
+    div.className = 'card-option' + (isSelected ? ' selected' : '');
+    div.onclick = () => toggleCardSelection(card.id);
     
-    // Create mini card preview (5x5 grid)
-    let mini='<div class="card-mini-grid">';
-    for(let row=0;row<5;row++)for(let col=0;col<5;col++){const n=entry.card[col][row];mini+=`<div class="mc${n===0?' free':''}">${n===0?'★':n}</div>`;}
-    mini+='</div>';
+    let miniGrid = '<div class="card-mini-grid">';
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        const num = card.card[col][row];
+        miniGrid += `<div class="mc${num === 0 ? ' free' : ''}">${num === 0 ? '★' : num}</div>`;
+      }
+    }
+    miniGrid += '</div>';
     
-    div.innerHTML=`<div class="sel-check">✓</div><div class="card-id-label">#${entry.id}</div>${mini}`;
+    div.innerHTML = `<div class="sel-check">✓</div><div class="card-id-label">#${card.id}</div>${miniGrid}`;
     grid.appendChild(div);
   });
 }
 
-function toggleSelect(id){
-  if(selectedIds.includes(id)){selectedIds=selectedIds.filter(x=>x!==id);}
-  else{
-    if(selectedIds.length>=MAX_CARDS){toast('Max '+MAX_CARDS+' cards','error');return;}
-    if((selectedIds.length+1)*CARD_COST>balance){toast('❌ Not enough balance!','error');return;}
+function toggleCardSelection(id) {
+  if (selectedIds.includes(id)) {
+    selectedIds = selectedIds.filter(x => x !== id);
+  } else {
+    if (selectedIds.length >= MAX_CARDS) {
+      showToast('Max ' + MAX_CARDS + ' cards', 'error');
+      return;
+    }
+    if ((selectedIds.length + 1) * CARD_COST > balance) {
+      showToast('❌ Not enough balance!', 'error');
+      return;
+    }
     selectedIds.push(id);
   }
-  renderAvailable();updateSelSummary();
+  renderAvailableCards();
+  updateSelectionSummary();
 }
 
-function updateSelSummary(){
-  const count=selectedIds.length,cost=count*CARD_COST,prize=BASE_PRIZE+cost;
-  document.getElementById('sel-count').textContent=count;
-  document.getElementById('sel-cost').textContent=cost+' ETB';
-  document.getElementById('sel-prize').textContent=prize+' ETB';
-  document.getElementById('confirm-btn').disabled=count===0;
-  const el=document.getElementById('selected-ids');
-  el.innerHTML=count===0?'<span class="empty-sel">None yet</span>':
-    selectedIds.map(id=>`<span class="id-chip">#${id}<span class="remove" onclick="event.stopPropagation();toggleSelect(${id})">✕</span></span>`).join('');
-}
-
-function confirmSelection(){
-  const cost=selectedIds.length*CARD_COST;
-  if(cost>balance){toast('❌ Not enough balance!','error');return;}
-  balance-=cost;
-  prizePool=BASE_PRIZE+cost;
-  games++;
+function updateSelectionSummary() {
+  const count = selectedIds.length;
+  const cost = count * CARD_COST;
+  const prize = BASE_PRIZE + cost;
   
-  cards=selectedIds.map(id=>{
-    const entry=allAvailableCards.find(c=>c.id===id);
-    const marked=Array.from({length:5},()=>Array(5).fill(false));
-    marked[2][2]=true;
-    return{id:entry.id,card:entry.card,marked,won:false,suspended:false,winLine:null};
-  });
+  document.getElementById('sel-count').textContent = count;
+  document.getElementById('sel-cost').textContent = cost + ' ETB';
+  document.getElementById('sel-prize').textContent = prize + ' ETB';
+  document.getElementById('confirm-btn').disabled = count === 0;
   
-  pool=Array.from({length:75},(_,i)=>i+1);shuffle(pool);
-  called=[];gameOver=false;suspended=false;
-  totalCardsSold = cards.length;
-  
-  updateBalanceDisplay();
-  document.getElementById('win-overlay').classList.remove('show');
-  document.getElementById('susp-banner').style.display='none';
-  document.getElementById('bingo-btn').disabled=true; // Disabled until game starts
-  
-  // Reset call display
-  document.getElementById('call-L').textContent='—';
-  document.getElementById('call-L').style.color='rgba(255,255,255,0.2)';
-  document.getElementById('call-N').textContent='?';
-  document.getElementById('call-N').style.color='rgba(255,255,255,0.12)';
-  document.getElementById('call-status').textContent='Game starts when 5 cards sold';
-  document.getElementById('called-cnt').textContent='0';
-  document.getElementById('chips-wrap').innerHTML='<span style="color:var(--muted);font-size:0.75rem;padding:4px 0">No numbers called yet</span>';
-  
-  // Set pattern info
-  const pat=getPattern(activePatternId);
-  document.getElementById('pattern-name-short').textContent=pat.name;
-  document.getElementById('pattern-hint-text').textContent=pat.hint;
-  
-  renderCardsGrid();
-  
-  // Check if 5 cards sold to start auto-timer
-  if (totalCardsSold >= 5 && !gameStarted) {
-    startAutoStartTimer();
+  const el = document.getElementById('selected-ids');
+  if (count === 0) {
+    el.innerHTML = '<span class="empty-sel">None yet</span>';
+  } else {
+    el.innerHTML = selectedIds.map(id => 
+      `<span class="id-chip">#${id}<span class="remove" onclick="event.stopPropagation();toggleCardSelection(${id})">✕</span></span>`
+    ).join('');
   }
+}
+
+function confirmSelection() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    showToast('Not connected to server', 'error');
+    connectWebSocket();
+    return;
+  }
+  
+  ws.send(JSON.stringify({
+    type: 'select_cards',
+    card_ids: selectedIds
+  }));
+  
+  games++;
+  document.getElementById('stat-games').textContent = games;
   
   switchTab('game');
-  toast(`🎱 ${cards.length} card${cards.length>1?'s':''} ready!`,'success');
 }
 
 // ═══════════════════════════════════════════════════════
-// GAME ACTIONS
+// GAME FUNCTIONS
 // ═══════════════════════════════════════════════════════
-function callNumber(){
-  if(!gameStarted){
-    toast('Game not started yet!','warning');
-    return;
-  }
-  if(gameOver||!pool.length){
-    if(!pool.length) toast('All 75 numbers called!','info');
-    return;
-  }
-  
-  const num=pool.pop();
-  called.push(num);
-  const letter=getLetter(num);
-  
-  // Update call display
-  document.getElementById('call-L').textContent=letter;
-  document.getElementById('call-L').style.color=COLORS[letter];
-  document.getElementById('call-N').textContent=num;
-  document.getElementById('call-N').style.color=COLORS[letter];
-  document.getElementById('call-status').textContent=`${letter}-${num}`;
-  document.getElementById('called-cnt').textContent=called.length;
-  
-  // Auto-mark if enabled
-  if(autoMark){
-    cards.forEach(card=>{
-      if(card.suspended||card.won)return;
-      for(let c=0;c<5;c++)for(let r=0;r<5;r++)if(card.card[c][r]===num)card.marked[c][r]=true;
-    });
-  }
-  
-  // Update chips
-  const wrap=document.getElementById('chips-wrap');
-  wrap.innerHTML = called.slice().reverse().map((n,i) => {
-    const L = getLetter(n);
-    return `<span class="chip ${L}${i===0?' newest':''}">${L}${n}</span>`;
-  }).join('');
-  
-  // Check for wins
-  let anyWin=false;
-  cards.forEach((card,i)=>{
-    if(!card.won&&!card.suspended){
-      const line=CHECKERS[activePatternId]?.(card.marked)||null;
-      if(line){
-        card.won=true;
-        card.winLine=line;
-        anyWin=true;
-      }
-    }
-  });
-  
-  renderCardsGrid();
-  
-  if(anyWin){
-    const winCard = cards.find(c=>c.won);
-    triggerWin(winCard);
-  }
-  
-  if(!pool.length) {
-    toast('All 75 numbers called!','info');
-    clearInterval(autoCallInterval);
-  }
+function callNumber() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'call_number' }));
 }
 
-function manualMark(cardId, col, row){
-  const card = cards.find(c=>c.id===cardId);
-  if(!card||card.suspended||card.won) return;
-  if(!gameStarted){
-    toast('Game not started yet!','warning');
+function manualMark(cardId, col, row) {
+  if (!gameStarted) {
+    showToast('Game not started!', 'warning');
     return;
   }
+  
+  const card = cards.find(c => c.id === cardId);
+  if (!card || card.suspended || card.won) return;
   
   const num = card.card[col][row];
-  if(num===0) return;
-  if(!called.includes(num)) { toast('⚠️ Not called yet!', 'error'); return; }
+  if (num === 0) return;
   
-  card.marked[col][row] = !card.marked[col][row];
-  
-  const line=CHECKERS[activePatternId]?.(card.marked)||null;
-  if(line){
-    card.won=true;
-    card.winLine=line;
-    triggerWin(card);
-  }
-  
-  renderCardsGrid();
+  ws.send(JSON.stringify({
+    type: 'mark_number',
+    card_id: cardId,
+    number: num
+  }));
 }
 
-function addCard(){
-  if(cards.length>=MAX_CARDS){toast('Max '+MAX_CARDS+' cards!','error');return;}
-  if(balance<CARD_COST){toast('❌ Not enough balance!','error');return;}
-  if(suspended){toast('⛔ Cards suspended!','error');return;}
-  
-  balance-=CARD_COST;
-  prizePool+=CARD_COST;
-  totalCardsSold++;
-  
-  const card=generateCardData();
-  const marked=Array.from({length:5},()=>Array(5).fill(false));
-  marked[2][2]=true;
-  const id = cards.length + 1000; // Simple ID generation
-  
-  cards.push({id,card,marked,won:false,suspended:false,winLine:null});
-  
-  updateBalanceDisplay();
-  renderCardsGrid();
-  
-  // Check if 5 cards sold to start auto-timer
-  if (totalCardsSold >= 5 && !gameStarted) {
-    startAutoStartTimer();
-  }
-  
-  toast(`🃏 Card added! (-${CARD_COST} ETB)`, 'success');
-}
-
-function claimBingo(){
-  if(!gameStarted){
-    toast('Game not started yet!','warning');
+function addCard() {
+  if (cards.length >= MAX_CARDS) {
+    showToast('Max ' + MAX_CARDS + ' cards!', 'error');
     return;
   }
-  if(suspended){
-    toast('⛔ Your cards are suspended!','error');
+  if (balance < CARD_COST) {
+    showToast('❌ Not enough balance!', 'error');
     return;
   }
   
-  // Check for actual win
-  let winnerCard = null;
-  cards.forEach(card=>{
-    if(!card.won&&!card.suspended){
-      const line=CHECKERS[activePatternId]?.(card.marked)||null;
-      if(line){
-        card.won=true;
-        card.winLine=line;
-        winnerCard=card;
-      }
-    }
-  });
-  
-  if(winnerCard){
-    triggerWin(winnerCard);
-  } else {
-    // FALSE BINGO - suspend one random card
-    const activeCards = cards.filter(c=>!c.suspended && !c.won);
-    if(activeCards.length > 0) {
-      const randomCard = activeCards[Math.floor(Math.random() * activeCards.length)];
-      randomCard.suspended = true;
-      suspendedCards.add(randomCard.id);
-      suspCount++;
-      showSuspOverlay(`Card #${randomCard.id} suspended for this round.`);
-    } else {
-      toast('No active cards to suspend!','error');
-    }
-    
-    renderCardsGrid();
-  }
-}
-
-function handleNumberCalled(number) {
-  called.push(number);
-  // Update UI
-  renderCardsGrid();
-}
-
-function handleCardSuspended(data) {
-  const card = cards.find(c=>c.id===data.card_id);
-  if(card) card.suspended = true;
-  renderCardsGrid();
-}
-
-function triggerWin(card){
-  gameOver=true;
-  gameStarted=false;
-  wins++;
-  clearInterval(autoCallInterval);
-  document.getElementById('bingo-btn').disabled=true;
-  document.getElementById('win-sub').textContent = `Card #${card.id} wins!`;
-  document.getElementById('win-prize-val').textContent = `${prizePool} ETB`;
-  document.getElementById('win-overlay').classList.add('show');
-  launchConfetti();
-  renderCardsGrid();
-}
-
-function collectWin(){
-  balance+=prizePool;
+  ws.send(JSON.stringify({ type: 'add_card' }));
+  balance -= CARD_COST;
   updateBalanceDisplay();
-  document.getElementById('win-overlay').classList.remove('show');
-  toast(`💰 +${prizePool} ETB collected!`,'success');
 }
 
-function closeWin(){
-  document.getElementById('win-overlay').classList.remove('show');
+function claimBingo() {
+  if (!gameStarted) {
+    showToast('Game not started!', 'warning');
+    return;
+  }
+  
+  // Find first active card
+  const activeCard = cards.find(c => !c.suspended && !c.won);
+  if (!activeCard) {
+    showToast('No active cards!', 'error');
+    return;
+  }
+  
+  ws.send(JSON.stringify({
+    type: 'claim_bingo',
+    card_id: activeCard.id
+  }));
 }
 
-function toggleAuto(){
-  autoMark=!autoMark;
-  document.getElementById('auto-track').classList.toggle('on',autoMark);
-  document.getElementById('auto-hint').textContent=autoMark?'ON':'OFF';
-  toast(autoMark?'✅ Auto-mark ON':'✋ Auto-mark OFF — click numbers manually');
+function toggleAuto() {
+  autoMark = !autoMark;
+  document.getElementById('auto-track').classList.toggle('on', autoMark);
+  document.getElementById('auto-hint').textContent = autoMark ? 'ON' : 'OFF';
+  showToast(autoMark ? '✅ Auto-mark ON' : '✋ Manual marking', 'info');
 }
 
 // ═══════════════════════════════════════════════════════
-// RENDER CARDS GRID
+// RENDER FUNCTIONS
 // ═══════════════════════════════════════════════════════
 function renderCardsGrid() {
   const grid = document.getElementById('cards-grid');
   const countEl = document.getElementById('card-count');
   
   if (!cards.length) {
-    grid.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:20px 0;grid-column:1/-1;text-align:center">No cards yet. Select cards from CARDS tab!</div>';
+    grid.innerHTML = '<div style="color:var(--muted);padding:20px 0;text-align:center">No cards yet. Select cards from CARDS tab!</div>';
     countEl.textContent = '0';
     return;
   }
   
   countEl.textContent = cards.length;
   const calledSet = new Set(called);
-  const pat = getPattern(activePatternId);
   
-  grid.innerHTML = cards.map((card, idx) => {
-    const markedCnt = card.marked.flat().filter((v,i)=>v===true).length - 1;
+  grid.innerHTML = cards.map(card => {
+    const markedCount = card.marked ? card.marked.flat().filter(v => v).length - 1 : 0;
     
     let statusClass = '';
     let statusText = '';
-    if(card.won) { statusClass = 'cs-won'; statusText = '🎊 WON'; }
-    else if(card.suspended) { statusClass = 'cs-susp'; statusText = '⛔ SUSP'; }
-    else statusText = `${markedCnt}/24`;
+    if (card.won) {
+      statusClass = 'cs-won';
+      statusText = '🎊 WON';
+    } else if (card.suspended) {
+      statusClass = 'cs-susp';
+      statusText = '⛔ SUSP';
+    } else {
+      statusText = markedCount + '/24';
+    }
     
     let lettersHtml = '<div class="b-letters">';
-    LETTERS.forEach(L=>{lettersHtml+=`<div class="b-letter" style="color:${COLORS[L]}">${L}</div>`;});
+    LETTERS.forEach(l => {
+      lettersHtml += `<div class="b-letter" style="color:${COLORS[l]}">${l}</div>`;
+    });
     lettersHtml += '</div>';
     
     let gridHtml = '<div class="b-grid">';
-    for(let row=0;row<5;row++) {
-      for(let col=0;col<5;col++) {
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
         const num = card.card[col][row];
-        const isWin = card.winLine?.some(w=>w.c===col&&w.r===row);
-        let cls = 'cell';
-        if(num===0) cls+=' free';
-        else if(isWin) cls+=' win-cell';
-        else if(card.marked[col][row]) cls+=' marked';
-        else if(calledSet.has(num)) cls+=' called';
+        const isWin = card.winLine?.some(w => w.c === col && w.r === row);
+        let cellClass = 'cell';
+        if (num === 0) cellClass += ' free';
+        else if (isWin) cellClass += ' win-cell';
+        else if (card.marked && card.marked[col] && card.marked[col][row]) cellClass += ' marked';
+        else if (calledSet.has(num)) cellClass += ' called';
         
-        const click = num!==0&&!card.suspended&&!card.won&&!isWin && gameStarted
-          ? `onclick="manualMark(${card.id},${col},${row})"` 
+        const clickHandler = (num !== 0 && !card.suspended && !card.won && !isWin && gameStarted && card.marked)
+          ? `onclick="manualMark(${card.id},${col},${row})"`
           : '';
         
-        gridHtml += `<div class="${cls}" ${click}>${num===0?'FREE':num}</div>`;
+        gridHtml += `<div class="${cellClass}" ${clickHandler}>${num === 0 ? 'FREE' : num}</div>`;
       }
     }
     gridHtml += '</div>';
     
-    return `<div class="bingo-card${card.won?' won':''}${card.suspended?' suspended':''}">
+    return `<div class="bingo-card${card.won ? ' won' : ''}${card.suspended ? ' suspended' : ''}">
       <div class="card-head">
         <span class="card-id">#${card.id}</span>
         <span class="card-status ${statusClass}">${statusText}</span>
@@ -1428,18 +1929,30 @@ function renderCardsGrid() {
   }).join('');
   
   // Update suspension banner
-  const banner = document.getElementById('susp-banner');
-  const bingoBtn = document.getElementById('bingo-btn');
-  const hasSuspended = cards.some(c=>c.suspended);
-  if (hasSuspended) {
-    banner.style.display = 'flex';
-  } else {
-    banner.style.display = 'none';
-  }
+  const hasSuspended = cards.some(c => c.suspended);
+  document.getElementById('susp-banner').style.display = hasSuspended ? 'flex' : 'none';
 }
 
-function updatePlayersList() {
-  // This would show other players in the room
+function updateCalledNumbers() {
+  const list = document.getElementById('called-numbers-list');
+  if (!list) return;
+  
+  list.innerHTML = '';
+  
+  if (called && called.length > 0) {
+    called.forEach(num => {
+      const badge = document.createElement('span');
+      badge.className = 'called-badge';
+      badge.textContent = num;
+      list.appendChild(badge);
+    });
+  } else {
+    const badge = document.createElement('span');
+    badge.className = 'called-badge';
+    badge.style.background = '#999';
+    badge.textContent = 'No numbers called yet';
+    list.appendChild(badge);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1447,37 +1960,19 @@ function updatePlayersList() {
 // ═══════════════════════════════════════════════════════
 function renderPatternsPage() {
   const list = document.getElementById('patterns-list');
-  const patId = activePatternId;
-  
-  list.innerHTML = WIN_PATTERNS.map((p, i) => {
-    const cells = getPatternCells(p.id);
-    const cellSet = new Set(cells.map(({c,r})=>`${c},${r}`));
-    let miniGrid = '<div style="margin-top:8px"><div class="p-grid">';
-    for(let r=0;r<5;r++) for(let c=0;c<5;c++) {
-      const isFree = c===2&&r===2;
-      const isHl = cellSet.has(`${c},${r}`);
-      miniGrid += `<div class="p-cell${isHl?' highlighted':''}${isFree&&!isHl?' free':''}"></div>`;
-    }
-    miniGrid += '</div></div>';
-    
-    return `<div class="pattern-card${p.id===patId?' active-pattern':''}" onclick="setPatternFromPage('${p.id}')">
-      <div class="pattern-num">${i+1}</div>
+  list.innerHTML = WIN_PATTERNS.map((p, i) => `
+    <div class="pattern-card${p.id === activePatternId ? ' active-pattern' : ''}" onclick="selectPatternFromPage('${p.id}')">
+      <div class="pattern-num">${i + 1}</div>
       <div class="pattern-body">
-        <div class="pattern-name">${p.name}${p.id===patId?'<span class="active-badge">ACTIVE</span>':''}</div>
+        <div class="pattern-name">${p.name}${p.id === activePatternId ? '<span class="active-badge">ACTIVE</span>' : ''}</div>
         <div class="pattern-hint-text">${p.hint}</div>
-        ${miniGrid}
       </div>
-    </div>`;
-  }).join('');
+    </div>
+  `).join('');
 }
 
-function setPatternFromPage(id){
-  activePatternId=id;
-  const pat=getPattern(id);
-  document.getElementById('pattern-name-short').textContent=pat.name;
-  document.getElementById('pattern-hint-text').textContent=pat.hint;
-  renderPatternsPage();
-  toast(`Pattern set: ${pat.name}`,'success');
+function selectPatternFromPage(id) {
+  selectPattern(id);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1485,35 +1980,102 @@ function setPatternFromPage(id){
 // ═══════════════════════════════════════════════════════
 function openPatternModal() {
   const list = document.getElementById('pm-list');
-  const patId = activePatternId;
   list.innerHTML = WIN_PATTERNS.map(p => `
-    <div class="pm-item${p.id===patId?' current':''}" onclick="selectPattern('${p.id}')">
+    <div class="pm-item${p.id === activePatternId ? ' current' : ''}" onclick="selectPatternFromModal('${p.id}')">
       <div class="pm-name">${p.name}</div>
       <div class="pm-hint">${p.hint}</div>
-    </div>`).join('');
+    </div>
+  `).join('');
   document.getElementById('pattern-modal').classList.add('show');
 }
 
 function closePatternModal(e) {
-  if (e.target === document.getElementById('pattern-modal'))
+  if (e.target === document.getElementById('pattern-modal')) {
     document.getElementById('pattern-modal').classList.remove('show');
+  }
 }
 
-function selectPattern(id) {
-  activePatternId = id;
-  const pat = getPattern(id);
-  document.getElementById('pattern-name-short').textContent = pat.name;
-  document.getElementById('pattern-hint-text').textContent = pat.hint;
+function selectPatternFromModal(id) {
+  selectPattern(id);
   document.getElementById('pattern-modal').classList.remove('show');
-  renderPatternsPage();
-  toast(`Pattern: ${pat.name}`, 'info');
 }
 
 // ═══════════════════════════════════════════════════════
-// SUSPENSION
+// ADMIN FUNCTIONS
+// ═══════════════════════════════════════════════════════
+function loadAdminData() {
+  if (!isAdmin) {
+    switchTab('wallet');
+    return;
+  }
+  
+  const pendingCount = deposits.filter(d => d.status === 'pending').length;
+  const totalDeposited = deposits.reduce((sum, d) => sum + d.amount, 0);
+  const uniqueUsers = new Set(deposits.map(d => d.userId)).size;
+  
+  document.getElementById('admin-pending').textContent = pendingCount;
+  document.getElementById('admin-total').textContent = totalDeposited;
+  document.getElementById('admin-users').textContent = uniqueUsers || 1;
+  
+  renderDeposits(deposits);
+}
+
+function filterDeposits(filter, btn) {
+  document.querySelectorAll('.admin-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  
+  let filtered = deposits;
+  if (filter !== 'all') {
+    filtered = deposits.filter(d => d.status === filter);
+  }
+  
+  renderDeposits(filtered);
+}
+
+function renderDeposits(depositsList) {
+  const container = document.getElementById('admin-deposit-list');
+  
+  if (!depositsList.length) {
+    container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px 0">No deposits found</div>';
+    return;
+  }
+  
+  container.innerHTML = depositsList.map(d => `
+    <div class="admin-deposit-card">
+      <div class="admin-deposit-header">
+        <div>
+          <div class="admin-deposit-user">User #${d.userId || 'Unknown'}</div>
+          <div class="admin-deposit-time">${d.date}</div>
+        </div>
+        <div class="admin-deposit-amount">+${d.amount} ETB</div>
+      </div>
+      <div class="admin-deposit-txid">${d.txid}</div>
+      <span class="admin-deposit-status status-${d.status}">
+        ${d.status === 'pending' ? '⏳ Pending' : d.status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+      </span>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// WIN OVERLAY
+// ═══════════════════════════════════════════════════════
+function collectWinnings() {
+  balance += prizePool;
+  updateBalanceDisplay();
+  document.getElementById('win-overlay').classList.remove('show');
+  showToast(`💰 +${prizePool} ETB collected!`, 'success');
+}
+
+function closeWinOverlay() {
+  document.getElementById('win-overlay').classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════
+// SUSPENSION OVERLAY
 // ═══════════════════════════════════════════════════════
 function showSuspOverlay(msg) {
-  document.getElementById('susp-msg').textContent = msg || 'Your BINGO claim was invalid. One card suspended for this round.';
+  document.getElementById('susp-msg').textContent = msg;
   document.getElementById('susp-overlay').classList.add('show');
 }
 
@@ -1522,123 +2084,95 @@ function closeSuspOverlay() {
 }
 
 // ═══════════════════════════════════════════════════════
-// WALLET
-// ═══════════════════════════════════════════════════════
-function updateWalletStats() {
-  document.getElementById('stat-wins').textContent = wins;
-  document.getElementById('stat-games').textContent = games;
-  document.getElementById('stat-susps').textContent = suspCount;
-  document.getElementById('stat-status').textContent = suspended ? '🔴' : '🟢';
-}
-
-function selAmount(amt) {
-  document.getElementById('dep-amount').value = amt;
-}
-
-function submitDeposit() {
-  const amount = parseInt(document.getElementById('dep-amount').value) || 100;
-  const txid = document.getElementById('txid-input').value.trim().toUpperCase();
-  
-  if(!txid||txid.length<4){toast('❌ Please enter Transaction ID','error');return;}
-  if(amount<10){toast('❌ Minimum deposit 10 ETB','error');return;}
-  
-  if(txid==='DEMO123') {
-    balance += amount;
-    updateBalanceDisplay();
-    toast(`✅ ${amount} ETB credited!`,'success');
-    document.getElementById('txid-input').value='';
-  } else {
-    toast(`📋 Deposit pending review`,'info');
-  }
-}
-
-function setWithdraw(v){document.getElementById('withdraw-amount').value=v;}
-function setWithdrawAll(){setWithdraw(balance);}
-
-function doWithdraw(){
-  const amt=parseInt(document.getElementById('withdraw-amount').value);
-  if(!amt||amt<100){toast('Minimum withdrawal is 100 ETB','error');return;}
-  if(amt>balance){toast('Insufficient balance!','error');return;}
-  balance-=amt;
-  updateBalanceDisplay();
-  toast(`✅ Withdrawal of ${amt} ETB requested!`,'success');
-  document.getElementById('withdraw-amount').value='';
-}
-
-// ═══════════════════════════════════════════════════════
-// ADMIN (Admin only)
-// ═══════════════════════════════════════════════════════
-let currentFilter='all';
-function loadAdmin(){
-  if(!isAdmin) {
-    toast('Admin access only','error');
-    switchTab('game');
-    return;
-  }
-  // Load admin data here
-}
-
-function filterDep(f,btn){
-  if(!isAdmin) return;
-  currentFilter=f;
-  document.querySelectorAll('.ftab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-}
-
-// ═══════════════════════════════════════════════════════
 // TOAST & CONFETTI
 // ═══════════════════════════════════════════════════════
 let toastTimer;
-function toast(msg, type='info') {
+function showToast(msg, type = 'info') {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = 'show' + (type==='error'?' error':type==='success'?' success':'');
+  el.className = 'show' + (type === 'error' ? ' error' : type === 'success' ? ' success' : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = ''; }, 2800);
+  toastTimer = setTimeout(() => {
+    el.className = '';
+  }, 2800);
 }
 
 function launchConfetti() {
   const canvas = document.getElementById('confetti');
-  canvas.width = innerWidth; canvas.height = innerHeight;
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
   const ctx = canvas.getContext('2d');
-  const pieces = Array.from({length:180},()=>({
-    x:Math.random()*innerWidth, y:-20-Math.random()*80,
-    w:5+Math.random()*9, h:3+Math.random()*5,
-    color:['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c084fc','#fff'][Math.floor(Math.random()*6)],
-    vx:(Math.random()-.5)*4, vy:2+Math.random()*3.5,
-    angle:Math.random()*Math.PI*2, va:(Math.random()-.5)*0.2,
+  
+  const pieces = Array.from({ length: 150 }, () => ({
+    x: Math.random() * canvas.width,
+    y: -20 - Math.random() * 80,
+    w: 5 + Math.random() * 8,
+    h: 3 + Math.random() * 5,
+    color: ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#c084fc'][Math.floor(Math.random() * 5)],
+    vx: (Math.random() - 0.5) * 3,
+    vy: 2 + Math.random() * 3,
+    angle: Math.random() * Math.PI * 2,
+    va: (Math.random() - 0.5) * 0.02
   }));
+  
   let frame;
-  (function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    let alive=false;
-    pieces.forEach(p=>{
-      p.x+=p.vx;p.y+=p.vy;p.angle+=p.va;p.vy+=0.06;
-      if(p.y<canvas.height+10)alive=true;
-      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.angle);
-      ctx.fillStyle=p.color;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore();
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+    
+    pieces.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.angle += p.va;
+      p.vy += 0.02;
+      
+      if (p.y < canvas.height + 20) alive = true;
+      
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
     });
-    if(alive)frame=requestAnimationFrame(draw);
-  })();
+    
+    if (alive) {
+      frame = requestAnimationFrame(draw);
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+  
+  draw();
+  
+  setTimeout(() => {
+    cancelAnimationFrame(frame);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }, 5000);
 }
 
 // ═══════════════════════════════════════════════════════
 // TELEGRAM WEB APP
 // ═══════════════════════════════════════════════════════
-const tg=window.Telegram?.WebApp;
-if(tg){tg.ready();tg.expand();}
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+}
 
 // ═══════════════════════════════════════════════════════
-// BOOT
+// INITIALIZATION
 // ═══════════════════════════════════════════════════════
-document.getElementById('auto-track').classList.add('on');
-updateBalanceDisplay();
-
-// Initialize cards on first load
-initAvailableCards();
-
-// Connect WebSocket for real-time updates
-connectWebSocket();
+document.addEventListener('DOMContentLoaded', () => {
+  updateBalanceDisplay();
+  document.getElementById('stat-wins').textContent = wins;
+  document.getElementById('stat-games').textContent = games;
+  document.getElementById('deposit-amount').value = 100;
+  
+  initAvailableCards();
+  renderPatternsPage();
+  connectWebSocket();
+});
 </script>
 </body>
 </html>
