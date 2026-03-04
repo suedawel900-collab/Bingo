@@ -4,7 +4,7 @@
     <title>MK-BINGO - ቢንጎ ጨዋታ</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        /* Keep all your existing CSS styles */
+        /* Keep all your existing CSS styles - same as before */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: Arial, sans-serif;
@@ -839,9 +839,10 @@
         let autoStartSeconds = AUTO_START_DELAY;
         let winningCardTimeout = null;
         
-        // New state for suspended players
+        // New state for suspended players and cards
         let suspended = false;
         let suspendedPlayers = {};
+        let suspendedCards = new Set(); // card IDs that are suspended
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -953,6 +954,11 @@
                 const miniCard = document.createElement('div');
                 miniCard.className = 'mini-card';
                 
+                // Check if card is suspended
+                if (suspendedCards.has(parseInt(cardId))) {
+                    miniCard.classList.add('suspended-card');
+                }
+                
                 // Check if player is suspended
                 if (suspended) {
                     miniCard.classList.add('suspended-card');
@@ -1006,7 +1012,7 @@
                         }
                         
                         // Add click handler for manual marking
-                        if (!suspended && gameStarted && num !== 'FREE' && !markedNumbers.includes(parseInt(num))) {
+                        if (!suspended && !suspendedCards.has(parseInt(cardId)) && gameStarted && num !== 'FREE' && !markedNumbers.includes(parseInt(num))) {
                             cell.onclick = (e) => {
                                 e.stopPropagation();
                                 const num = parseInt(e.target.dataset.number);
@@ -1021,12 +1027,12 @@
                 
                 miniCard.appendChild(grid);
                 
-                // Add click handler to check bingo on this card (only if not suspended)
+                // Add click handler to check bingo on this card
                 miniCard.onclick = (e) => {
-                    if (gameStarted && !suspended && !e.target.classList.contains('mini-bingo-cell')) {
+                    if (gameStarted && !suspended && !suspendedCards.has(parseInt(cardId)) && !e.target.classList.contains('mini-bingo-cell')) {
                         checkBingoForCard(parseInt(cardId));
-                    } else if (suspended) {
-                        showMessage('እርስዎ ተከልክለዋል! ቀጣዩ ዙር ይጠብቁ', 'warning');
+                    } else if (suspended || suspendedCards.has(parseInt(cardId))) {
+                        showMessage('ይህ ካርድ ተከልክሏል!', 'warning');
                     }
                 };
                 
@@ -1043,6 +1049,11 @@
             
             if (suspended) {
                 showMessage('እርስዎ ተከልክለዋል!', 'error');
+                return;
+            }
+            
+            if (suspendedCards.has(cardId)) {
+                showMessage(`ካርድ ${cardId} ተከልክሏል!`, 'error');
                 return;
             }
             
@@ -1118,22 +1129,6 @@
             titleEl.innerHTML = `🏆 አሸናፊ ካርድ #${cardId} 🏆`;
             container.innerHTML = '';
             
-            let winningRow = -1;
-            for (let row = 0; row < 5; row++) {
-                let rowComplete = true;
-                for (let col = 0; col < 5; col++) {
-                    const val = cardGrid[col][row];
-                    if (val !== 'FREE' && !called.includes(parseInt(val))) {
-                        rowComplete = false;
-                        break;
-                    }
-                }
-                if (rowComplete) {
-                    winningRow = row;
-                    break;
-                }
-            }
-            
             for (let row = 0; row < 5; row++) {
                 for (let col = 0; col < 5; col++) {
                     const cell = document.createElement('div');
@@ -1146,9 +1141,6 @@
                     }
                     if (called.includes(parseInt(val))) {
                         cell.classList.add('marked');
-                    }
-                    if (row === winningRow) {
-                        cell.classList.add('winning-row');
                     }
                     container.appendChild(cell);
                 }
@@ -1165,7 +1157,11 @@
         function checkBingoForCard(cardId) {
             if (!gameStarted) return false;
             if (suspended) {
-                showMessage('እርስዎ ተከልክለዋል! ቀጣዩ ዙር ይጠብቁ', 'warning');
+                showMessage('እርስዎ ተከልክለዋል!', 'warning');
+                return false;
+            }
+            if (suspendedCards.has(cardId)) {
+                showMessage(`ካርድ ${cardId} ተከልክሏል!`, 'warning');
                 return false;
             }
             
@@ -1197,38 +1193,34 @@
                 return;
             }
             if (suspended) {
-                showMessage('እርስዎ ተከልክለዋል! ቀጣዩ ዙር ይጠብቁ', 'warning');
+                showMessage('እርስዎ ተከልክለዋል!', 'warning');
                 return;
             }
             
-            // Check all cards for bingo
+            // Check all active cards for bingo
+            let foundWinner = false;
             for (let cardId of myCardIds) {
-                if (checkBingoForCard(cardId)) {
-                    return;
+                if (!suspendedCards.has(cardId) && checkBingoForCard(cardId)) {
+                    foundWinner = true;
+                    break;
                 }
             }
             
-            // If we get here, player clicked BINGO but has no complete line
-            showMessage('❌ የተሟላ መስመር የለም! እርስዎ ተከልክለዋል', 'error');
-            
-            // Suspend the player (local)
-            suspended = true;
-            
-            // Notify server that this player made a false claim
-            ws.send(JSON.stringify({
-                type: 'false_bingo',
-                player_id: userId
-            }));
-            
-            // Update UI
-            document.getElementById('bingo-btn').disabled = true;
-            renderAllCards();
-            updatePlayersList();
+            if (!foundWinner) {
+                // If we get here, player clicked BINGO but has no complete line
+                showMessage('❌ የተሟላ መስመር የለም! አንድ ካርድ ይታገዳል', 'error');
+                
+                // Notify server of false bingo
+                ws.send(JSON.stringify({
+                    type: 'false_bingo',
+                    card_id: null // Let server pick random card
+                }));
+            }
         }
         
         // Claim BINGO
         function claimBingo(cardId) {
-            if (suspended) return;
+            if (suspended || suspendedCards.has(cardId)) return;
             showMessage('🎯 ቢንጎ ተጠይቋል! እየተረጋገጠ ነው...', 'info');
             ws.send(JSON.stringify({
                 type: 'claim_bingo',
@@ -1369,10 +1361,29 @@
                         showMessage(data.message, 'warning');
                         if (data.new_status) {
                             suspended = data.new_status.fully_suspended || false;
+                            // Update suspended cards
+                            if (data.new_status.suspended_cards) {
+                                suspendedCards.clear();
+                                data.new_status.suspended_cards.forEach(card => {
+                                    suspendedCards.add(card.card_id);
+                                });
+                            }
                         }
-                        document.getElementById('bingo-btn').disabled = true;
+                        document.getElementById('bingo-btn').disabled = suspended;
+                        renderAllCards();
                     } else {
                         showMessage(data.message, 'error');
+                    }
+                }
+                else if (data.type === 'card_suspended') {
+                    if (data.user_id === userId) {
+                        suspendedCards.add(data.suspended_card_id);
+                        showMessage(data.message, 'warning');
+                        if (data.remaining_cards === 0) {
+                            suspended = true;
+                            document.getElementById('bingo-btn').disabled = true;
+                        }
+                        renderAllCards();
                     }
                 }
                 else if (data.type === 'player_suspended') {
@@ -1380,7 +1391,7 @@
                     if (data.user_id === userId) {
                         suspended = true;
                         document.getElementById('bingo-btn').disabled = true;
-                        showMessage('⛔ የውሸት ቢንጎ ምክንያት ተከልክለዋል!', 'error');
+                        showMessage('⛔ ተከልክለዋል!', 'error');
                     }
                     // Update suspended players list
                     if (data.suspended_players) {
@@ -1388,15 +1399,6 @@
                     }
                     updatePlayersList();
                     renderAllCards();
-                }
-                else if (data.type === 'card_suspended') {
-                    if (data.user_id === userId) {
-                        showMessage(data.message, 'warning');
-                        if (data.remaining_cards === 0) {
-                            suspended = true;
-                            document.getElementById('bingo-btn').disabled = true;
-                        }
-                    }
                 }
                 else if (data.type === 'game_won') {
                     gameStarted = false;
@@ -1431,7 +1433,6 @@
                         winnerDiv.style.display = 'none';
                         currentWinnerCardId = null;
                         currentWinners = null;
-                        suspended = false;
                         renderAllCards();
                     }, 10000);
                 }
@@ -1445,6 +1446,7 @@
                     currentWinners = null;
                     suspended = false;
                     suspendedPlayers = {};
+                    suspendedCards.clear();
                     
                     document.getElementById('winning-card-section').style.display = 'none';
                     if (winningCardTimeout) {
@@ -1623,8 +1625,10 @@
                     // Add click handler for manual marking from called numbers list
                     if (gameStarted && !suspended) {
                         badge.onclick = () => {
-                            // Find first card that has this number
+                            // Find first active card that has this number
                             for (let cardId of myCardIds) {
+                                if (suspendedCards.has(cardId)) continue;
+                                
                                 const card = myCards[cardId];
                                 for (let col = 0; col < 5; col++) {
                                     for (let row = 0; row < 5; row++) {
@@ -1639,7 +1643,7 @@
                                     }
                                 }
                             }
-                            showMessage(`ቁጥር ${num} በካርዶችዎ ላይ የለም`, 'warning');
+                            showMessage(`ቁጥር ${num} በንቃት ካርዶችዎ ላይ የለም`, 'warning');
                         };
                     }
                     
