@@ -615,7 +615,7 @@ body{
   text-align:center;
 }
 
-/* ══ ADMIN SCREEN (Admin only) with Approve/Reject Buttons ══ */
+/* ══ ADMIN SCREEN (Admin only) with Game Controls ══ */
 .admin-container{padding:16px;}
 .admin-stats-grid{
   display:grid;
@@ -677,6 +677,80 @@ body{
 }
 .admin-section-title:first-of-type{
   margin-top:0;
+}
+
+/* Game Control Card */
+.admin-control-card{
+  background:var(--surface2);
+  border-radius:12px;
+  padding:16px;
+  margin-bottom:20px;
+  border:2px solid #4d96ff;
+}
+.admin-control-title{
+  font-size:1rem;
+  font-weight:700;
+  color:#4d96ff;
+  margin-bottom:12px;
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+.admin-control-row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:10px;
+}
+.admin-control-select{
+  flex:1;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:8px;
+  color:var(--text);
+  padding:10px;
+  font-size:0.9rem;
+  font-family:'IBM Plex Mono',monospace;
+  outline:none;
+}
+.admin-control-select:focus{
+  border-color:#4d96ff;
+}
+.admin-control-buttons{
+  display:flex;
+  gap:10px;
+  margin-top:10px;
+}
+.admin-start-btn{
+  flex:1;
+  background:linear-gradient(135deg,#4d96ff,#7c3aed);
+  border:none;
+  color:#fff;
+  padding:12px;
+  border-radius:8px;
+  font-weight:700;
+  font-size:0.9rem;
+  cursor:pointer;
+  transition:all 0.15s;
+}
+.admin-start-btn:hover{
+  transform:translateY(-2px);
+  box-shadow:0 4px 12px rgba(77,150,255,0.3);
+}
+.admin-apply-btn{
+  flex:1;
+  background:var(--surface);
+  border:1px solid #4d96ff;
+  color:#4d96ff;
+  padding:12px;
+  border-radius:8px;
+  font-weight:700;
+  font-size:0.9rem;
+  cursor:pointer;
+  transition:all 0.15s;
+}
+.admin-apply-btn:hover{
+  background:rgba(77,150,255,0.1);
 }
 
 /* Payment Cards with Approve/Reject Buttons */
@@ -814,20 +888,6 @@ body{
 .admin-reject-btn:hover{
   background:rgba(239,68,68,0.25);
   border-color:#ef4444;
-}
-.admin-view-btn{
-  background:rgba(77,150,255,0.15);
-  border:1px solid rgba(77,150,255,0.3);
-  color:#4d96ff;
-  padding:10px;
-  border-radius:8px;
-  font-weight:700;
-  font-size:0.85rem;
-  cursor:pointer;
-  text-align:center;
-}
-.admin-view-btn:hover{
-  background:rgba(77,150,255,0.25);
 }
 
 /* History Section */
@@ -1280,7 +1340,7 @@ canvas#confetti{
   </div>
 </div>
 
-<!-- ═══════ ADMIN SCREEN (Admin only) with Approve/Reject Buttons ═══════ -->
+<!-- ═══════ ADMIN SCREEN (Admin only) with Game Controls ═══════ -->
 <div class="screen" id="screen-admin">
   <div class="admin-container">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">
@@ -1301,6 +1361,50 @@ canvas#confetti{
       <div class="admin-stat-box">
         <div class="admin-stat-value" id="admin-users">0</div>
         <div class="admin-stat-label">👥 Players</div>
+      </div>
+    </div>
+    
+    <!-- Game Control Card -->
+    <div class="admin-control-card">
+      <div class="admin-control-title">
+        <span>🎮 Game Control</span>
+      </div>
+      <div class="admin-control-row">
+        <select id="admin-room-select" class="admin-control-select">
+          <option value="1">Room 1 (50 ETB)</option>
+          <option value="2">Room 2 (100 ETB)</option>
+          <option value="3">Room 3 (200 ETB)</option>
+        </select>
+        <select id="admin-pattern-select" class="admin-control-select">
+          <option value="any_line">Any Line</option>
+          <option value="any_row">Any Row</option>
+          <option value="any_col">Any Column</option>
+          <option value="diag_tl">Diagonal TL→BR</option>
+          <option value="diag_tr">Diagonal TR→BL</option>
+          <option value="full_house">Full House</option>
+          <option value="four_corners">Four Corners</option>
+          <option value="x_pattern">X Pattern</option>
+          <option value="plus_pattern">Plus Pattern</option>
+          <option value="t_pattern">T Pattern</option>
+          <option value="l_pattern">L Pattern</option>
+          <option value="u_pattern">U Pattern</option>
+          <option value="frame">Frame</option>
+          <option value="blackout">Blackout</option>
+          <option value="two_rows">Two Rows</option>
+          <option value="two_cols">Two Columns</option>
+          <option value="top_bottom">Top & Bottom</option>
+          <option value="center_col">Center Column</option>
+          <option value="b_o_cols">B & O Columns</option>
+          <option value="six_pack">Six Pack</option>
+        </select>
+      </div>
+      <div class="admin-control-buttons">
+        <button class="admin-apply-btn" onclick="adminSetRoomSettings()">
+          ⚙️ Apply Settings
+        </button>
+        <button class="admin-start-btn" onclick="adminStartGame()">
+          🎮 Start Game Now
+        </button>
       </div>
     </div>
     
@@ -2541,6 +2645,71 @@ async function rejectWithdrawal(requestId) {
     }
   } catch (error) {
     console.error('Reject withdrawal error:', error);
+    showToast('❌ Network error', 'error');
+  }
+}
+
+// Admin Game Control Functions
+async function adminStartGame() {
+  const roomId = document.getElementById('admin-room-select').value;
+  
+  if (!confirm(`Start game in Room ${roomId}?`)) return;
+  
+  try {
+    const response = await fetch('/api/admin/start-game', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        admin_id: userId,
+        game_id: parseInt(roomId)
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(`✅ Game started in Room ${roomId}!`, 'success');
+      
+      // Switch to game tab
+      switchTab('game');
+    } else {
+      showToast(`❌ ${data.message || 'Failed to start game'}`, 'error');
+    }
+  } catch (error) {
+    console.error('Start game error:', error);
+    showToast('❌ Network error', 'error');
+  }
+}
+
+async function adminSetRoomSettings() {
+  const roomId = document.getElementById('admin-room-select').value;
+  const pattern = document.getElementById('admin-pattern-select').value;
+  
+  try {
+    const response = await fetch('/api/admin/set-room-settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        admin_id: userId,
+        game_id: parseInt(roomId),
+        pattern: pattern
+        // price is optional - will use default if not specified
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast(`✅ Room ${roomId} settings updated!`, 'success');
+    } else {
+      showToast(`❌ ${data.message || 'Failed to update settings'}`, 'error');
+    }
+  } catch (error) {
+    console.error('Set settings error:', error);
     showToast('❌ Network error', 'error');
   }
 }
