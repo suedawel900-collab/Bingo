@@ -38,6 +38,9 @@ body{
 .tab.active{color:#4d96ff;border-bottom-color:#4d96ff;}
 .tab-icon{display:block;font-size:1.3rem;margin-bottom:2px;}
 
+/* Admin tab - hidden by default */
+.tab.admin-tab{display:none;}
+
 /* ══ SCROLL CONTAINER ══ */
 .screen{display:none;height:calc(100vh - 52px);overflow-y:auto;padding-bottom:20px;}
 .screen.active{display:block;}
@@ -88,6 +91,20 @@ body{
 .susp-icon{font-size:1.4rem;flex-shrink:0;}
 .susp-text{font-size:0.82rem;line-height:1.5;}
 .susp-text strong{color:var(--red);}
+
+/* ══ AUTO-START TIMER ══ */
+.auto-start-timer{
+  margin:0 16px 12px;padding:10px 16px;
+  background:rgba(77,150,255,0.15);border:1px solid rgba(77,150,255,0.3);
+  border-radius:12px;display:flex;align-items:center;gap:12px;
+  display:none;
+}
+.timer-icon{font-size:1.4rem;}
+.timer-text{font-size:0.9rem;font-weight:700;}
+.timer-seconds{
+  margin-left:auto;font-family:'IBM Plex Mono',monospace;
+  font-size:1.4rem;font-weight:700;color:#4d96ff;
+}
 
 /* ══ CALL SECTION ══ */
 .call-section{margin:0 16px 16px;text-align:center;}
@@ -231,7 +248,7 @@ body{
   to{box-shadow:0 0 20px rgba(255,107,107,0.8);}
 }
 
-/* ══ CARD SELECTION SCREEN ══ */
+/* ══ CARD SELECTION SCREEN (100×10 grid) ══ */
 .select-container{padding:16px;}
 .step-header{text-align:center;margin-bottom:24px;}
 .step-title{
@@ -278,30 +295,67 @@ body{
 .id-chip .remove:hover{color:var(--red);}
 .empty-sel{color:var(--muted);font-size:0.82rem;font-style:italic;}
 
+/* 100×10 Grid for card selection */
 .available-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));
-  gap:14px;margin-bottom:24px;
+  display:grid;
+  grid-template-columns:repeat(10, 1fr);
+  gap:4px;
+  margin-bottom:24px;
+  max-height:400px;
+  overflow-y:auto;
+  padding:4px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
 }
 .card-option{
-  background:var(--surface);border:2px solid var(--border);border-radius:14px;
-  padding:14px;cursor:pointer;transition:all 0.2s;
-  display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;
+  aspect-ratio:1;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:6px 2px;
+  cursor:pointer;
+  transition:all 0.2s;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:2px;
+  position:relative;
+  font-size:0.7rem;
 }
 .card-option:hover{border-color:rgba(77,150,255,0.45);background:rgba(77,150,255,0.05);transform:translateY(-2px);}
 .card-option.selected{border-color:#4d96ff;background:rgba(77,150,255,0.1);transform:translateY(-2px);}
 .card-option.selected .sel-check{display:flex;}
-.card-id-label{font-family:'IBM Plex Mono',monospace;font-size:0.9rem;font-weight:700;color:var(--gold);letter-spacing:0.07em;}
-.card-mini-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;width:100%;}
+.card-id-label{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:0.65rem;
+  font-weight:700;
+  color:var(--gold);
+  letter-spacing:0.05em;
+}
+.card-mini-grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:1px;
+  width:100%;
+}
 .mc{
-  aspect-ratio:1;border-radius:3px;background:var(--surface2);
-  display:flex;align-items:center;justify-content:center;
-  font-size:0.32rem;font-weight:700;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,0.3);
+  aspect-ratio:1;
+  border-radius:2px;
+  background:rgba(255,255,255,0.1);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:0.25rem;
+  font-weight:700;
+  font-family:'IBM Plex Mono',monospace;
+  color:rgba(255,255,255,0.5);
 }
 .mc.free{background:rgba(107,203,119,0.3);color:#6bcb77;}
 .sel-check{
-  display:none;position:absolute;top:-8px;right:-8px;
-  width:22px;height:22px;border-radius:50%;background:#4d96ff;
-  align-items:center;justify-content:center;font-size:0.7rem;font-weight:900;
+  display:none;position:absolute;top:-4px;right:-4px;
+  width:16px;height:16px;border-radius:50%;background:#4d96ff;
+  align-items:center;justify-content:center;font-size:0.5rem;font-weight:900;
   border:2px solid var(--bg);
 }
 .btn-confirm{
@@ -357,8 +411,19 @@ body{
 .stat-val{font-family:'IBM Plex Mono',monospace;font-size:1.5rem;font-weight:700;color:var(--text);}
 .stat-lbl{font-size:0.7rem;color:var(--muted);text-transform:uppercase;margin-top:4px;}
 
-.withdraw-form{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;}
-.withdraw-title{font-weight:900;margin-bottom:12px;}
+.deposit-section{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;
+}
+.deposit-title{font-weight:900;margin-bottom:12px;}
+.account-box{
+  background:rgba(0,166,81,0.08);border:1px solid rgba(0,166,81,0.25);border-radius:10px;
+  padding:12px;text-align:center;margin-bottom:12px;
+}
+.account-label{font-size:0.8rem;color:var(--muted);}
+.account-number{
+  font-family:'IBM Plex Mono',monospace;font-size:1.8rem;font-weight:700;
+  color:var(--telebirr);letter-spacing:0.1em;
+}
 .amount-input{
   width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;
   color:var(--text);padding:12px 16px;font-size:1.1rem;font-family:'IBM Plex Mono',monospace;
@@ -372,6 +437,16 @@ body{
   font-family:'IBM Plex Mono',monospace;font-size:0.82rem;font-weight:700;transition:all 0.15s;
 }
 .preset-btn:active{background:rgba(77,150,255,0.15);color:#4d96ff;border-color:rgba(77,150,255,0.3);}
+.deposit-btn{
+  width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;
+  background:linear-gradient(135deg,#00a651,#008542);color:#fff;
+  font-family:'Boogaloo',cursive;font-size:1.3rem;letter-spacing:0.04em;
+  transition:all 0.15s;
+}
+.deposit-btn:active{transform:scale(0.97);}
+
+.withdraw-form{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;}
+.withdraw-title{font-weight:900;margin-bottom:12px;}
 .withdraw-btn{
   width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;
   background:linear-gradient(135deg,#10b981,#059669);color:#fff;
@@ -381,7 +456,7 @@ body{
 .withdraw-btn:active{transform:scale(0.97);}
 .withdraw-note{font-size:0.72rem;color:var(--muted);margin-top:8px;text-align:center;}
 
-/* ══ ADMIN SCREEN ══ */
+/* ══ ADMIN SCREEN (Admin only) ══ */
 .admin-container{padding:16px;}
 .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px;}
 .stat-box2{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;text-align:center;}
@@ -460,6 +535,15 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
 <body>
 <canvas id="confetti"></canvas>
 
+<!-- Template data for backend integration -->
+<div id="template-data" 
+     data-user-id="{{ user_id }}" 
+     data-game-id="{{ game_id }}"
+     data-price="{{ price_per_card }}"
+     data-max-cards="{{ max_cards }}"
+     data-is-admin="{{ is_admin }}"
+     style="display:none;"></div>
+
 <!-- ═══════ TAB BAR ═══════ -->
 <div class="tab-bar">
   <div class="tab active" id="tab-game" onclick="switchTab('game')">
@@ -474,7 +558,7 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
   <div class="tab" id="tab-select" onclick="switchTab('select')">
     <span class="tab-icon">🃏</span>CARDS
   </div>
-  <div class="tab" id="tab-admin" onclick="switchTab('admin')">
+  <div class="tab admin-tab" id="tab-admin" onclick="switchTab('admin')">
     <span class="tab-icon">⚙️</span>ADMIN
   </div>
 </div>
@@ -484,7 +568,7 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
   <!-- Top bar -->
   <div class="topbar">
     <div class="logo">🎱 MK BINGO</div>
-    <div class="bal-pill" onclick="switchTab('wallet')">💰 <span id="bal-val">1000</span> ETB</div>
+    <div class="bal-pill" onclick="switchTab('wallet')">💰 <span id="bal-val">{{ initial_balance }}</span> ETB</div>
   </div>
 
   <!-- Suspension banner -->
@@ -497,18 +581,25 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
     </div>
   </div>
 
+  <!-- Auto-start timer -->
+  <div class="auto-start-timer" id="auto-start-timer">
+    <span class="timer-icon">⏱️</span>
+    <span class="timer-text">Game starts in</span>
+    <span class="timer-seconds" id="timer-seconds">30</span>
+  </div>
+
   <!-- Room + pattern info -->
   <div class="room-bar">
     <div class="room-bar-row">
       <div class="pattern-badge" onclick="openPatternModal()">
-        🎯 <span id="pattern-name-short">Any Line</span> ▾
+        🎯 <span id="pattern-name-short">{{ pattern_name }}</span> ▾
       </div>
       <div class="prize-badge">🏆 <span id="prize-val">200</span> ETB</div>
     </div>
     <div class="pattern-hint" id="pattern-hint-text">Complete any single line — row, column, or diagonal.</div>
   </div>
 
-  <!-- Current call (click to call number) -->
+  <!-- Current call -->
   <div class="call-section">
     <div class="call-box" onclick="callNumber()">
       <div class="call-display">
@@ -543,7 +634,7 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
   <div class="cards-section">
     <div class="section-title">
       <span>My Cards (<span id="card-count">0</span>)</span>
-      <span class="add-card-mini" onclick="addCard()">+ Add Card (50 ETB)</span>
+      <span class="add-card-mini" onclick="addCard()">+ Add Card ({{ price_per_card }} ETB)</span>
     </div>
     <div class="cards-grid" id="cards-grid">
       <div style="color:var(--muted);font-size:0.85rem;padding:20px 0;grid-column:1/-1;text-align:center">
@@ -553,12 +644,12 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
   </div>
 </div>
 
-<!-- ═══════ CARD SELECTION SCREEN ═══════ -->
+<!-- ═══════ CARD SELECTION SCREEN (100×10 grid) ═══════ -->
 <div class="screen" id="screen-select">
   <div class="select-container">
     <div class="step-header">
       <div class="step-title">🃏 Choose Your Cards</div>
-      <div class="step-sub">Each card 50 ETB · Max 8 cards · Pick your win pattern below</div>
+      <div class="step-sub">Each card {{ price_per_card }} ETB · Max {{ max_cards }} cards</div>
     </div>
 
     <!-- Pattern selector -->
@@ -593,7 +684,7 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
       </div>
     </div>
 
-    <!-- Available cards -->
+    <!-- Available cards - 100×10 grid -->
     <div class="available-grid" id="available-grid"></div>
     <button class="btn-confirm" id="confirm-btn" onclick="confirmSelection()" disabled>▶ Play With Selected Cards</button>
   </div>
@@ -613,12 +704,12 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
 <div class="screen" id="screen-wallet">
   <div class="topbar">
     <div class="logo">💰 Wallet</div>
-    <div class="bal-pill">💰 <span id="bal-val2">1000</span> ETB</div>
+    <div class="bal-pill">💰 <span id="bal-val2">{{ initial_balance }}</span> ETB</div>
   </div>
   <div class="wallet-section">
     <div class="wallet-card">
       <div class="wallet-balance-lbl">Available Balance</div>
-      <div class="wallet-balance"><span id="wallet-bal">1000</span> <span class="wallet-balance-unit">ETB</span></div>
+      <div class="wallet-balance"><span id="wallet-bal">{{ initial_balance }}</span> <span class="wallet-balance-unit">ETB</span></div>
     </div>
 
     <div class="stat-row">
@@ -640,22 +731,23 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
       </div>
     </div>
 
-    <!-- Deposit section -->
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;">
-      <div style="font-weight:900;margin-bottom:12px;">📱 Deposit via Telebirr</div>
-      <div style="background:rgba(0,166,81,0.08);border:1px solid rgba(0,166,81,0.25);border-radius:10px;padding:12px;text-align:center;margin-bottom:12px;">
-        <div style="font-size:0.8rem;color:var(--muted)">Send to:</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:1.8rem;font-weight:700;color:var(--telebirr);letter-spacing:0.1em;">0983994214</div>
+    <!-- Deposit section - Updated numbers -->
+    <div class="deposit-section">
+      <div class="deposit-title">📱 Deposit</div>
+      <div class="account-box">
+        <div class="account-label">Telebirr / CBE Birr</div>
+        <div class="account-number">0982372677</div>
       </div>
       <div class="amount-presets" style="margin-bottom:8px;">
         <button class="preset-btn" onclick="selAmount(50)">50</button>
         <button class="preset-btn" onclick="selAmount(100)">100</button>
         <button class="preset-btn" onclick="selAmount(200)">200</button>
         <button class="preset-btn" onclick="selAmount(500)">500</button>
+        <button class="preset-btn" onclick="selAmount(1000)">1000</button>
       </div>
       <input class="amount-input" id="dep-amount" placeholder="Custom amount" type="number" min="10" style="margin-bottom:8px;">
       <input class="amount-input" id="txid-input" placeholder="Transaction ID (DEMO123 for test)" style="margin-bottom:8px;">
-      <button class="withdraw-btn" style="background:var(--telebirr);" onclick="submitDeposit()">✅ Verify & Deposit</button>
+      <button class="deposit-btn" onclick="submitDeposit()">✅ Verify & Deposit</button>
     </div>
 
     <!-- Withdraw section -->
@@ -669,12 +761,12 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
         <button class="preset-btn" onclick="setWithdrawAll()">ALL</button>
       </div>
       <button class="withdraw-btn" onclick="doWithdraw()">💸 Withdraw</button>
-      <div class="withdraw-note">Minimum 100 ETB · Processed within 24 hours via Telebirr</div>
+      <div class="withdraw-note">Minimum 100 ETB · Processed within 24 hours</div>
     </div>
   </div>
 </div>
 
-<!-- ═══════ ADMIN SCREEN ═══════ -->
+<!-- ═══════ ADMIN SCREEN (Admin only) ═══════ -->
 <div class="screen" id="screen-admin">
   <div class="admin-container">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">
@@ -683,8 +775,8 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
     </div>
     <div class="stats-grid">
       <div class="stat-box2"><div class="stat-val" id="s-pending" style="color:#f59e0b">2</div><div class="stat-lbl">⏳ Pending</div></div>
-      <div class="stat-box2"><div class="stat-val" id="s-total" style="color:#10b981">700</div><div class="stat-lbl">ETB Deposited</div></div>
-      <div class="stat-box2"><div class="stat-val" id="s-users" style="color:#3b82f6">24</div><div class="stat-lbl">👥 Players</div></div>
+      <div class="stat-box2"><div class="stat-val" id="s-total" style="color:#10b981">0</div><div class="stat-lbl">ETB Deposited</div></div>
+      <div class="stat-box2"><div class="stat-val" id="s-users" style="color:#3b82f6">0</div><div class="stat-lbl">👥 Players</div></div>
     </div>
     <div class="filter-tabs">
       <button class="ftab active" onclick="filterDep('all',this)">All</button>
@@ -735,13 +827,27 @@ canvas#confetti{position:fixed;inset:0;pointer-events:none;z-index:600;}
 // ═══════════════════════════════════════════════════════
 // CONSTANTS & DATA
 // ═══════════════════════════════════════════════════════
+const templateData = document.getElementById('template-data');
+const userId = templateData ? parseInt(templateData.dataset.userId) : 1;
+const gameId = templateData ? parseInt(templateData.dataset.gameId) : 1;
+const pricePerCard = templateData ? parseFloat(templateData.dataset.price) : 50;
+const maxCards = templateData ? parseInt(templateData.dataset.maxCards) : 8;
+const isAdmin = templateData ? templateData.dataset.isAdmin === 'True' : false;
+
+const CARD_COST = pricePerCard;
+const MAX_CARDS = maxCards;
+const AUTO_START_DELAY = 30;
+const AUTO_CALL_INTERVAL = 3000; // 3 seconds
+
 const LETTERS = ['B','I','N','G','O'];
 const COLORS  = {B:'#ff6b6b',I:'#ffd93d',N:'#6bcb77',G:'#4d96ff',O:'#c084fc'};
 const RANGES  = [[1,15],[16,30],[31,45],[46,60],[61,75]];
-const CARD_COST = 50;
-const MAX_CARDS = 8;
 const BASE_PRIZE = 200;
-const SUSPENSION_MS = 10 * 60 * 1000; // 10 minutes
+
+// Show/hide admin tab based on user role
+if (isAdmin) {
+  document.querySelector('.admin-tab').style.display = 'block';
+}
 
 // ── 20 Win Patterns ──
 const WIN_PATTERNS = [
@@ -822,26 +928,55 @@ const CHECKERS = {
 // ═══════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════
-let balance = 1000;
+let balance = {{ initial_balance }};
 let prizePool = BASE_PRIZE;
 let allAvailableCards = [];
 let selectedIds = [];
 let cards = [];        // [{id, card, marked, won, suspended, winLine}]
 let pool = [], called = [];
 let autoMark = true;
+let gameStarted = false;
 let gameOver = false;
 let suspended = false;
-let suspendedUntil = null;
-let suspendCount = 0;
-let activePatternId = 'any_line';
-let depAmount = 100;
+let suspendedCards = new Set();
 let wins = 0, games = 0, suspCount = 0;
-let deposits = [
-  {id:'d1',user:'Abebe 🇪🇹',amount:200,txid:'AB12CD34EF',status:'pending',note:'⏳ Awaiting admin review',time:'2 min ago'},
-  {id:'d2',user:'Tigist 🌟',amount:500,txid:'TG98XY12ZA',status:'auto_verified',note:'🔍 Receipt verified — awaiting final approval',time:'5 min ago'},
-  {id:'d3',user:'Dawit 🎯',amount:100,txid:'DW45MN78PQ',status:'approved',note:'✅ Approved by admin',time:'1 hr ago'},
-  {id:'d4',user:'Sara ✨',amount:50,txid:'SR22BB44CC',status:'rejected',note:'❌ Amount mismatch',time:'3 hr ago'},
-];
+let activePatternId = 'any_line';
+let autoStartTimer = null;
+let autoStartSeconds = AUTO_START_DELAY;
+let autoCallInterval = null;
+let totalCardsSold = 0;
+let players = [];
+
+// WebSocket connection (if using real-time)
+let ws = null;
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/${gameId}/${userId}`;
+    ws = new WebSocket(wsUrl);
+    
+    ws.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        handleWebSocketMessage(data);
+    };
+}
+
+function handleWebSocketMessage(data) {
+    switch(data.type) {
+        case 'number_called':
+            handleNumberCalled(data.number);
+            break;
+        case 'game_won':
+            triggerWin(data.winners[0]);
+            break;
+        case 'card_suspended':
+            handleCardSuspended(data);
+            break;
+        case 'player_joined':
+            players = data.players;
+            updatePlayersList();
+            break;
+    }
+}
 
 // ═══════════════════════════════════════════════════════
 // HELPERS
@@ -857,10 +992,6 @@ function generateCardData(){
   c[2][2]=0;return c;
 }
 function getPattern(id){return WIN_PATTERNS.find(p=>p.id===id)||WIN_PATTERNS[4];}
-function checkSuspension(){
-  if(suspended&&suspendedUntil&&Date.now()>suspendedUntil){suspended=false;suspendedUntil=null;}
-}
-function isSuspended(){checkSuspension();return suspended;}
 function updateBalanceDisplay(){
   document.getElementById('bal-val').textContent=balance;
   document.getElementById('bal-val2').textContent=balance;
@@ -878,17 +1009,52 @@ function switchTab(tab) {
   
   if(tab==='select'){initAvailableCards();}
   if(tab==='patterns'){renderPatternsPage();}
-  if(tab==='admin'){loadAdmin();}
+  if(tab==='admin' && isAdmin){loadAdmin();}
   if(tab==='wallet'){updateWalletStats();}
 }
 
 // ═══════════════════════════════════════════════════════
-// CARD SELECTION
+// AUTO-START TIMER
+// ═══════════════════════════════════════════════════════
+function startAutoStartTimer() {
+  if (autoStartTimer) clearInterval(autoStartTimer);
+  autoStartSeconds = AUTO_START_DELAY;
+  document.getElementById('auto-start-timer').style.display = 'flex';
+  document.getElementById('timer-seconds').textContent = autoStartSeconds;
+  
+  autoStartTimer = setInterval(() => {
+    autoStartSeconds--;
+    document.getElementById('timer-seconds').textContent = autoStartSeconds;
+    
+    if (autoStartSeconds <= 0) {
+      clearInterval(autoStartTimer);
+      document.getElementById('auto-start-timer').style.display = 'none';
+      startGame();
+    }
+  }, 1000);
+}
+
+function startGame() {
+  gameStarted = true;
+  document.getElementById('bingo-btn').disabled = false;
+  document.getElementById('call-status').textContent = 'Game started!';
+  
+  // Start auto-calling numbers every 3 seconds
+  if (autoCallInterval) clearInterval(autoCallInterval);
+  autoCallInterval = setInterval(() => {
+    callNumber();
+  }, AUTO_CALL_INTERVAL);
+}
+
+// ═══════════════════════════════════════════════════════
+// CARD SELECTION (100×10 grid)
 // ═══════════════════════════════════════════════════════
 function initAvailableCards(){
   allAvailableCards=[];
   const used=new Set();
-  for(let i=0;i<20;i++){let id;do{id=randId();}while(used.has(id));used.add(id);allAvailableCards.push({id,card:generateCardData()});}
+  for(let i=1;i<=1000;i++){
+    allAvailableCards.push({id:i,card:generateCardData()});
+  }
   selectedIds=[];
   renderPatternPills();
   renderAvailable();
@@ -919,10 +1085,13 @@ function renderAvailable(){
     const div=document.createElement('div');
     div.className='card-option'+(isSel?' selected':'');
     div.onclick=()=>toggleSelect(entry.id);
+    
+    // Create mini card preview (5x5 grid)
     let mini='<div class="card-mini-grid">';
     for(let row=0;row<5;row++)for(let col=0;col<5;col++){const n=entry.card[col][row];mini+=`<div class="mc${n===0?' free':''}">${n===0?'★':n}</div>`;}
     mini+='</div>';
-    div.innerHTML=`<div class="sel-check">✓</div><div class="card-id-label">${entry.id}</div>${mini}<div style="font-size:0.7rem;color:var(--muted)">50 ETB</div>`;
+    
+    div.innerHTML=`<div class="sel-check">✓</div><div class="card-id-label">#${entry.id}</div>${mini}`;
     grid.appendChild(div);
   });
 }
@@ -945,7 +1114,7 @@ function updateSelSummary(){
   document.getElementById('confirm-btn').disabled=count===0;
   const el=document.getElementById('selected-ids');
   el.innerHTML=count===0?'<span class="empty-sel">None yet</span>':
-    selectedIds.map(id=>`<span class="id-chip">${id}<span class="remove" onclick="event.stopPropagation();toggleSelect('${id}')">✕</span></span>`).join('');
+    selectedIds.map(id=>`<span class="id-chip">#${id}<span class="remove" onclick="event.stopPropagation();toggleSelect(${id})">✕</span></span>`).join('');
 }
 
 function confirmSelection(){
@@ -964,18 +1133,19 @@ function confirmSelection(){
   
   pool=Array.from({length:75},(_,i)=>i+1);shuffle(pool);
   called=[];gameOver=false;suspended=false;
+  totalCardsSold = cards.length;
   
   updateBalanceDisplay();
   document.getElementById('win-overlay').classList.remove('show');
   document.getElementById('susp-banner').style.display='none';
-  document.getElementById('bingo-btn').disabled=false;
+  document.getElementById('bingo-btn').disabled=true; // Disabled until game starts
   
   // Reset call display
   document.getElementById('call-L').textContent='—';
   document.getElementById('call-L').style.color='rgba(255,255,255,0.2)';
   document.getElementById('call-N').textContent='?';
   document.getElementById('call-N').style.color='rgba(255,255,255,0.12)';
-  document.getElementById('call-status').textContent='Click to call';
+  document.getElementById('call-status').textContent='Game starts when 5 cards sold';
   document.getElementById('called-cnt').textContent='0';
   document.getElementById('chips-wrap').innerHTML='<span style="color:var(--muted);font-size:0.75rem;padding:4px 0">No numbers called yet</span>';
   
@@ -985,18 +1155,29 @@ function confirmSelection(){
   document.getElementById('pattern-hint-text').textContent=pat.hint;
   
   renderCardsGrid();
+  
+  // Check if 5 cards sold to start auto-timer
+  if (totalCardsSold >= 5 && !gameStarted) {
+    startAutoStartTimer();
+  }
+  
   switchTab('game');
-  toast(`🎱 ${cards.length} card${cards.length>1?'s':''} ready! Good luck!`,'success');
+  toast(`🎱 ${cards.length} card${cards.length>1?'s':''} ready!`,'success');
 }
 
 // ═══════════════════════════════════════════════════════
 // GAME ACTIONS
 // ═══════════════════════════════════════════════════════
 function callNumber(){
+  if(!gameStarted){
+    toast('Game not started yet!','warning');
+    return;
+  }
   if(gameOver||!pool.length){
     if(!pool.length) toast('All 75 numbers called!','info');
     return;
   }
+  
   const num=pool.pop();
   called.push(num);
   const letter=getLetter(num);
@@ -1009,7 +1190,7 @@ function callNumber(){
   document.getElementById('call-status').textContent=`${letter}-${num}`;
   document.getElementById('called-cnt').textContent=called.length;
   
-  // Auto-mark
+  // Auto-mark if enabled
   if(autoMark){
     cards.forEach(card=>{
       if(card.suspended||card.won)return;
@@ -1044,12 +1225,20 @@ function callNumber(){
     triggerWin(winCard);
   }
   
-  if(!pool.length) toast('All 75 numbers called!','info');
+  if(!pool.length) {
+    toast('All 75 numbers called!','info');
+    clearInterval(autoCallInterval);
+  }
 }
 
 function manualMark(cardId, col, row){
   const card = cards.find(c=>c.id===cardId);
   if(!card||card.suspended||card.won) return;
+  if(!gameStarted){
+    toast('Game not started yet!','warning');
+    return;
+  }
+  
   const num = card.card[col][row];
   if(num===0) return;
   if(!called.includes(num)) { toast('⚠️ Not called yet!', 'error'); return; }
@@ -1069,25 +1258,36 @@ function manualMark(cardId, col, row){
 function addCard(){
   if(cards.length>=MAX_CARDS){toast('Max '+MAX_CARDS+' cards!','error');return;}
   if(balance<CARD_COST){toast('❌ Not enough balance!','error');return;}
-  if(isSuspended()){toast('⛔ Card suspended!','error');return;}
+  if(suspended){toast('⛔ Cards suspended!','error');return;}
   
   balance-=CARD_COST;
   prizePool+=CARD_COST;
+  totalCardsSold++;
   
   const card=generateCardData();
   const marked=Array.from({length:5},()=>Array(5).fill(false));
   marked[2][2]=true;
-  const id=randId();
+  const id = cards.length + 1000; // Simple ID generation
   
   cards.push({id,card,marked,won:false,suspended:false,winLine:null});
   
   updateBalanceDisplay();
   renderCardsGrid();
-  toast(`🃏 Card ${cards.length} added! (-${CARD_COST} ETB)`, 'success');
+  
+  // Check if 5 cards sold to start auto-timer
+  if (totalCardsSold >= 5 && !gameStarted) {
+    startAutoStartTimer();
+  }
+  
+  toast(`🃏 Card added! (-${CARD_COST} ETB)`, 'success');
 }
 
 function claimBingo(){
-  if(isSuspended()){
+  if(!gameStarted){
+    toast('Game not started yet!','warning');
+    return;
+  }
+  if(suspended){
     toast('⛔ Your cards are suspended!','error');
     return;
   }
@@ -1113,9 +1313,9 @@ function claimBingo(){
     if(activeCards.length > 0) {
       const randomCard = activeCards[Math.floor(Math.random() * activeCards.length)];
       randomCard.suspended = true;
-      suspendCount++;
+      suspendedCards.add(randomCard.id);
       suspCount++;
-      showSuspOverlay(`Card ${randomCard.id} suspended for this round.`);
+      showSuspOverlay(`Card #${randomCard.id} suspended for this round.`);
     } else {
       toast('No active cards to suspend!','error');
     }
@@ -1124,10 +1324,25 @@ function claimBingo(){
   }
 }
 
+function handleNumberCalled(number) {
+  called.push(number);
+  // Update UI
+  renderCardsGrid();
+}
+
+function handleCardSuspended(data) {
+  const card = cards.find(c=>c.id===data.card_id);
+  if(card) card.suspended = true;
+  renderCardsGrid();
+}
+
 function triggerWin(card){
   gameOver=true;
+  gameStarted=false;
   wins++;
-  document.getElementById('win-sub').textContent = `Card ${card.id} wins!`;
+  clearInterval(autoCallInterval);
+  document.getElementById('bingo-btn').disabled=true;
+  document.getElementById('win-sub').textContent = `Card #${card.id} wins!`;
   document.getElementById('win-prize-val').textContent = `${prizePool} ETB`;
   document.getElementById('win-overlay').classList.add('show');
   launchConfetti();
@@ -1170,7 +1385,6 @@ function renderCardsGrid() {
   const pat = getPattern(activePatternId);
   
   grid.innerHTML = cards.map((card, idx) => {
-    // Count marked (excluding free space)
     const markedCnt = card.marked.flat().filter((v,i)=>v===true).length - 1;
     
     let statusClass = '';
@@ -1194,8 +1408,8 @@ function renderCardsGrid() {
         else if(card.marked[col][row]) cls+=' marked';
         else if(calledSet.has(num)) cls+=' called';
         
-        const click = num!==0&&!card.suspended&&!card.won&&!isWin 
-          ? `onclick="manualMark('${card.id}',${col},${row})"` 
+        const click = num!==0&&!card.suspended&&!card.won&&!isWin && gameStarted
+          ? `onclick="manualMark(${card.id},${col},${row})"` 
           : '';
         
         gridHtml += `<div class="${cls}" ${click}>${num===0?'FREE':num}</div>`;
@@ -1205,7 +1419,7 @@ function renderCardsGrid() {
     
     return `<div class="bingo-card${card.won?' won':''}${card.suspended?' suspended':''}">
       <div class="card-head">
-        <span class="card-id">${card.id}</span>
+        <span class="card-id">#${card.id}</span>
         <span class="card-status ${statusClass}">${statusText}</span>
       </div>
       ${lettersHtml}
@@ -1219,11 +1433,13 @@ function renderCardsGrid() {
   const hasSuspended = cards.some(c=>c.suspended);
   if (hasSuspended) {
     banner.style.display = 'flex';
-    bingoBtn.disabled = true;
   } else {
     banner.style.display = 'none';
-    bingoBtn.disabled = false;
   }
+}
+
+function updatePlayersList() {
+  // This would show other players in the room
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1312,16 +1528,15 @@ function updateWalletStats() {
   document.getElementById('stat-wins').textContent = wins;
   document.getElementById('stat-games').textContent = games;
   document.getElementById('stat-susps').textContent = suspCount;
-  document.getElementById('stat-status').textContent = isSuspended() ? '🔴' : '🟢';
+  document.getElementById('stat-status').textContent = suspended ? '🔴' : '🟢';
 }
 
 function selAmount(amt) {
-  depAmount = amt;
   document.getElementById('dep-amount').value = amt;
 }
 
 function submitDeposit() {
-  const amount = parseInt(document.getElementById('dep-amount').value) || depAmount;
+  const amount = parseInt(document.getElementById('dep-amount').value) || 100;
   const txid = document.getElementById('txid-input').value.trim().toUpperCase();
   
   if(!txid||txid.length<4){toast('❌ Please enter Transaction ID','error');return;}
@@ -1330,11 +1545,9 @@ function submitDeposit() {
   if(txid==='DEMO123') {
     balance += amount;
     updateBalanceDisplay();
-    deposits.unshift({id:'d'+Date.now(),user:'You 👤',amount,txid:'DEMO123',status:'approved',note:'✅ Auto-verified',time:'Just now'});
     toast(`✅ ${amount} ETB credited!`,'success');
     document.getElementById('txid-input').value='';
   } else {
-    deposits.unshift({id:'d'+Date.now(),user:'You 👤',amount,txid,status:'pending',note:'⏳ Sent to admin',time:'Just now'});
     toast(`📋 Deposit pending review`,'info');
   }
 }
@@ -1353,35 +1566,23 @@ function doWithdraw(){
 }
 
 // ═══════════════════════════════════════════════════════
-// ADMIN
+// ADMIN (Admin only)
 // ═══════════════════════════════════════════════════════
 let currentFilter='all';
 function loadAdmin(){
-  const pend=deposits.filter(d=>['pending','auto_verified'].includes(d.status)).length;
-  document.getElementById('s-pending').textContent=pend;
-  renderDeposits(deposits);
+  if(!isAdmin) {
+    toast('Admin access only','error');
+    switchTab('game');
+    return;
+  }
+  // Load admin data here
 }
+
 function filterDep(f,btn){
+  if(!isAdmin) return;
   currentFilter=f;
   document.querySelectorAll('.ftab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  renderDeposits(f==='all'?deposits:deposits.filter(d=>d.status===f));
-}
-function renderDeposits(list){
-  const el=document.getElementById('admin-dep-list');
-  if(!list.length){el.innerHTML='<div style="text-align:center;color:var(--muted);padding:40px 0">No deposits found</div>';return;}
-  el.innerHTML=list.map(d=>`
-    <div class="deposit-card" id="dep-${d.id}">
-      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-        <div><div style="font-weight:900;font-size:0.95rem;">👤 ${d.user}</div><div style="font-size:0.72rem;color:var(--muted)">${d.time}</div></div>
-        <div style="text-align:right"><div style="font-family:monospace;font-size:1.1rem;color:var(--green);font-weight:700">+${d.amount} ETB</div></div>
-      </div>
-      <div style="font-family:monospace;font-size:0.8rem;color:var(--muted);margin-bottom:6px">${d.txid}</div>
-      <div style="font-size:0.82rem;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.03);margin-bottom:10px">${d.note}</div>
-      <span class="status-badge" style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:0.7rem;font-weight:700;background:${d.status==='pending'?'rgba(245,158,11,0.15)':d.status==='auto_verified'?'rgba(59,130,246,0.15)':d.status==='approved'?'rgba(16,185,129,0.15)':'rgba(239,68,68,0.15)'};color:${d.status==='pending'?'#f59e0b':d.status==='auto_verified'?'#3b82f6':d.status==='approved'?'#10b981':'#ef4444'}">${
-        d.status==='pending'?'⏳ Pending':d.status==='auto_verified'?'🔍 Auto-Verified':d.status==='approved'?'✅ Approved':'❌ Rejected'
-      }</span>
-    </div>`).join('');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1433,11 +1634,8 @@ if(tg){tg.ready();tg.expand();}
 document.getElementById('auto-track').classList.add('on');
 updateBalanceDisplay();
 
-// Add some demo cards for initial state
-cards = [];
-called = [];
-pool = [];
-suspended = false;
+// Connect WebSocket for real-time updates
+connectWebSocket();
 </script>
 </body>
 </html>
