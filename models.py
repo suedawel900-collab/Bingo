@@ -4,7 +4,7 @@ import logging
 import random
 import string
 from datetime import datetime
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class Database:
         return conn
 
     def init_db(self):
-        """Initialize database tables with all required fields"""
+        """Initialize database tables"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -42,7 +42,6 @@ class Database:
                     total_deposits INTEGER DEFAULT 0,
                     total_withdrawals INTEGER DEFAULT 0,
                     referral_earnings INTEGER DEFAULT 0,
-                    suspended_until TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (referred_by) REFERENCES users(user_id)
@@ -145,9 +144,7 @@ class Database:
                     card_data TEXT,
                     marked_numbers TEXT DEFAULT '[]',
                     suspended BOOLEAN DEFAULT 0,
-                    suspended_at TIMESTAMP,
                     won BOOLEAN DEFAULT 0,
-                    won_at TIMESTAMP,
                     purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -193,7 +190,6 @@ class Database:
                     id TEXT PRIMARY KEY,
                     name TEXT,
                     description TEXT,
-                    positions TEXT,
                     is_active BOOLEAN DEFAULT 1
                 )
             ''')
@@ -230,28 +226,28 @@ class Database:
             cursor.execute("SELECT COUNT(*) FROM patterns")
             if cursor.fetchone()[0] == 0:
                 patterns = [
-                    ('any_row', 'Any Row', 'Complete any horizontal line of 5 numbers', 'rows'),
-                    ('any_col', 'Any Column', 'Complete any vertical line of 5 numbers', 'cols'),
-                    ('diag_tl', 'Diagonal TL→BR', 'Diagonal from top-left to bottom-right', 'diag_tl'),
-                    ('diag_tr', 'Diagonal TR→BL', 'Diagonal from top-right to bottom-left', 'diag_tr'),
-                    ('any_line', 'Any Line', 'Complete any row, column, or diagonal', 'any_line'),
-                    ('full_house', 'Full House', 'Mark all 24 numbers plus FREE space', 'full_house'),
-                    ('four_corners', 'Four Corners', 'Mark the four corner squares', 'four_corners'),
-                    ('x_pattern', 'X Pattern', 'Complete both diagonals', 'x_pattern'),
-                    ('plus_pattern', 'Plus Sign', 'Complete middle row and column', 'plus_pattern'),
-                    ('t_pattern', 'T Pattern', 'Complete top row and middle column', 't_pattern'),
-                    ('l_pattern', 'L Pattern', 'Complete left column and bottom row', 'l_pattern'),
-                    ('u_pattern', 'U Pattern', 'Complete side columns and bottom row', 'u_pattern'),
-                    ('frame', 'Frame', 'Mark all outer border numbers', 'frame'),
-                    ('blackout', 'Blackout', 'Mark every single number', 'blackout'),
-                    ('two_rows', 'Two Rows', 'Complete any 2 rows', 'two_rows'),
-                    ('two_cols', 'Two Columns', 'Complete any 2 columns', 'two_cols'),
-                    ('top_bottom', 'Top & Bottom', 'Complete top and bottom rows', 'top_bottom'),
-                    ('center_col', 'Center Column', 'Complete the N column', 'center_col'),
-                    ('b_o_cols', 'B & O Columns', 'Complete left and right columns', 'b_o_cols'),
-                    ('six_pack', 'Six Pack', 'Complete any 2x3 block', 'six_pack')
+                    ('any_row', 'Any Row', 'Complete any horizontal line'),
+                    ('any_col', 'Any Column', 'Complete any vertical line'),
+                    ('diag_tl', 'Diagonal TL→BR', 'Diagonal from top-left'),
+                    ('diag_tr', 'Diagonal TR→BL', 'Diagonal from top-right'),
+                    ('any_line', 'Any Line', 'Complete any row, column, or diagonal'),
+                    ('full_house', 'Full House', 'Mark all numbers'),
+                    ('four_corners', 'Four Corners', 'Mark the four corners'),
+                    ('x_pattern', 'X Pattern', 'Complete both diagonals'),
+                    ('plus_pattern', 'Plus Sign', 'Complete middle row and column'),
+                    ('t_pattern', 'T Pattern', 'Complete top row and middle column'),
+                    ('l_pattern', 'L Pattern', 'Complete left column and bottom row'),
+                    ('u_pattern', 'U Pattern', 'Complete side columns and bottom row'),
+                    ('frame', 'Frame', 'Mark all outer border numbers'),
+                    ('blackout', 'Blackout', 'Mark every single number'),
+                    ('two_rows', 'Two Rows', 'Complete any 2 rows'),
+                    ('two_cols', 'Two Columns', 'Complete any 2 columns'),
+                    ('top_bottom', 'Top & Bottom', 'Complete top and bottom rows'),
+                    ('center_col', 'Center Column', 'Complete the middle column'),
+                    ('b_o_cols', 'B & O Columns', 'Complete left and right columns'),
+                    ('six_pack', 'Six Pack', 'Complete any 2x3 block')
                 ]
-                cursor.executemany("INSERT INTO patterns (id, name, description, positions) VALUES (?,?,?,?)", patterns)
+                cursor.executemany("INSERT INTO patterns (id, name, description) VALUES (?,?,?)", patterns)
             
             # Insert default game settings
             for room_id in [1, 2, 3]:
@@ -281,7 +277,6 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_referral_bonuses_status ON referral_bonuses(status)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_suspension_history_user ON suspension_history(user_id, expires_at)")
             
             conn.commit()
             logger.info("✅ Database initialized successfully with all tables for MK BINGO system")
@@ -362,21 +357,10 @@ class Database:
         finally:
             conn.close()
 
-    def update_user_suspension(self, user_id: int, suspended_until: datetime = None) -> bool:
-        """Update user suspension status"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE users SET suspended_until = ? WHERE user_id = ?", (suspended_until, user_id))
-            conn.commit()
-            return cursor.rowcount > 0
-        finally:
-            conn.close()
-
     # ==================== BALANCE METHODS ====================
 
     def update_balance(self, user_id: int, amount: int, transaction_type: str, description: str = None) -> Optional[Dict]:
-        """Atomically update user balance"""
+        """Update user balance"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -416,6 +400,43 @@ class Database:
             logger.error(f"Database error in update_balance: {e}")
             conn.rollback()
             return None
+        finally:
+            conn.close()
+
+    # ==================== GAME METHODS ====================
+
+    def get_active_games_count(self, user_id: int) -> int:
+        """Get count of active games for user"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM game_players WHERE user_id = ?", (user_id,))
+            return cursor.fetchone()[0]
+        finally:
+            conn.close()
+
+    def get_total_stake(self, user_id: int) -> int:
+        """Get total stake for user"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT SUM(g.prize_pool) FROM games g JOIN game_players gp ON g.id = gp.game_id WHERE gp.user_id = ? AND g.status = 'active'", (user_id,))
+            result = cursor.fetchone()[0]
+            return result or 0
+        finally:
+            conn.close()
+
+    def add_active_game(self, user_id: int, game_id: int, card_ids: List[int], stake: int) -> bool:
+        """Add active game for user"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO game_players (user_id, game_id, cards)
+                VALUES (?, ?, ?)
+            ''', (user_id, game_id, json.dumps(card_ids)))
+            conn.commit()
+            return True
         finally:
             conn.close()
 
@@ -469,7 +490,7 @@ class Database:
             conn.close()
 
     def get_active_cards(self, user_id: int, game_id: int) -> List[Dict]:
-        """Get active (non-suspended, non-won) cards for user"""
+        """Get active cards for user"""
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
@@ -492,7 +513,7 @@ class Database:
             for card_id in suspended_cards:
                 cursor.execute('''
                     UPDATE user_cards 
-                    SET suspended = 1, suspended_at = CURRENT_TIMESTAMP
+                    SET suspended = 1, updated_at = CURRENT_TIMESTAMP
                     WHERE user_id = ? AND game_id = ? AND card_id = ?
                 ''', (user_id, game_id, card_id))
                 
@@ -505,207 +526,6 @@ class Database:
             return True
         except Exception as e:
             logger.error(f"Error updating suspension: {e}")
-            return False
-        finally:
-            conn.close()
-
-    def clear_suspensions(self, user_id: int, game_id: int) -> bool:
-        """Clear all suspensions for a user in a game"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE user_cards 
-                SET suspended = 0, suspended_at = NULL
-                WHERE user_id = ? AND game_id = ?
-            ''', (user_id, game_id))
-            conn.commit()
-            return True
-        except Exception as e:
-            logger.error(f"Error clearing suspensions: {e}")
-            return False
-        finally:
-            conn.close()
-
-    # ==================== GAME METHODS ====================
-
-    def create_game(self, room_id: int, pattern_id: str) -> Optional[int]:
-        """Create a new game record"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO games (room_id, game_number, pattern_id, status)
-                VALUES (?, (SELECT COALESCE(MAX(game_number), 0) + 1 FROM games WHERE room_id = ?), ?, 'waiting')
-            ''', (room_id, room_id, pattern_id))
-            conn.commit()
-            return cursor.lastrowid
-        except Exception as e:
-            logger.error(f"Error creating game: {e}")
-            return None
-        finally:
-            conn.close()
-
-    def get_game(self, game_id: int) -> Optional[Dict]:
-        """Get game by ID"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM games WHERE id = ?", (game_id,))
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-            return None
-        finally:
-            conn.close()
-
-    def update_game_status(self, game_id: int, status: str, **kwargs) -> bool:
-        """Update game status"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            updates = []
-            values = []
-            
-            if status:
-                updates.append("status = ?")
-                values.append(status)
-            
-            if 'prize_pool' in kwargs:
-                updates.append("prize_pool = ?")
-                values.append(kwargs['prize_pool'])
-            
-            if 'total_cards_sold' in kwargs:
-                updates.append("total_cards_sold = ?")
-                values.append(kwargs['total_cards_sold'])
-            
-            if 'called_numbers' in kwargs:
-                updates.append("called_numbers = ?")
-                values.append(json.dumps(kwargs['called_numbers']))
-            
-            if 'started_at' in kwargs and kwargs['started_at']:
-                updates.append("started_at = CURRENT_TIMESTAMP")
-            
-            if 'ended_at' in kwargs and kwargs['ended_at']:
-                updates.append("ended_at = CURRENT_TIMESTAMP")
-            
-            if 'winner_id' in kwargs:
-                updates.append("winner_id = ?")
-                values.append(kwargs['winner_id'])
-            
-            if 'winning_card_id' in kwargs:
-                updates.append("winning_card_id = ?")
-                values.append(kwargs['winning_card_id'])
-            
-            if not updates:
-                return True
-            
-            values.append(game_id)
-            query = f"UPDATE games SET {', '.join(updates)} WHERE id = ?"
-            cursor.execute(query, values)
-            conn.commit()
-            return cursor.rowcount > 0
-        except Exception as e:
-            logger.error(f"Error updating game: {e}")
-            return False
-        finally:
-            conn.close()
-
-    def add_player_to_game(self, game_id: int, user_id: int, card_ids: List[int]) -> bool:
-        """Add player to game"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO game_players (game_id, user_id, cards)
-                VALUES (?, ?, ?)
-            ''', (game_id, user_id, json.dumps(card_ids)))
-            conn.commit()
-            return True
-        except Exception as e:
-            logger.error(f"Error adding player to game: {e}")
-            return False
-        finally:
-            conn.close()
-
-    def get_game_players(self, game_id: int) -> List[Dict]:
-        """Get all players in a game"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT gp.*, u.first_name, u.username
-                FROM game_players gp
-                JOIN users u ON gp.user_id = u.user_id
-                WHERE gp.game_id = ?
-            ''', (game_id,))
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
-        finally:
-            conn.close()
-
-    # ==================== GAME SETTINGS METHODS ====================
-
-    def get_game_settings(self, room_id: int) -> Dict:
-        """Get settings for a specific room"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM game_settings WHERE room_id = ?", (room_id,))
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-            return {
-                'room_id': room_id,
-                'card_price': 5000 if room_id == 1 else 10000 if room_id == 2 else 20000,
-                'max_cards': 8,
-                'auto_start_delay': 30,
-                'auto_call_interval': 3,
-                'house_percent': 0.20
-            }
-        finally:
-            conn.close()
-
-    def update_game_settings(self, room_id: int, **kwargs) -> bool:
-        """Update game settings for a room"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            updates = []
-            values = []
-            
-            if 'card_price' in kwargs:
-                updates.append("card_price = ?")
-                values.append(kwargs['card_price'])
-            
-            if 'max_cards' in kwargs:
-                updates.append("max_cards = ?")
-                values.append(kwargs['max_cards'])
-            
-            if 'auto_start_delay' in kwargs:
-                updates.append("auto_start_delay = ?")
-                values.append(kwargs['auto_start_delay'])
-            
-            if 'auto_call_interval' in kwargs:
-                updates.append("auto_call_interval = ?")
-                values.append(kwargs['auto_call_interval'])
-            
-            if 'house_percent' in kwargs:
-                updates.append("house_percent = ?")
-                values.append(kwargs['house_percent'])
-            
-            if not updates:
-                return True
-            
-            updates.append("updated_at = CURRENT_TIMESTAMP")
-            values.append(room_id)
-            
-            query = f"UPDATE game_settings SET {', '.join(updates)} WHERE room_id = ?"
-            cursor.execute(query, values)
-            conn.commit()
-            return cursor.rowcount > 0
-        except Exception as e:
-            logger.error(f"Error updating game settings: {e}")
             return False
         finally:
             conn.close()
@@ -815,134 +635,6 @@ class Database:
         finally:
             conn.close()
 
-    # ==================== REFERRAL METHODS ====================
-
-    def create_pending_referral_bonus(self, referrer_id: int, referred_id: int):
-        """Create a pending referral bonus entry"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            
-            cursor.execute(
-                "SELECT id FROM referral_bonuses WHERE referrer_id = ? AND referred_id = ?",
-                (referrer_id, referred_id)
-            )
-            if cursor.fetchone():
-                return False
-            
-            cursor.execute('''
-                INSERT INTO referral_bonuses (referrer_id, referred_id, amount, status)
-                VALUES (?, ?, ?, 'pending')
-            ''', (referrer_id, referred_id, 500))
-            
-            conn.commit()
-            logger.info(f"Pending referral bonus created: {referrer_id} -> {referred_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Error creating pending referral bonus: {e}")
-            conn.rollback()
-            return False
-        finally:
-            conn.close()
-
-    def check_and_pay_referral_bonus(self, user_id: int) -> bool:
-        """Check if user was referred and pay bonus to referrer after first deposit"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT referred_by, has_deposited FROM users WHERE user_id = ?", (user_id,))
-            result = cursor.fetchone()
-            if not result or not result['referred_by']:
-                return False
-            
-            if result['has_deposited']:
-                return False
-            
-            referrer_id = result['referred_by']
-            
-            cursor.execute('''
-                SELECT id FROM referral_bonuses 
-                WHERE referrer_id = ? AND referred_id = ? AND status = 'pending'
-            ''', (referrer_id, user_id))
-            
-            bonus = cursor.fetchone()
-            if not bonus:
-                return False
-            
-            cursor.execute(
-                "UPDATE users SET has_deposited = 1 WHERE user_id = ?",
-                (user_id,)
-            )
-            
-            cursor.execute('''
-                UPDATE referral_bonuses 
-                SET status = 'paid', paid_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            ''', (bonus['id'],))
-            
-            cursor.execute(
-                "UPDATE users SET balance = balance + 500, referral_earnings = referral_earnings + 500 WHERE user_id = ?",
-                (referrer_id,)
-            )
-            
-            cursor.execute('''
-                INSERT INTO transactions (user_id, amount, type, description)
-                VALUES (?, ?, ?, ?)
-            ''', (referrer_id, 500, 'referral_bonus', f'Referral bonus for user {user_id}'))
-            
-            conn.commit()
-            logger.info(f"Referral bonus paid: {referrer_id} received 5 ETB for {user_id}'s deposit")
-            return True
-        except Exception as e:
-            logger.error(f"Error paying referral bonus: {e}")
-            conn.rollback()
-            return False
-        finally:
-            conn.close()
-
-    def get_user_by_referral_code(self, code: str) -> Optional[Dict]:
-        """Get user by referral code"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM users WHERE referral_code = ?", (code,))
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-            return None
-        finally:
-            conn.close()
-
-    def get_referral_stats(self, user_id: int) -> Dict:
-        """Get referral statistics for a user"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT COUNT(*) FROM users WHERE referred_by = ?", (user_id,))
-            total_referrals = cursor.fetchone()[0]
-            
-            cursor.execute('''
-                SELECT COUNT(*) FROM referral_bonuses 
-                WHERE referrer_id = ? AND status = 'pending'
-            ''', (user_id,))
-            pending_bonuses = cursor.fetchone()[0]
-            
-            cursor.execute('''
-                SELECT SUM(amount) FROM referral_bonuses 
-                WHERE referrer_id = ? AND status = 'paid'
-            ''', (user_id,))
-            total_earnings = cursor.fetchone()[0] or 0
-            
-            return {
-                'total_referrals': total_referrals,
-                'pending_bonuses': pending_bonuses,
-                'total_earnings': total_earnings
-            }
-        finally:
-            conn.close()
-
     # ==================== WITHDRAWAL METHODS ====================
 
     def create_withdrawal_request(self, user_id: int, amount: int, phone_number: str) -> Optional[str]:
@@ -1016,6 +708,124 @@ class Database:
         finally:
             conn.close()
 
+    # ==================== REFERRAL METHODS ====================
+
+    def create_pending_referral_bonus(self, referrer_id: int, referred_id: int):
+        """Create a pending referral bonus entry"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                "SELECT id FROM referral_bonuses WHERE referrer_id = ? AND referred_id = ?",
+                (referrer_id, referred_id)
+            )
+            if cursor.fetchone():
+                return False
+            
+            cursor.execute('''
+                INSERT INTO referral_bonuses (referrer_id, referred_id, amount, status)
+                VALUES (?, ?, ?, 'pending')
+            ''', (referrer_id, referred_id, 500))
+            
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error creating referral bonus: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def check_and_pay_referral_bonus(self, user_id: int) -> bool:
+        """Check if user was referred and pay bonus"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT referred_by, has_deposited FROM users WHERE user_id = ?", (user_id,))
+            result = cursor.fetchone()
+            if not result or not result['referred_by']:
+                return False
+            
+            if result['has_deposited']:
+                return False
+            
+            referrer_id = result['referred_by']
+            
+            cursor.execute('''
+                SELECT id FROM referral_bonuses 
+                WHERE referrer_id = ? AND referred_id = ? AND status = 'pending'
+            ''', (referrer_id, user_id))
+            
+            bonus = cursor.fetchone()
+            if not bonus:
+                return False
+            
+            cursor.execute("UPDATE users SET has_deposited = 1 WHERE user_id = ?", (user_id,))
+            
+            cursor.execute('''
+                UPDATE referral_bonuses 
+                SET status = 'paid', paid_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (bonus['id'],))
+            
+            cursor.execute("UPDATE users SET balance = balance + 500, referral_earnings = referral_earnings + 500 WHERE user_id = ?", (referrer_id,))
+            
+            cursor.execute('''
+                INSERT INTO transactions (user_id, amount, type, description)
+                VALUES (?, ?, ?, ?)
+            ''', (referrer_id, 500, 'referral_bonus', f'Referral bonus for user {user_id}'))
+            
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error paying referral bonus: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def get_user_by_referral_code(self, code: str) -> Optional[Dict]:
+        """Get user by referral code"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE referral_code = ?", (code,))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+        finally:
+            conn.close()
+
+    def get_referral_stats(self, user_id: int) -> Dict:
+        """Get referral statistics for a user"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT COUNT(*) FROM users WHERE referred_by = ?", (user_id,))
+            total_referrals = cursor.fetchone()[0]
+            
+            cursor.execute('''
+                SELECT COUNT(*) FROM referral_bonuses 
+                WHERE referrer_id = ? AND status = 'pending'
+            ''', (user_id,))
+            pending_bonuses = cursor.fetchone()[0]
+            
+            cursor.execute('''
+                SELECT SUM(amount) FROM referral_bonuses 
+                WHERE referrer_id = ? AND status = 'paid'
+            ''', (user_id,))
+            total_earnings = cursor.fetchone()[0] or 0
+            
+            return {
+                'total_referrals': total_referrals,
+                'pending_bonuses': pending_bonuses,
+                'total_earnings': total_earnings
+            }
+        finally:
+            conn.close()
+
     # ==================== PATTERN METHODS ====================
 
     def get_patterns(self, active_only: bool = True) -> List[Dict]:
@@ -1023,10 +833,7 @@ class Database:
         conn = self.get_connection()
         try:
             cursor = conn.cursor()
-            if active_only:
-                cursor.execute("SELECT * FROM patterns WHERE is_active = 1 ORDER BY id")
-            else:
-                cursor.execute("SELECT * FROM patterns ORDER BY id")
+            cursor.execute("SELECT * FROM patterns WHERE is_active = 1 ORDER BY id")
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
         finally:
@@ -1058,19 +865,6 @@ class Database:
         finally:
             conn.close()
 
-    def get_active_users_count(self) -> int:
-        """Get count of users active in the last 24 hours"""
-        conn = self.get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT COUNT(DISTINCT user_id) FROM transactions 
-                WHERE created_at > datetime('now', '-1 day')
-            ''')
-            return cursor.fetchone()[0]
-        finally:
-            conn.close()
-
     # ==================== SYSTEM STATS ====================
 
     def get_system_stats(self) -> Dict:
@@ -1091,20 +885,14 @@ class Database:
             cursor.execute("SELECT SUM(amount) FROM transactions WHERE amount < 0 AND type = 'withdrawal'")
             total_withdrawals = abs(cursor.fetchone()[0] or 0)
 
-            cursor.execute("SELECT COUNT(DISTINCT game_id) FROM games WHERE status = 'active'")
+            cursor.execute("SELECT COUNT(*) FROM games WHERE status = 'active'")
             active_games = cursor.fetchone()[0]
 
-            cursor.execute("SELECT COUNT(*) FROM games WHERE status = 'active'")
-            active_rooms = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM payment_requests WHERE status = 'pending'")
+            pending_payments = cursor.fetchone()[0]
 
-            cursor.execute("SELECT COUNT(*) FROM referral_bonuses WHERE status = 'pending'")
-            pending_referrals = cursor.fetchone()[0]
-
-            cursor.execute("SELECT SUM(amount) FROM referral_bonuses WHERE status = 'paid'")
-            total_referral_paid = cursor.fetchone()[0] or 0
-            
-            cursor.execute("SELECT COUNT(*) FROM suspension_history WHERE expires_at > datetime('now')")
-            active_suspensions = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM withdrawal_requests WHERE status = 'pending'")
+            pending_withdrawals = cursor.fetchone()[0]
 
             return {
                 'total_users': total_users,
@@ -1112,10 +900,8 @@ class Database:
                 'total_deposits': total_deposits,
                 'total_withdrawals': total_withdrawals,
                 'active_games': active_games,
-                'active_rooms': active_rooms,
-                'pending_referrals': pending_referrals,
-                'total_referral_paid': total_referral_paid,
-                'active_suspensions': active_suspensions
+                'pending_payments': pending_payments,
+                'pending_withdrawals': pending_withdrawals
             }
         finally:
             conn.close()
