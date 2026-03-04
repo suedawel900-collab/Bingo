@@ -16,12 +16,11 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, ContextTypes,
-    ConversationHandler, MessageHandler, filters
+    Application, CommandHandler, CallbackQueryHandler, ContextTypes
 )
-from telegram.error import BadRequest, TelegramError
+from telegram.error import BadRequest
 
 from models import Database
 
@@ -30,13 +29,12 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('app.log')
+        logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
 
-# Configuration with error handling
+# Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
     logger.error("BOT_TOKEN environment variable not set")
@@ -55,7 +53,6 @@ BOT_USERNAME = os.getenv('BOT_USERNAME', 'MK_BINGO_bot')
 RAILWAY_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN')
 
 if not RAILWAY_URL:
-    # Fallback for local development
     RAILWAY_URL = "localhost:8080"
     BASE_URL = f"http://{RAILWAY_URL}"
     logger.warning(f"RAILWAY_PUBLIC_DOMAIN not set, using localhost: {BASE_URL}")
@@ -145,29 +142,19 @@ def get_pattern_name(pattern_id: str) -> str:
     }
     return pattern_names.get(pattern_id, "Any Line")
 
-# Payment methods with auto-approval settings
+# Payment methods
 PAYMENT_METHODS = {
     "telebirr": {
         "name": "Telebirr",
         "account": "0982372677",
         "account_name": "MK Bingo",
-        "instructions": (
-            "Dial *127# and send money to 0982372677\n\n"
-            "📱 **የደረሰኝ ማረጋገጫ መስመር ላይ:**\n"
-            "ክፍያዎን ከፍለው ከጨረሱ በኋላ የደረሰኝ ቁጥርዎን በመጠቀም ከዚህ ሊንክ ማረጋገጥ ይችላሉ፦\n"
-            "`https://transactioninfo.ethiotelecom.et/receipt/{የደረሰኝ_ቁጥር}`\n\n"
-            "ለምሳሌ: `https://transactioninfo.ethiotelecom.et/receipt/TRX123456`"
-        ),
-        "auto_approve": True,
-        "receipt_pattern": r'^[A-Z0-9]{6,30}$'
+        "instructions": "Dial *127# and send money to 0982372677"
     },
     "cbebirr": {
         "name": "CBE Birr",
         "account": "0982372677",
         "account_name": "MK Bingo",
-        "instructions": "Dial *847# and send money to 0982372677",
-        "auto_approve": False,
-        "receipt_pattern": r'^[A-Z0-9]{6,30}$'
+        "instructions": "Dial *847# and send money to 0982372677"
     }
 }
 
@@ -1467,6 +1454,7 @@ async def game_page(request: Request, user_id: int, game_id: int = 1):
             "initial_active_games": db.get_active_games_count(user_id),
             "initial_stake": db.get_total_stake(user_id) / 100,
             "auto_start_delay": AUTO_START_DELAY,
+            "base_url": BASE_URL,
             "is_admin": str(user_id) == str(ADMIN_USER_ID)
         })
     except Exception as e:
@@ -1520,6 +1508,193 @@ async def get_user_info(user_id: int):
         }
     except Exception as e:
         logger.error(f"Error getting user {user_id}: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/deposit")
+async def create_deposit(request: Request):
+    """Create a deposit request (called from web app)"""
+    try:
+        data = await request.json()
+        user_id = data.get('user_id')
+        amount = data.get('amount')
+        txid = data.get('txid')
+        
+        if not all([user_id, amount, txid]):
+            return JSONResponse(content={"error": "Missing fields"}, status_code=400)
+        
+        # Create payment request
+        methods = db.get_payment_methods(type='mobile_money', active_only=True)
+        if not methods:
+            return JSONResponse(content={"error": "No payment methods"}, status_code=400)
+        
+        request_id = db.create_payment_request(
+            user_id=user_id,
+            method_id=methods[0]['id'],
+            amount=amount * 100,
+            sender_phone=""
+        )
+        
+        if not request_id:
+            return JSONResponse(content={"error": "Failed to create request"}, status_code=500)
+        
+        db.add_payment_proof(request_id, 'text', txid)
+        
+        return JSONResponse(content={
+            "success": True,
+            "request_id": request_id,
+            "status": "pending"
+        })
+    except Exception as e:
+        logger.error(f"Error creating deposit: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/withdraw")
+async def create_withdrawal(request: Request):
+    """Create a withdrawal request (called from web app)"""
+    try:
+        data = await request.json()
+        user_id = data.get('user_id')
+        amount = data.get('amount')
+        phone = data.get('phone')
+        
+        if not all([user_id, amount, phone]):
+            return JSONResponse(content={"error": "Missing fields"}, status_code=400)
+        
+        # Check balance
+        user = db.get_user(user_id)
+        if not user or user['balance'] < amount * 100:
+            return JSONResponse(content={"error": "Insufficient balance"}, status_code=400)
+        
+        request_id = db.create_withdrawal_request(user_id, amount * 100, phone)
+        
+        if not request_id:
+            return JSONResponse(content={"error": "Failed to create request"}, status_code=500)
+        
+        return JSONResponse(content={
+            "success": True,
+            "request_id": request_id,
+            "status": "pending"
+        })
+    except Exception as e:
+        logger.error(f"Error creating withdrawal: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.get("/api/admin/payments")
+async def get_pending_payments(user_id: int):
+    """Get pending payments (admin only)"""
+    if str(user_id) != str(ADMIN_USER_ID):
+        return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
+    
+    try:
+        payments = db.get_pending_payment_requests(limit=50)
+        withdrawals = db.get_pending_withdrawal_requests(limit=50)
+        
+        return JSONResponse(content={
+            "payments": payments,
+            "withdrawals": withdrawals
+        })
+    except Exception as e:
+        logger.error(f"Error getting pending payments: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/admin/approve-payment")
+async def approve_payment(request: Request):
+    """Approve a payment (admin only)"""
+    try:
+        data = await request.json()
+        admin_id = data.get('admin_id')
+        request_id = data.get('request_id')
+        
+        if str(admin_id) != str(ADMIN_USER_ID):
+            return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
+        
+        payment = db.get_payment_request(request_id)
+        if not payment:
+            return JSONResponse(content={"error": "Payment not found"}, status_code=404)
+        
+        db.update_payment_request_status(request_id, 'approved', 'Approved by admin')
+        result = db.update_balance(
+            payment['user_id'],
+            payment['amount'],
+            'deposit',
+            f'Payment approved - {request_id}'
+        )
+        
+        if not result:
+            return JSONResponse(content={"error": "Failed to update balance"}, status_code=500)
+        
+        return JSONResponse(content={"success": True})
+    except Exception as e:
+        logger.error(f"Error approving payment: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/admin/reject-payment")
+async def reject_payment(request: Request):
+    """Reject a payment (admin only)"""
+    try:
+        data = await request.json()
+        admin_id = data.get('admin_id')
+        request_id = data.get('request_id')
+        
+        if str(admin_id) != str(ADMIN_USER_ID):
+            return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
+        
+        db.update_payment_request_status(request_id, 'rejected', 'Rejected by admin')
+        
+        return JSONResponse(content={"success": True})
+    except Exception as e:
+        logger.error(f"Error rejecting payment: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/admin/approve-withdrawal")
+async def approve_withdrawal(request: Request):
+    """Approve a withdrawal (admin only)"""
+    try:
+        data = await request.json()
+        admin_id = data.get('admin_id')
+        request_id = data.get('request_id')
+        
+        if str(admin_id) != str(ADMIN_USER_ID):
+            return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
+        
+        withdrawal = db.get_withdrawal_request(request_id)
+        if not withdrawal:
+            return JSONResponse(content={"error": "Withdrawal not found"}, status_code=404)
+        
+        # Check balance
+        user = db.get_user(withdrawal['user_id'])
+        if not user or user['balance'] < withdrawal['amount']:
+            return JSONResponse(content={"error": "Insufficient balance"}, status_code=400)
+        
+        db.update_balance(
+            withdrawal['user_id'],
+            -withdrawal['amount'],
+            'withdrawal',
+            f'Withdrawal approved - {request_id}'
+        )
+        db.update_withdrawal_request_status(request_id, 'approved', 'Approved by admin')
+        
+        return JSONResponse(content={"success": True})
+    except Exception as e:
+        logger.error(f"Error approving withdrawal: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/admin/reject-withdrawal")
+async def reject_withdrawal(request: Request):
+    """Reject a withdrawal (admin only)"""
+    try:
+        data = await request.json()
+        admin_id = data.get('admin_id')
+        request_id = data.get('request_id')
+        
+        if str(admin_id) != str(ADMIN_USER_ID):
+            return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
+        
+        db.update_withdrawal_request_status(request_id, 'rejected', 'Rejected by admin')
+        
+        return JSONResponse(content={"success": True})
+    except Exception as e:
+        logger.error(f"Error rejecting withdrawal: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 # ==================== WebSocket Endpoint ====================
@@ -1647,6 +1822,9 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                     'status': status
                 })
             
+            elif data['type'] == 'call_number':
+                await game_manager.call_next_number(game_id)
+            
             elif data['type'] == 'heartbeat':
                 await websocket.send_json({'type': 'heartbeat_ack'})
             
@@ -1660,24 +1838,243 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
         logger.error(f"WebSocket error: {e}")
         await game_manager.disconnect(game_id, websocket, user_id)
 
-# ==================== Telegram Bot Setup ====================
+# ==================== Simplified Telegram Bot Handlers ====================
+# Only essential commands - all financial transactions in web app
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command - opens mini app"""
+    user = update.effective_user
+    
+    # Create or get user
+    user_data = db.get_or_create_user(
+        user_id=user.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name
+    )
+    
+    balance = user_data['balance'] / 100
+    
+    # Create mini app URL
+    webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
+    
+    # Create keyboard with mini app button
+    keyboard = [
+        [InlineKeyboardButton("🎮 Open MK BINGO", web_app={'url': webapp_url})],
+        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
+        [InlineKeyboardButton("❓ Help", callback_data="help")]
+    ]
+    
+    # Add admin button if user is admin
+    if str(user.id) == str(ADMIN_USER_ID):
+        keyboard.append([InlineKeyboardButton("⚙️ Admin Panel", callback_data="admin")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    welcome_text = (
+        f"🎉 እንኳን ደስ አለዎት {user.first_name}! 🎉\n\n"
+        f"💰 ቀሪ ሂሳብ: {balance:.2f} ብር\n\n"
+        f"ከታች ያለውን ቁልፍ በመጫን ወደ ጨዋታው ይሂዱ 👇\n"
+        f"📱 ገንዘብ መሙላት እና ማውጣት በዌብ አፕ ውስጥ ይቻላል"
+    )
+    
+    await update.message.reply_text(
+        welcome_text,
+        reply_markup=reply_markup
+    )
+
+async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /play command - opens mini app directly"""
+    user = update.effective_user
+    webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
+    
+    keyboard = [[InlineKeyboardButton("🎮 Open MK BINGO", web_app={'url': webapp_url})]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "ከታች ያለውን ቁልፍ ተጫን ወደ ጨዋታው ለመግባት 👇",
+        reply_markup=reply_markup
+    )
+
+async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /balance command - shows balance and link to web app"""
+    user_id = update.effective_user.id
+    user_data = db.get_user(user_id)
+    
+    if not user_data:
+        user_data = db.get_or_create_user(
+            user_id, 
+            update.effective_user.username, 
+            update.effective_user.first_name, 
+            update.effective_user.last_name
+        )
+    
+    balance = user_data['balance'] / 100
+    games_won = user_data.get('games_won', 0)
+    games_played = user_data.get('games_played', 0)
+    
+    webapp_url = f"{BASE_URL}/rooms?user_id={user_id}"
+    
+    message = (
+        f"💰 **የእርስዎ ቀሪ ሂሳብ**\n\n"
+        f"ጠቅላላ ቀሪ: **{balance:.2f} ብር**\n"
+        f"ያሸነፉባቸው ጨዋታዎች: **{games_won}**\n"
+        f"የተጫወቱባቸው ጨዋታዎች: **{games_played}**\n\n"
+        f"ለመጫወት፣ ገንዘብ ለመሙላት ወይም ለማውጣት ከታች ያለውን ቁልፍ ይጫኑ 👇"
+    )
+    
+    keyboard = [[InlineKeyboardButton("🎮 ወደ ጨዋታ ይሂዱ", web_app={'url': webapp_url})]]
+    
+    await update.message.reply_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /help command"""
+    webapp_url = f"{BASE_URL}/rooms?user_id={update.effective_user.id}"
+    
+    help_text = (
+        "❓ **የMK BINGO እገዛ**\n\n"
+        "**እንዴት እንደሚጫወት:**\n"
+        "1. ከታች ያለውን '🎮 Open MK BINGO' ቁልፍ ይጫኑ\n"
+        "2. ክፍል ይምረጡ (1-3)\n"
+        "3. ካርዶችን ይምረጡ (እስከ 8 ካርዶች)\n"
+        "4. 5 ካርዶች ከተሸጡ በኋላ ጨዋታው ይጀምራል\n"
+        "5. ቁጥሮች በየ 3 ሰከንድ ይጠራሉ\n"
+        "6. በካርድዎ ላይ ቁጥሮችን ምልክት ያድርጉ\n"
+        "7. ንድፉን ሲያጠናቅቁ BINGO ይጫኑ\n\n"
+        f"**ዋጋዎች:**\n"
+        f"• ክፍል 1: {CARD_PRICE_ROOM1/100} ብር በካርድ\n"
+        f"• ክፍል 2: {CARD_PRICE_ROOM2/100} ብር በካርድ\n"
+        f"• ክፍል 3: {CARD_PRICE_ROOM3/100} ብር በካርድ\n\n"
+        "**ገንዘብ መሙላት እና ማውጣት:**\n"
+        "• በዌብ አፕ ውስጥ በ WALLET ትር ውስጥ ይቻላል\n"
+        "• የTelebirr ቁጥር: `0982372677`\n"
+        "• ክፍያዎች በአስተዳዳሪ ይጸድቃሉ\n\n"
+        "**ትዕዛዛት:**\n"
+        "/start - ጀምር\n"
+        "/play - ወደ ጨዋታ ሂድ\n"
+        "/balance - ቀሪ ሂሳብ\n"
+        "/help - እገዛ"
+    )
+    
+    keyboard = [[InlineKeyboardButton("🎮 ወደ ጨዋታ ይሂዱ", web_app={'url': webapp_url})]]
+    
+    await update.message.reply_text(
+        help_text,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle button callbacks"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = update.effective_user
+    data = query.data
+    
+    if data == "balance":
+        user_id = user.id
+        user_data = db.get_user(user_id)
+        balance = user_data['balance'] / 100 if user_data else 0
+        games_won = user_data.get('games_won', 0) if user_data else 0
+        
+        webapp_url = f"{BASE_URL}/rooms?user_id={user_id}"
+        
+        message = (
+            f"💰 **ቀሪ ሂሳብ:** {balance:.2f} ብር\n"
+            f"🏆 **ያሸነፉባቸው:** {games_won}\n\n"
+            f"ለመጫወት፣ ገንዘብ ለመሙላት ወይም ለማውጣት ከታች ያለውን ቁልፍ ይጫኑ 👇"
+        )
+        
+        keyboard = [[InlineKeyboardButton("🎮 ወደ ጨዋታ ይሂዱ", web_app={'url': webapp_url})]]
+        
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    
+    elif data == "help":
+        webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
+        
+        help_text = (
+            "❓ **እገዛ**\n\n"
+            "• ጨዋታ ለመጀመር 'Open MK BINGO' ይጫኑ\n"
+            "• ቀሪ ሂሳብ ለማየት /balance\n"
+            "• ገንዘብ መሙላት/ማውጣት በዌብ አፕ ውስጥ\n"
+            "• ክፍያዎች በአስተዳዳሪ ይጸድቃሉ\n"
+            "• እገዛ ለማግኘት /help"
+        )
+        
+        keyboard = [[InlineKeyboardButton("🎮 ወደ ጨዋታ ይሂዱ", web_app={'url': webapp_url})]]
+        
+        await query.edit_message_text(
+            help_text,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    
+    elif data == "admin" and str(user.id) == str(ADMIN_USER_ID):
+        stats = db.get_system_stats()
+        
+        webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
+        
+        message = (
+            f"⚙️ **አስተዳዳሪ ፓነል**\n\n"
+            f"👥 ተጠቃሚዎች: {stats['total_users']}\n"
+            f"💰 ጠቅላላ ቀሪ: {stats['total_balance']/100:.2f} ብር\n"
+            f"⏳ በመጠባበቅ ላይ ያሉ ክፍያዎች: {stats.get('pending_payments', 0)}\n"
+            f"💸 በመጠባበቅ ላይ ያሉ ማውጫዎች: {stats.get('pending_withdrawals', 0)}\n\n"
+            f"ክፍያዎችን ለማረጋገጥ ወደ ዌብ አፕ ይሂዱ 👇"
+        )
+        
+        keyboard = [[InlineKeyboardButton("⚙️ ወደ አስተዳዳሪ ፓነል", web_app={'url': webapp_url})]]
+        
+        await query.edit_message_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+# ==================== Bot Setup ====================
 
 async def setup_bot():
-    """Setup and start the Telegram bot"""
+    """Setup and start the Telegram bot with all handlers"""
     application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
     
-    # Add handlers here (simplified for now)
-    # You can add your conversation handlers from the original code
+    # Add command handlers - only essential commands
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("play", play_command))
+    application.add_handler(CommandHandler("balance", balance_command))
+    application.add_handler(CommandHandler("help", help_command))
     
+    # Add callback query handler for buttons
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    # Initialize and start
     await application.initialize()
     await application.start()
     
     # Set webhook
     webhook_url = f"{BASE_URL}/webhook"
-    await application.bot.set_webhook(url=webhook_url)
-    logger.info(f"🤖 Webhook set to {webhook_url}")
+    success = await application.bot.set_webhook(url=webhook_url)
+    
+    if success:
+        logger.info(f"✅ Webhook set to {webhook_url}")
+        
+        # Get webhook info to verify
+        webhook_info = await application.bot.get_webhook_info()
+        logger.info(f"📡 Webhook info: {webhook_info.url} - {webhook_info.pending_update_count} pending updates")
+    else:
+        logger.error("❌ Failed to set webhook")
     
     return application
+
+# ==================== Webhook Endpoint ====================
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -1701,9 +2098,10 @@ async def lifespan(app: FastAPI):
     # Start bot
     try:
         game_manager.bot_app = await setup_bot()
-        logger.info("✅ Telegram bot started")
+        logger.info("✅ Telegram bot started successfully")
     except Exception as e:
         logger.error(f"❌ Failed to start Telegram bot: {e}")
+        logger.exception("Bot startup error details:")
     
     # Start heartbeat
     asyncio.create_task(game_manager.start_heartbeat())
@@ -1747,8 +2145,9 @@ if __name__ == "__main__":
     logger.info(f"💰 Card price room 3: {CARD_PRICE_ROOM3/100} ETB")
     
     uvicorn.run(
-        app, 
-        host=host, 
+        "main:app",
+        host=host,
         port=port,
-        log_level="info"
+        log_level="info",
+        reload=False
     )
