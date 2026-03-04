@@ -1412,6 +1412,7 @@ class IntegratedBingoGame:
         self.false_bingo_attempts = {}  # game_id -> {user_id: int}
         self.player_marked_numbers = {}  # game_id -> {user_id: {card_id: set(marked_numbers)}}
         self.card_owners = {}  # game_id -> {card_id: user_id}
+        self.user_selected_cards = {}  # game_id -> {user_id: set(card_ids)}
 
         self.bot_app = None
         self.user_connections = {}
@@ -1479,6 +1480,7 @@ class IntegratedBingoGame:
                 self.false_bingo_attempts[game_id] = {}
                 self.player_marked_numbers[game_id] = {}
                 self.card_owners[game_id] = {}
+                self.user_selected_cards[game_id] = {}
                 
                 self.active_games[game_id] = {
                     'called_numbers': [],
@@ -1509,6 +1511,8 @@ class IntegratedBingoGame:
                     self.suspended_cards[game_id][user_id] = set()
                 if user_id not in self.player_marked_numbers[game_id]:
                     self.player_marked_numbers[game_id][user_id] = {}
+                if user_id not in self.user_selected_cards[game_id]:
+                    self.user_selected_cards[game_id][user_id] = set()
 
             active_games_count = db.get_active_games_count(user_id)
             total_stake = db.get_total_stake(user_id)
@@ -1607,67 +1611,145 @@ class IntegratedBingoGame:
         except:
             pass
 
-    async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]):
+    async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]) -> Tuple[bool, str, int, Optional[int]]:
+        """
+        Select cards for a player with proper validation and duplicate prevention
+        """
         async with self.get_lock(game_id):
-            if game_id not in self.active_games:
-                return False, "Game not found", 0, None
-            if self.game_started.get(game_id, False):
-                return False, "Game already started", 0, None
-            if user_id not in self.active_games[game_id]['players']:
-                return False, "Player not found", 0, None
-
-            player = self.active_games[game_id]['players'][user_id]
-            if len(player['card_ids']) + len(card_ids) > MAX_CARDS_PER_PLAYER:
-                return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0, None
-
-            for card_id in card_ids:
-                if card_id in self.taken_cards[game_id]:
-                    return False, f"Card {card_id} already taken", 0, None
-                if not next((c for c in BINGO_CARDS if c['id'] == card_id), None):
-                    return False, f"Card {card_id} not found", 0, None
+            try:
+                # Initialize tracking structures
+                if game_id not in self.user_selected_cards:
+                    self.user_selected_cards[game_id] = {}
+                if user_id not in self.user_selected_cards[game_id]:
+                    self.user_selected_cards[game_id][user_id] = set()
                 
-                # Track card owner
-                self.card_owners[game_id][card_id] = user_id
-
-            # Get price from room settings
-            price_per_card = self.room_price.get(game_id, 1000)
-
-            total_cost = len(card_ids) * price_per_card
-            user = db.get_user(user_id)
-            if not user or user['balance'] < total_cost:
-                return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
-
-            update_result = db.update_balance(user_id, -total_cost, 'game_fee', f'Selected cards for game #{game_id}')
-            if not update_result:
-                return False, "Failed to deduct balance", total_cost, None
-            new_balance = update_result['new_balance']
-
-            for card_id in card_ids:
-                self.taken_cards[game_id].add(card_id)
-                card_data = next(c for c in BINGO_CARDS if c['id'] == card_id)
-                player['cards'].append(card_data['card'])
-                player['card_ids'].append(card_id)
-                player['marked'][card_id] = []
+                # Validate game state
+                if game_id not in self.active_games:
+                    return False, "Game not found", 0, None
+                
+                if self.game_started.get(game_id, False):
+                    return False, "Game already started", 0, None
+                
+                if user_id not in self.active_games[game_id]['players']:
+                    return False, "Player not found", 0, None
+                
+                player = self.active_games[game_id]['players'][user_id]
+                
+                # Check if player is suspended
+                if user_id in self.suspended_players.get(game_id, set()):
+                    return False, "You are suspended from this round", 0, None
+                
+                # Check if cards are already selected by this user
+                already_selected = [cid for cid in card_ids if cid in self.user_selected_cards[game_id][user_id]]
+                if already_selected:
+                    return False, f"Cards {already_selected} already selected", 0, None
+                
+                # Check maximum cards limit
+                if len(player['card_ids']) + len(card_ids) > MAX_CARDS_PER_PLAYER:
+                    return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0, None
+                
+                # Validate all cards exist and are available
+                price_per_card = self.room_price.get(game_id, 1000)
+                available_cards = []
+                
+                for card_id in card_ids:
+                    # Check if card exists
+                    card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+                    if not card_data:
+                        return False, f"Card {card_id} not found", 0, None
+                    
+                    # Check if card is already taken by someone else
+                    if card_id in self.taken_cards.get(game_id, set()):
+                        owner = self.card_owners.get(game_id, {}).get(card_id)
+                        if owner and owner != user_id:
+                            return False, f"Card {card_id} already taken by another player", 0, None
+                    
+                    available_cards.append(card_data)
+                
+                # Calculate total cost
+                total_cost = len(card_ids) * price_per_card
+                
+                # Check user balance
+                user = db.get_user(user_id)
+                if not user or user['balance'] < total_cost:
+                    return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
+                
+                # Deduct balance
+                update_result = db.update_balance(
+                    user_id, 
+                    -total_cost, 
+                    'game_fee', 
+                    f'Selected {len(card_ids)} cards for game #{game_id}'
+                )
+                
+                if not update_result:
+                    return False, "Failed to deduct balance", total_cost, None
+                
+                new_balance = update_result['new_balance']
+                
+                # Initialize game structures if needed
+                if game_id not in self.taken_cards:
+                    self.taken_cards[game_id] = set()
+                if game_id not in self.card_owners:
+                    self.card_owners[game_id] = {}
+                if game_id not in self.suspended_cards:
+                    self.suspended_cards[game_id] = {}
+                if user_id not in self.suspended_cards.get(game_id, {}):
+                    self.suspended_cards.setdefault(game_id, {})[user_id] = set()
+                
+                # Assign each card
+                for i, card_data in enumerate(available_cards):
+                    card_id = card_ids[i]
+                    
+                    # Mark card as taken
+                    self.taken_cards[game_id].add(card_id)
+                    self.card_owners[game_id][card_id] = user_id
+                    self.user_selected_cards[game_id][user_id].add(card_id)
+                    
+                    # Add to player's cards
+                    player['cards'].append(card_data['card'])
+                    player['card_ids'].append(card_id)
+                    player['marked'][card_id] = []
+                    
+                    # Initialize marked numbers for manual marking
+                    if game_id not in self.player_marked_numbers:
+                        self.player_marked_numbers[game_id] = {}
+                    if user_id not in self.player_marked_numbers[game_id]:
+                        self.player_marked_numbers[game_id][user_id] = {}
+                    if card_id not in self.player_marked_numbers[game_id][user_id]:
+                        self.player_marked_numbers[game_id][user_id][card_id] = set()
+                
                 player['balance'] = new_balance
                 player['ready'] = True
                 
-                # Initialize marked numbers for this card
-                if user_id not in self.player_marked_numbers[game_id]:
-                    self.player_marked_numbers[game_id][user_id] = {}
-                if card_id not in self.player_marked_numbers[game_id][user_id]:
-                    self.player_marked_numbers[game_id][user_id][card_id] = set()
-
-            self.active_games[game_id]['total_cards_sold'] += len(card_ids)
-            self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * price_per_card
-
-            if game_id != 2 and not self.game_started.get(game_id, False) and self.active_games[game_id]['total_cards_sold'] >= 5:
-                if game_id not in self.auto_start_timers:
-                    asyncio.create_task(self.start_auto_start_timer(game_id))
-                    await self.broadcast(game_id, {'type': 'auto_start_timer', 'delay': AUTO_START_DELAY})
-
-            await self.broadcast(game_id, {'type': 'player_ready', 'players': self.get_players(game_id), 'user_id': user_id})
-
-            return True, f"Selected {len(card_ids)} cards", total_cost, new_balance
+                # Update game stats
+                self.active_games[game_id]['total_cards_sold'] += len(card_ids)
+                self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * price_per_card
+                
+                # Start auto-start timer if conditions met
+                if (game_id != 2 and not self.game_started.get(game_id, False) and 
+                    self.active_games[game_id]['total_cards_sold'] >= 5):
+                    if game_id not in self.auto_start_timers:
+                        asyncio.create_task(self.start_auto_start_timer(game_id))
+                        await self.broadcast(game_id, {
+                            'type': 'auto_start_timer', 
+                            'delay': AUTO_START_DELAY
+                        })
+                
+                # Broadcast player ready
+                await self.broadcast(game_id, {
+                    'type': 'player_ready', 
+                    'players': self.get_players(game_id), 
+                    'user_id': user_id
+                })
+                
+                logger.info(f"User {user_id} successfully selected {len(card_ids)} cards in room {game_id}")
+                
+                return True, f"Selected {len(card_ids)} cards", total_cost, new_balance
+                
+            except Exception as e:
+                logger.error(f"Error in select_cards: {e}")
+                return False, f"Error selecting cards: {str(e)}", 0, None
 
     async def start_auto_start_timer(self, game_id: int):
         if game_id in self.auto_start_timers:
@@ -1739,100 +1821,313 @@ class IntegratedBingoGame:
                 'already_marked': False
             }
             
-            # Validation checks
-            if not self.game_started.get(game_id, False):
-                result['message'] = 'Game not started'
+            try:
+                # Validation checks
+                if not self.game_started.get(game_id, False):
+                    result['message'] = 'Game not started'
+                    return result
+                
+                if game_id not in self.active_games:
+                    result['message'] = 'Game not found'
+                    return result
+                
+                if user_id not in self.active_games[game_id]['players']:
+                    result['message'] = 'Player not found'
+                    return result
+                
+                player = self.active_games[game_id]['players'][user_id]
+                
+                # Check if player is suspended
+                if user_id in self.suspended_players.get(game_id, set()):
+                    result['message'] = 'You are suspended from this round'
+                    return result
+                
+                # Check if card is suspended
+                if (game_id in self.suspended_cards and 
+                    user_id in self.suspended_cards[game_id] and 
+                    card_id in self.suspended_cards[game_id][user_id]):
+                    result['message'] = f'Card {card_id} is suspended'
+                    return result
+                
+                # Check if card belongs to player
+                if card_id not in player['card_ids']:
+                    result['message'] = 'Card does not belong to you'
+                    return result
+                
+                # Check if number has been called
+                if number not in self.active_games[game_id]['called_numbers']:
+                    result['message'] = f'Number {number} has not been called yet'
+                    return result
+                
+                # Get card data
+                card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
+                if not card_data:
+                    result['message'] = 'Card not found'
+                    return result
+                
+                # Check if number is on this card
+                number_found = False
+                for col in range(5):
+                    for row in range(5):
+                        val = card_data['card'][col][row]
+                        if val == number:
+                            number_found = True
+                            break
+                    if number_found:
+                        break
+                
+                if not number_found:
+                    result['message'] = f'Number {number} is not on this card'
+                    return result
+                
+                # Initialize marking structures if needed
+                if game_id not in self.player_marked_numbers:
+                    self.player_marked_numbers[game_id] = {}
+                if user_id not in self.player_marked_numbers[game_id]:
+                    self.player_marked_numbers[game_id][user_id] = {}
+                if card_id not in self.player_marked_numbers[game_id][user_id]:
+                    self.player_marked_numbers[game_id][user_id][card_id] = set()
+                
+                # Check if already marked
+                if number in self.player_marked_numbers[game_id][user_id][card_id]:
+                    result['message'] = f'Number {number} already marked on this card'
+                    result['already_marked'] = True
+                    return result
+                
+                # Mark the number
+                self.player_marked_numbers[game_id][user_id][card_id].add(number)
+                
+                # Also update player['marked'] for backward compatibility
+                if card_id not in player['marked']:
+                    player['marked'][card_id] = []
+                if number not in player['marked'][card_id]:
+                    player['marked'][card_id].append(number)
+                
+                result['success'] = True
+                result['message'] = f'✓ Marked {number} on card {card_id}'
+                
+                # Check if this mark completes the pattern
+                is_winner = await self.check_winner_with_manual_marks(
+                    game_id, user_id, card_id
+                )
+                
+                if is_winner:
+                    result['pattern_completed'] = True
+                    result['message'] = f'🎉 BINGO! Card {card_id} completed the pattern! Click BINGO to claim!'
+                
+                logger.info(f"User {user_id} manually marked {number} on card {card_id}")
                 return result
-            
+                
+            except Exception as e:
+                logger.error(f"Error in handle_mark_number: {e}")
+                result['message'] = f"Error: {str(e)}"
+                return result
+
+    async def handle_false_bingo(self, game_id: int, user_id: int, card_id: int = None) -> Tuple[bool, str, dict]:
+        """
+        Handle false bingo claim with improved card-based suspension
+        Returns: (success, message, updated_status)
+        """
+        async with self.get_lock(game_id):
+            try:
+                if game_id not in self.active_games:
+                    return False, "Game not found", {}
+                
+                if user_id not in self.active_games[game_id]['players']:
+                    return False, "Player not found", {}
+                
+                player = self.active_games[game_id]['players'][user_id]
+                
+                # Check if player has any cards
+                if not player['card_ids']:
+                    return False, "You have no cards", {}
+                
+                # Check if player is already fully suspended
+                if user_id in self.suspended_players.get(game_id, set()):
+                    return False, "You are already suspended from this round", {}
+                
+                # Initialize suspension tracking
+                if game_id not in self.suspended_cards:
+                    self.suspended_cards[game_id] = {}
+                if user_id not in self.suspended_cards[game_id]:
+                    self.suspended_cards[game_id][user_id] = set()
+                
+                if game_id not in self.false_bingo_attempts:
+                    self.false_bingo_attempts[game_id] = {}
+                if user_id not in self.false_bingo_attempts[game_id]:
+                    self.false_bingo_attempts[game_id][user_id] = 0
+                
+                # Get player's active cards (not suspended)
+                active_cards = []
+                suspended_cards = self.suspended_cards[game_id][user_id]
+                
+                for cid in player['card_ids']:
+                    if cid not in suspended_cards:
+                        active_cards.append(cid)
+                
+                logger.info(f"User {user_id} false bingo - Active cards: {active_cards}, Suspended: {list(suspended_cards)}")
+                
+                if not active_cards:
+                    # All cards suspended - suspend player entirely
+                    if game_id not in self.suspended_players:
+                        self.suspended_players[game_id] = set()
+                    self.suspended_players[game_id].add(user_id)
+                    
+                    logger.info(f"User {user_id} fully suspended - no active cards left")
+                    
+                    # Broadcast full suspension
+                    await self.broadcast(game_id, {
+                        'type': 'player_suspended',
+                        'user_id': user_id,
+                        'reason': 'all_cards_suspended',
+                        'suspended_players': list(self.suspended_players[game_id])
+                    })
+                    
+                    status = await self.get_player_card_status(game_id, user_id)
+                    return True, "All your cards are suspended. You are out of this round!", status
+                
+                # Decide which card to suspend
+                card_to_suspend = None
+                reason = ""
+                
+                # If a specific card was provided and it belongs to the player and is active
+                if card_id and card_id in player['card_ids']:
+                    if card_id in suspended_cards:
+                        # Card already suspended, pick a random active card
+                        card_to_suspend = random.choice(active_cards)
+                        reason = "random (selected card already suspended)"
+                    else:
+                        # Suspend the specific card that caused false bingo
+                        card_to_suspend = card_id
+                        reason = "specific_card"
+                else:
+                    # No card specified, pick a random active card
+                    if active_cards:
+                        card_to_suspend = random.choice(active_cards)
+                        reason = "random"
+                    else:
+                        return False, "No active cards to suspend", {}
+                
+                # Suspend the card
+                self.suspended_cards[game_id][user_id].add(card_to_suspend)
+                self.false_bingo_attempts[game_id][user_id] += 1
+                
+                # Clear marked numbers for suspended card
+                if (game_id in self.player_marked_numbers and 
+                    user_id in self.player_marked_numbers[game_id] and 
+                    card_to_suspend in self.player_marked_numbers[game_id][user_id]):
+                    del self.player_marked_numbers[game_id][user_id][card_to_suspend]
+                
+                # Also clear from player['marked'] for backward compatibility
+                if card_to_suspend in player['marked']:
+                    player['marked'][card_to_suspend] = []
+                
+                # Get remaining active cards count
+                remaining_cards = len([c for c in player['card_ids'] 
+                                     if c not in self.suspended_cards[game_id][user_id]])
+                
+                logger.info(f"User {user_id} - Suspended card {card_to_suspend}, remaining: {remaining_cards}")
+                
+                # Broadcast card suspension
+                await self.broadcast(game_id, {
+                    'type': 'card_suspended',
+                    'user_id': user_id,
+                    'suspended_card_id': card_to_suspend,
+                    'remaining_cards': remaining_cards,
+                    'total_cards': len(player['card_ids']),
+                    'false_bingo_attempts': self.false_bingo_attempts[game_id][user_id],
+                    'suspended_cards': list(self.suspended_cards[game_id][user_id]),
+                    'reason': reason
+                })
+                
+                # Get updated status
+                status = await self.get_player_card_status(game_id, user_id)
+                
+                # Send personal message to the player
+                player_message = self._get_suspension_message(reason, card_to_suspend, remaining_cards)
+                
+                return True, player_message, status
+                
+            except Exception as e:
+                logger.error(f"Error in handle_false_bingo: {e}")
+                return False, f"Error: {str(e)}", {}
+
+    def _get_suspension_message(self, reason: str, card_id: int, remaining_cards: int) -> str:
+        """Get appropriate message based on suspension reason"""
+        base_messages = {
+            "specific_card": f"❌ Wrong Bingo! Card {card_id} is suspended for this round!",
+            "random": f"❌ Wrong Bingo! Random card {card_id} has been suspended!",
+            "random (selected card already suspended)": f"❌ Wrong Bingo! That card was already suspended. Random card {card_id} suspended instead!"
+        }
+        
+        message = base_messages.get(reason, f"❌ Wrong Bingo! Card {card_id} suspended!")
+        
+        if remaining_cards == 0:
+            message += "\n\n⚠️ You have no active cards left! You are out of this round."
+        elif remaining_cards == 1:
+            message += "\n\n⚠️ Warning: This is your last active card!"
+        elif remaining_cards <= 3:
+            message += f"\n\n⚠️ You have {remaining_cards} active cards remaining."
+        
+        return message
+
+    async def get_player_card_status(self, game_id: int, user_id: int) -> dict:
+        """Get status of all player's cards (active/suspended)"""
+        try:
             if game_id not in self.active_games:
-                result['message'] = 'Game not found'
-                return result
+                return {'error': 'Game not found'}
             
             if user_id not in self.active_games[game_id]['players']:
-                result['message'] = 'Player not found'
-                return result
+                return {'error': 'Player not found'}
             
             player = self.active_games[game_id]['players'][user_id]
             
-            # Check if player is suspended
-            if user_id in self.suspended_players.get(game_id, set()):
-                result['message'] = 'You are suspended from this round'
-                return result
+            # Get suspended cards
+            suspended = set()
+            if game_id in self.suspended_cards and user_id in self.suspended_cards[game_id]:
+                suspended = self.suspended_cards[game_id][user_id]
             
-            # Check if card is suspended
-            if (game_id in self.suspended_cards and 
-                user_id in self.suspended_cards[game_id] and 
-                card_id in self.suspended_cards[game_id][user_id]):
-                result['message'] = f'Card {card_id} is suspended'
-                return result
+            # Get false bingo attempts
+            attempts = 0
+            if game_id in self.false_bingo_attempts and user_id in self.false_bingo_attempts[game_id]:
+                attempts = self.false_bingo_attempts[game_id][user_id]
             
-            # Check if card belongs to player
-            if card_id not in player['card_ids']:
-                result['message'] = 'Card does not belong to you'
-                return result
+            result = {
+                'total_cards': len(player['card_ids']),
+                'active_cards': [],
+                'suspended_cards': [],
+                'false_bingo_attempts': attempts,
+                'fully_suspended': user_id in self.suspended_players.get(game_id, set())
+            }
             
-            # Check if number has been called
-            if number not in self.active_games[game_id]['called_numbers']:
-                result['message'] = f'Number {number} has not been called yet'
-                return result
+            for card_id in player['card_ids']:
+                card_info = {
+                    'card_id': card_id,
+                    'status': 'suspended' if card_id in suspended else 'active'
+                }
+                
+                # Add marked numbers if any
+                marked_count = 0
+                marked_numbers = []
+                if (game_id in self.player_marked_numbers and 
+                    user_id in self.player_marked_numbers[game_id] and 
+                    card_id in self.player_marked_numbers[game_id][user_id]):
+                    marked_count = len(self.player_marked_numbers[game_id][user_id][card_id])
+                    marked_numbers = list(self.player_marked_numbers[game_id][user_id][card_id])
+                
+                card_info['marked_count'] = marked_count
+                card_info['marked_numbers'] = marked_numbers
+                
+                if card_id in suspended:
+                    result['suspended_cards'].append(card_info)
+                else:
+                    result['active_cards'].append(card_info)
             
-            # Get card data
-            card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-            if not card_data:
-                result['message'] = 'Card not found'
-                return result
-            
-            # Check if number is on this card
-            number_found = False
-            for col in range(5):
-                for row in range(5):
-                    if card_data['card'][col][row] == number:
-                        number_found = True
-                        break
-                if number_found:
-                    break
-            
-            if not number_found:
-                result['message'] = f'Number {number} is not on this card'
-                return result
-            
-            # Initialize marking structures if needed
-            if game_id not in self.player_marked_numbers:
-                self.player_marked_numbers[game_id] = {}
-            if user_id not in self.player_marked_numbers[game_id]:
-                self.player_marked_numbers[game_id][user_id] = {}
-            if card_id not in self.player_marked_numbers[game_id][user_id]:
-                self.player_marked_numbers[game_id][user_id][card_id] = set()
-            
-            # Check if already marked
-            if number in self.player_marked_numbers[game_id][user_id][card_id]:
-                result['message'] = f'Number {number} already marked on this card'
-                result['already_marked'] = True
-                return result
-            
-            # Mark the number
-            self.player_marked_numbers[game_id][user_id][card_id].add(number)
-            
-            # Also update player['marked'] for backward compatibility
-            if card_id not in player['marked']:
-                player['marked'][card_id] = []
-            if number not in player['marked'][card_id]:
-                player['marked'][card_id].append(number)
-            
-            result['success'] = True
-            result['message'] = f'✓ Marked {number} on card {card_id}'
-            
-            # Check if this mark completes the pattern
-            is_winner = await self.check_winner_with_manual_marks(
-                game_id, user_id, card_id
-            )
-            
-            if is_winner:
-                result['pattern_completed'] = True
-                result['message'] = f'🎉 BINGO! Card {card_id} completed the pattern! Click BINGO to claim!'
-            
-            logger.info(f"User {user_id} manually marked {number} on card {card_id}")
             return result
+            
+        except Exception as e:
+            logger.error(f"Error getting card status: {e}")
+            return {'error': str(e)}
 
     async def check_winner_with_manual_marks(self, game_id: int, user_id: int, card_id: int) -> bool:
         """Check winner using only manually marked numbers"""
@@ -1888,221 +2183,6 @@ class IntegratedBingoGame:
         except Exception as e:
             logger.error(f"Error checking winner with manual marks: {e}")
             return False
-
-    async def handle_false_bingo(self, game_id: int, user_id: int, card_id: int = None) -> Tuple[bool, str]:
-        """
-        Handle false bingo claim with card-based suspension
-        If card_id is provided, try to suspend that specific card
-        Otherwise suspend a random card
-        """
-        async with self.get_lock(game_id):
-            if game_id not in self.active_games:
-                logger.warning(f"Game {game_id} not active for false bingo")
-                return False, "Game not found"
-            
-            if user_id not in self.active_games[game_id]['players']:
-                logger.warning(f"User {user_id} not in game {game_id}")
-                return False, "Player not found"
-            
-            player = self.active_games[game_id]['players'][user_id]
-            
-            # Check if player has any cards
-            if not player['card_ids']:
-                return False, "You have no cards"
-            
-            # Initialize structures for this game/user if needed
-            if game_id not in self.suspended_cards:
-                self.suspended_cards[game_id] = {}
-            if user_id not in self.suspended_cards[game_id]:
-                self.suspended_cards[game_id][user_id] = set()
-            
-            if game_id not in self.false_bingo_attempts:
-                self.false_bingo_attempts[game_id] = {}
-            if user_id not in self.false_bingo_attempts[game_id]:
-                self.false_bingo_attempts[game_id][user_id] = 0
-            
-            # Get player's active cards (not suspended)
-            active_cards = []
-            for cid in player['card_ids']:
-                if cid not in self.suspended_cards[game_id][user_id]:
-                    active_cards.append(cid)
-            
-            logger.info(f"User {user_id} false bingo - Active cards: {active_cards}")
-            
-            if not active_cards:
-                # All cards suspended - suspend player entirely
-                if game_id not in self.suspended_players:
-                    self.suspended_players[game_id] = set()
-                self.suspended_players[game_id].add(user_id)
-                
-                logger.info(f"User {user_id} fully suspended - no active cards left")
-                
-                # Broadcast full suspension
-                await self.broadcast(game_id, {
-                    'type': 'player_suspended',
-                    'user_id': user_id,
-                    'reason': 'all_cards_suspended',
-                    'suspended_players': list(self.suspended_players[game_id])
-                })
-                
-                return True, "All your cards are suspended. You are out of this round!"
-            
-            # Decide which card to suspend
-            card_to_suspend = None
-            reason = ""
-            
-            if card_id and card_id in player['card_ids']:
-                if card_id in self.suspended_cards[game_id][user_id]:
-                    # Card already suspended, pick random
-                    card_to_suspend = random.choice(active_cards)
-                    reason = "random_card (selected card already suspended)"
-                else:
-                    # Suspend the card that caused false bingo
-                    card_to_suspend = card_id
-                    reason = "false_bingo_card"
-            else:
-                # No card specified or invalid card, suspend random
-                card_to_suspend = random.choice(active_cards)
-                reason = "random_card"
-            
-            # Suspend the card
-            self.suspended_cards[game_id][user_id].add(card_to_suspend)
-            self.false_bingo_attempts[game_id][user_id] += 1
-            
-            # Clear marked numbers for suspended card
-            if (game_id in self.player_marked_numbers and 
-                user_id in self.player_marked_numbers[game_id] and 
-                card_to_suspend in self.player_marked_numbers[game_id][user_id]):
-                del self.player_marked_numbers[game_id][user_id][card_to_suspend]
-            
-            # Get remaining active cards count
-            remaining_cards = len([c for c in player['card_ids'] 
-                                 if c not in self.suspended_cards[game_id][user_id]])
-            
-            logger.info(f"User {user_id} - Suspended card {card_to_suspend}, remaining: {remaining_cards}")
-            
-            # Broadcast card suspension
-            await self.broadcast(game_id, {
-                'type': 'card_suspended',
-                'user_id': user_id,
-                'suspended_card_id': card_to_suspend,
-                'remaining_cards': remaining_cards,
-                'total_cards': len(player['card_ids']),
-                'false_bingo_attempts': self.false_bingo_attempts[game_id][user_id],
-                'suspended_cards': list(self.suspended_cards[game_id][user_id]),
-                'reason': reason
-            })
-            
-            # Send personal message to the player
-            player_message = self._get_suspension_message(reason, card_to_suspend, remaining_cards)
-            
-            return True, player_message
-
-    def _get_suspension_message(self, reason: str, card_id: int, remaining_cards: int) -> str:
-        """Get appropriate message based on suspension reason"""
-        base_messages = {
-            "false_bingo_card": f"❌ Wrong Bingo! Card {card_id} is suspended for this round!",
-            "random_card": f"❌ Wrong Bingo! Random card {card_id} has been suspended!",
-            "random_card (selected card already suspended)": f"❌ Wrong Bingo! That card was already suspended. Random card {card_id} suspended instead!"
-        }
-        
-        message = base_messages.get(reason, f"❌ Wrong Bingo! Card {card_id} suspended!")
-        
-        if remaining_cards == 0:
-            message += "\n\n⚠️ You have no active cards left! You are out of this round."
-        elif remaining_cards == 1:
-            message += "\n\n⚠️ Warning: This is your last active card!"
-        elif remaining_cards <= 3:
-            message += f"\n\n⚠️ You have {remaining_cards} active cards remaining."
-        
-        return message
-
-    async def get_unmarked_called_numbers(self, game_id: int, user_id: int, card_id: int) -> list:
-        """Get list of called numbers that haven't been manually marked on this card"""
-        if game_id not in self.active_games:
-            return []
-        
-        called_numbers = set(self.active_games[game_id]['called_numbers'])
-        
-        # Get manually marked numbers
-        marked_numbers = set()
-        if (game_id in self.player_marked_numbers and 
-            user_id in self.player_marked_numbers[game_id] and 
-            card_id in self.player_marked_numbers[game_id][user_id]):
-            marked_numbers = self.player_marked_numbers[game_id][user_id][card_id]
-        
-        # Get card data to find which numbers are actually on the card
-        card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-        if not card_data:
-            return []
-        
-        # Get numbers on this card
-        card_numbers = set()
-        for col in range(5):
-            for row in range(5):
-                val = card_data['card'][col][row]
-                if val != 'FREE':
-                    card_numbers.add(val)
-        
-        # Called numbers that are on the card but not marked
-        unmarked = (called_numbers & card_numbers) - marked_numbers
-        
-        return sorted(list(unmarked))
-
-    async def get_player_card_status(self, game_id: int, user_id: int) -> dict:
-        """Get status of all player's cards (active/suspended)"""
-        try:
-            if game_id not in self.active_games:
-                return {'error': 'Game not found'}
-            
-            if user_id not in self.active_games[game_id]['players']:
-                return {'error': 'Player not found'}
-            
-            player = self.active_games[game_id]['players'][user_id]
-            
-            # Get suspended cards
-            suspended = set()
-            if game_id in self.suspended_cards and user_id in self.suspended_cards[game_id]:
-                suspended = self.suspended_cards[game_id][user_id]
-            
-            # Get false bingo attempts
-            attempts = 0
-            if game_id in self.false_bingo_attempts and user_id in self.false_bingo_attempts[game_id]:
-                attempts = self.false_bingo_attempts[game_id][user_id]
-            
-            result = {
-                'total_cards': len(player['card_ids']),
-                'active_cards': [],
-                'suspended_cards': [],
-                'false_bingo_attempts': attempts,
-                'fully_suspended': user_id in self.suspended_players.get(game_id, set())
-            }
-            
-            for card_id in player['card_ids']:
-                card_info = {
-                    'card_id': card_id,
-                    'status': 'suspended' if card_id in suspended else 'active'
-                }
-                
-                # Add marked numbers if any
-                marked_count = 0
-                if (game_id in self.player_marked_numbers and 
-                    user_id in self.player_marked_numbers[game_id] and 
-                    card_id in self.player_marked_numbers[game_id][user_id]):
-                    marked_count = len(self.player_marked_numbers[game_id][user_id][card_id])
-                
-                card_info['marked_count'] = marked_count
-                
-                if card_id in suspended:
-                    result['suspended_cards'].append(card_info)
-                else:
-                    result['active_cards'].append(card_info)
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error getting card status: {e}")
-            return {'error': str(e)}
 
     async def finish_round_multi(self, game_id: int, winners: List[Tuple[int, int]]):
         if game_id not in self.active_games:
@@ -2189,6 +2269,8 @@ class IntegratedBingoGame:
             del self.player_marked_numbers[game_id]
         if game_id in self.card_owners:
             del self.card_owners[game_id]
+        if game_id in self.user_selected_cards:
+            del self.user_selected_cards[game_id]
         
         # Clear player suspensions
         if game_id in self.suspended_players:
@@ -2736,19 +2818,6 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                         'message': result['message']
                     })
             
-            elif data['type'] == 'get_unmarked_numbers':
-                # Get numbers that are called but not yet marked on this card
-                card_id = data.get('card_id')
-                if card_id:
-                    unmarked = await game_manager.get_unmarked_called_numbers(
-                        game_id, user_id, card_id
-                    )
-                    await websocket.send_json({
-                        'type': 'unmarked_numbers',
-                        'card_id': card_id,
-                        'unmarked_numbers': unmarked
-                    })
-            
             elif data['type'] == 'claim_bingo':
                 card_id = data.get('card_id')
                 if not card_id:
@@ -2772,47 +2841,35 @@ async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
                 else:
                     # False bingo - suspend a card
                     logger.info(f"False bingo by user {user_id} on card {card_id}")
-                    success, message = await game_manager.handle_false_bingo(
+                    success, message, status = await game_manager.handle_false_bingo(
                         game_id, user_id, card_id
                     )
-                    
-                    # Get updated status
-                    new_status = await game_manager.get_player_card_status(game_id, user_id)
                     
                     await websocket.send_json({
                         'type': 'false_bingo_result',
                         'success': success,
                         'message': message,
                         'claimed_card_id': card_id,
-                        'new_status': new_status
+                        'new_status': status
                     })
             
             elif data['type'] == 'false_bingo':
                 # Handle false bingo from client (backup)
                 card_id = data.get('card_id')
                 logger.info(f"False bingo report from user {user_id} on card {card_id}")
-                success, message = await game_manager.handle_false_bingo(
+                success, message, status = await game_manager.handle_false_bingo(
                     game_id, user_id, card_id
                 )
                 await websocket.send_json({
                     'type': 'false_bingo_result',
                     'success': success,
-                    'message': message
+                    'message': message,
+                    'claimed_card_id': card_id,
+                    'new_status': status
                 })
             
             elif data['type'] == 'get_card_status':
                 status = await game_manager.get_player_card_status(game_id, user_id)
-                
-                # Add marked numbers for each card
-                for card in status.get('active_cards', []):
-                    card_id = card['card_id']
-                    if (game_id in game_manager.player_marked_numbers and 
-                        user_id in game_manager.player_marked_numbers[game_id] and 
-                        card_id in game_manager.player_marked_numbers[game_id][user_id]):
-                        card['marked_numbers'] = list(
-                            game_manager.player_marked_numbers[game_id][user_id][card_id]
-                        )
-                
                 await websocket.send_json({
                     'type': 'card_status',
                     'status': status
