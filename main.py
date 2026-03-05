@@ -333,7 +333,7 @@ def check_pattern(marked_positions, pattern_name):
     
     return False
 
-# ==================== Game Class with Admin Controls ====================
+# ==================== Game Class with Auto-Call ====================
 
 class IntegratedBingoGame:
     def __init__(self):
@@ -352,9 +352,12 @@ class IntegratedBingoGame:
         self.auto_start_timers = {}
         self.first_card_time = {}
         self.reset_timers = {}
-        self.number_pool = {}  # For manual number calling
+        self.number_pool = {}  # For number calling
         
-        # NEW: Admin control timers
+        # Auto-call tasks
+        self.auto_call_tasks = {}  # game_id -> asyncio.Task
+        
+        # Admin control timers
         self.admin_control_timer = {}  # game_id -> asyncio.Task
         self.admin_control_timeout = ADMIN_CONTROL_TIMEOUT
         
@@ -414,6 +417,15 @@ class IntegratedBingoGame:
                 self.room_price[game_id] = 1000  # 10 ETB default
                 
                 logger.info(f"Room {game_id} auto-set pattern: {self.room_patterns[game_id]}, price: 10 ETB")
+                
+                # Broadcast update to all players
+                await self.broadcast(game_id, {
+                    'type': 'room_settings_updated',
+                    'pattern': self.room_patterns[game_id],
+                    'pattern_name': get_pattern_name(self.room_patterns[game_id]),
+                    'price': self.room_price[game_id] / 100,
+                    'pattern_locked': True
+                })
                 
                 # Auto-start the game if enough cards are sold
                 if self.active_games[game_id]['total_cards_sold'] >= 5:
@@ -843,22 +855,49 @@ class IntegratedBingoGame:
         """Start a new round"""
         if self.game_started.get(game_id, False) or game_id not in self.active_games or self.active_games[game_id]['total_cards_sold'] == 0:
             return
+        
         self.game_started[game_id] = True
         self.stop_number_generation[game_id] = False
+        
         if game_id in self.auto_start_timers:
             self.auto_start_timers[game_id].cancel()
             del self.auto_start_timers[game_id]
+        
+        # Broadcast game started
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_numbers[game_id]})
         
-        # Start auto-calling numbers
-        asyncio.create_task(self.auto_call_numbers(game_id))
-        logger.info(f"Room {game_id} started")
+        # IMPORTANT: Start auto-calling numbers
+        self.start_auto_call(game_id)
+        
+        logger.info(f"Room {game_id} started - auto-call task initiated")
 
-    async def auto_call_numbers(self, game_id: int):
-        """Automatically call numbers every 3 seconds"""
-        while self.game_started.get(game_id, False) and not self.stop_number_generation.get(game_id, False):
-            await asyncio.sleep(AUTO_CALL_INTERVAL)
-            await self.call_next_number(game_id)
+    def start_auto_call(self, game_id: int):
+        """Start the auto-call task for a game"""
+        if game_id in self.auto_call_tasks:
+            self.auto_call_tasks[game_id].cancel()
+        
+        async def auto_call_loop():
+            logger.info(f"Auto-call started for room {game_id}")
+            try:
+                while self.game_started.get(game_id, False) and not self.stop_number_generation.get(game_id, False):
+                    await asyncio.sleep(AUTO_CALL_INTERVAL)
+                    
+                    # Call the next number
+                    await self.call_next_number(game_id)
+                    
+                    # Check if we've called all numbers
+                    if game_id in self.number_pool and not self.number_pool[game_id]:
+                        logger.info(f"Room {game_id} - All numbers called")
+                        break
+                        
+            except asyncio.CancelledError:
+                logger.info(f"Auto-call cancelled for room {game_id}")
+            except Exception as e:
+                logger.error(f"Error in auto-call for room {game_id}: {e}")
+            finally:
+                logger.info(f"Auto-call stopped for room {game_id}")
+        
+        self.auto_call_tasks[game_id] = asyncio.create_task(auto_call_loop())
 
     async def call_next_number(self, game_id: int):
         """Call the next number in the sequence"""
@@ -870,6 +909,7 @@ class IntegratedBingoGame:
                 return
             
             if game_id not in self.number_pool or not self.number_pool[game_id]:
+                logger.info(f"Room {game_id} - No more numbers to call")
                 return
             
             number = self.number_pool[game_id].pop()
@@ -885,6 +925,8 @@ class IntegratedBingoGame:
             if game_id in self.active_games:
                 self.active_games[game_id]['called_numbers'].append(number)
             
+            logger.info(f"Room {game_id} - Called number: {number}")
+            
             # Broadcast to all players
             await self.broadcast(game_id, {
                 'type': 'number_called',
@@ -892,8 +934,6 @@ class IntegratedBingoGame:
                 'called': self.called_numbers[game_id],
                 'auto_mark': False
             })
-            
-            logger.info(f"Room {game_id} - Called number: {number}")
 
     async def handle_mark_number(self, game_id: int, user_id: int, card_id: int, number: int) -> dict:
         """Handle manual marking of a called number"""
@@ -1559,6 +1599,11 @@ class IntegratedBingoGame:
         """Reset round with card suspension cleanup"""
         logger.info(f"Resetting round for game {game_id}")
         
+        # Cancel auto-call task
+        if game_id in self.auto_call_tasks:
+            self.auto_call_tasks[game_id].cancel()
+            del self.auto_call_tasks[game_id]
+        
         # Clear card-specific suspension data for this game
         if game_id in self.suspended_cards:
             del self.suspended_cards[game_id]
@@ -1886,7 +1931,7 @@ async def approve_payment(request: Request):
         if not payment:
             return JSONResponse(content={"error": "Payment not found"}, status_code=404)
         
-        db.update_payment_request_status(request_id, 'approved', 'Approved by admin')
+        db.update_payment_request_status(request_id, 'approved', 'Approved by admin', admin_id)
         result = db.update_balance(
             payment['user_id'],
             payment['amount'],
@@ -1913,7 +1958,7 @@ async def reject_payment(request: Request):
         if str(admin_id) != str(ADMIN_USER_ID):
             return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
         
-        db.update_payment_request_status(request_id, 'rejected', 'Rejected by admin')
+        db.update_payment_request_status(request_id, 'rejected', 'Rejected by admin', admin_id)
         
         return JSONResponse(content={"success": True})
     except Exception as e:
@@ -1946,7 +1991,7 @@ async def approve_withdrawal(request: Request):
             'withdrawal',
             f'Withdrawal approved - {request_id}'
         )
-        db.update_withdrawal_request_status(request_id, 'approved', 'Approved by admin')
+        db.update_withdrawal_request_status(request_id, 'approved', 'Approved by admin', admin_id)
         
         return JSONResponse(content={"success": True})
     except Exception as e:
@@ -1964,7 +2009,7 @@ async def reject_withdrawal(request: Request):
         if str(admin_id) != str(ADMIN_USER_ID):
             return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
         
-        db.update_withdrawal_request_status(request_id, 'rejected', 'Rejected by admin')
+        db.update_withdrawal_request_status(request_id, 'rejected', 'Rejected by admin', admin_id)
         
         return JSONResponse(content={"success": True})
     except Exception as e:
