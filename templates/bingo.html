@@ -113,31 +113,89 @@ body{
   border-radius:16px;padding:16px 20px;
   display:flex;align-items:center;justify-content:space-between;gap:12px;
   cursor:pointer;
+  transition:all 0.2s;
+}
+.call-box:hover{
+  background:var(--surface2);
 }
 .call-display{display:flex;align-items:center;gap:6px;}
-.call-L{font-family:'Boogaloo',cursive;font-size:2.8rem;line-height:1;}
-.call-N{font-family:'Boogaloo',cursive;font-size:5rem;line-height:1;}
+.call-L{
+  font-family:'Boogaloo',cursive;
+  font-size:2.8rem;
+  line-height:1;
+  transition:color 0.3s;
+}
+.call-N{
+  font-family:'Boogaloo',cursive;
+  font-size:5rem;
+  line-height:1;
+  transition:color 0.3s;
+}
 .call-info{flex:1;text-align:left;}
-.call-label{font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px;}
-.call-count{font-family:'IBM Plex Mono',monospace;font-size:0.9rem;font-weight:700;}
+.call-label{
+  font-size:0.7rem;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:0.07em;
+  margin-bottom:4px;
+}
+.call-count{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:0.9rem;
+  font-weight:700;
+}
+.call-status{
+  font-size:0.7rem;
+  color:var(--muted);
+  margin-top:4px;
+}
 
 /* Called chips scroll */
 .chips-wrap{
-  display:flex;gap:4px;overflow-x:auto;padding:8px 16px 4px;
+  display:flex;
+  gap:4px;
+  overflow-x:auto;
+  padding:8px 16px 4px;
   scrollbar-width:none;
+  min-height: 40px;
 }
 .chips-wrap::-webkit-scrollbar{display:none;}
 .chip{
-  flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:0.72rem;font-weight:700;
-  padding:4px 8px;border-radius:20px;
-  background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.35);
+  flex-shrink:0;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:0.72rem;
+  font-weight:700;
+  padding:4px 8px;
+  border-radius:20px;
+  background:rgba(255,255,255,0.06);
+  color:rgba(255,255,255,0.35);
+  transition:all 0.2s;
 }
-.chip.B{background:rgba(255,107,107,0.15);color:#ff6b6b;}
-.chip.I{background:rgba(255,217,61,0.15);color:#ffd93d;}
-.chip.N{background:rgba(107,203,119,0.15);color:#6bcb77;}
-.chip.G{background:rgba(77,150,255,0.15);color:#4d96ff;}
-.chip.O{background:rgba(192,132,252,0.15);color:#c084fc;}
-.chip.newest{outline:2px solid currentColor;transform:scale(1.15);}
+.chip.B{
+  background:rgba(255,107,107,0.15);
+  color:#ff6b6b;
+}
+.chip.I{
+  background:rgba(255,217,61,0.15);
+  color:#ffd93d;
+}
+.chip.N{
+  background:rgba(107,203,119,0.15);
+  color:#6bcb77;
+}
+.chip.G{
+  background:rgba(77,150,255,0.15);
+  color:#4d96ff;
+}
+.chip.O{
+  background:rgba(192,132,252,0.15);
+  color:#c084fc;
+}
+.chip.newest{
+  outline:2px solid currentColor;
+  transform:scale(1.15);
+  z-index:10;
+}
 
 /* ══ BINGO BUTTON ══ */
 .bingo-btn-wrap{padding:0 16px 12px;}
@@ -178,68 +236,115 @@ body{
 .add-card-mini:active{transform:scale(0.95);}
 
 .cards-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
-  gap:12px;margin-bottom:20px;
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:12px;
+  margin-bottom:20px;
 }
 
 .bingo-card{
-  background:var(--surface);border:2px solid var(--border);
-  border-radius:14px;padding:10px;transition:all 0.2s;
+  background:var(--surface);
+  border:2px solid var(--border);
+  border-radius:14px;
+  padding:10px;
+  transition:all 0.2s;
 }
-.bingo-card.won{border-color:var(--gold);box-shadow:0 0 20px rgba(255,217,61,0.2);}
-.bingo-card.suspended{border-color:var(--red);opacity:0.55;}
+.bingo-card.won{
+  border-color:var(--gold);
+  box-shadow:0 0 20px rgba(255,217,61,0.2);
+}
+.bingo-card.suspended{
+  border-color:var(--red);
+  opacity:0.55;
+}
 
 .card-head{
-  display:flex;align-items:center;justify-content:space-between;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   margin-bottom:8px;
 }
 .card-id{
-  font-family:'IBM Plex Mono',monospace;font-size:0.72rem;
-  font-weight:700;color:var(--gold);
+  font-family:'IBM Plex Mono',monospace;
+  font-size:0.72rem;
+  font-weight:700;
+  color:var(--gold);
 }
 .card-status{
-  font-size:0.62rem;font-weight:900;padding:2px 7px;border-radius:20px;
+  font-size:0.62rem;
+  font-weight:900;
+  padding:2px 7px;
+  border-radius:20px;
 }
-.cs-won{background:rgba(255,217,61,0.2);color:var(--gold);}
-.cs-susp{background:rgba(239,68,68,0.2);color:var(--red);}
-.cs-marks{color:var(--muted);}
+.cs-won{
+  background:rgba(255,217,61,0.2);
+  color:var(--gold);
+}
+.cs-susp{
+  background:rgba(239,68,68,0.2);
+  color:var(--red);
+}
+.cs-marks{
+  color:var(--muted);
+}
 
 .b-letters{
-  display:grid;grid-template-columns:repeat(5,1fr);
-  gap:3px;margin-bottom:3px;
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:3px;
+  margin-bottom:3px;
 }
 .b-letter{
-  font-family:'Boogaloo',cursive;font-size:1rem;text-align:center;
+  font-family:'Boogaloo',cursive;
+  font-size:1rem;
+  text-align:center;
 }
 .b-grid{
-  display:grid;grid-template-columns:repeat(5,1fr);
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
   gap:3px;
 }
 .cell{
-  aspect-ratio:1;border-radius:6px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:0.72rem;font-weight:900;cursor:pointer;
-  transition:all 0.12s;user-select:none;
-  background:var(--surface2);border:1px solid var(--border);
+  aspect-ratio:1;
+  border-radius:6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:0.72rem;
+  font-weight:900;
+  cursor:pointer;
+  transition:all 0.12s;
+  user-select:none;
+  background:var(--surface2);
+  border:1px solid var(--border);
   font-family:'IBM Plex Mono',monospace;
 }
-.cell:active:not(.free):not(.marked){transform:scale(0.92);}
+.cell:active:not(.free):not(.marked){
+  transform:scale(0.92);
+}
 .cell.free{
-  background:linear-gradient(135deg,#6bcb77,#059669);color:#fff;
-  border-color:#6bcb77;font-size:0.38rem;cursor:default;
-  font-family:'Nunito',sans-serif;font-weight:900;
+  background:linear-gradient(135deg,#6bcb77,#059669);
+  color:#fff;
+  border-color:#6bcb77;
+  font-size:0.38rem;
+  cursor:default;
+  font-family:'Nunito',sans-serif;
+  font-weight:900;
 }
 .cell.called{
-  border-color:rgba(255,255,255,0.14);
-  background:rgba(255,255,255,0.06);
+  border-color:rgba(255,107,107,0.5);
+  background:rgba(255,107,107,0.1);
 }
 .cell.marked{
-  background:linear-gradient(135deg,#ffd93d,#f59e0b);color:#0f0a1e;
-  border-color:#ffd93d;box-shadow:0 0 8px rgba(255,217,61,0.35);
+  background:linear-gradient(135deg,#ffd93d,#f59e0b);
+  color:#0f0a1e;
+  border-color:#ffd93d;
+  box-shadow:0 0 8px rgba(255,217,61,0.35);
 }
 .cell.win-cell{
   background:linear-gradient(135deg,#ff6b6b,#f43f5e)!important;
-  color:#fff!important;border-color:#ff6b6b!important;
+  color:#fff!important;
+  border-color:#ff6b6b!important;
   box-shadow:0 0 12px rgba(255,107,107,0.6)!important;
   animation:wpulse 0.7s ease-in-out infinite alternate;
 }
@@ -323,8 +428,16 @@ body{
   position:relative;
   font-size:0.7rem;
 }
-.card-option:hover{border-color:rgba(77,150,255,0.45);background:rgba(77,150,255,0.05);transform:translateY(-2px);}
-.card-option.selected{border-color:#4d96ff;background:rgba(77,150,255,0.1);transform:translateY(-2px);}
+.card-option:hover{
+  border-color:rgba(77,150,255,0.45);
+  background:rgba(77,150,255,0.05);
+  transform:translateY(-2px);
+}
+.card-option.selected{
+  border-color:#4d96ff;
+  background:rgba(77,150,255,0.1);
+  transform:translateY(-2px);
+}
 .card-option.selected .sel-check{display:flex;}
 .card-id-label{
   font-family:'IBM Plex Mono',monospace;
@@ -1285,23 +1398,29 @@ canvas#confetti{
     <div class="pattern-hint" id="pattern-hint-text">Complete any single line — row, column, or diagonal.</div>
   </div>
 
-  <!-- Current call -->
+  <!-- Current call - IMPORTANT: This is the main number display -->
   <div class="call-section">
     <div class="call-box" onclick="callNumber()">
       <div class="call-display">
-        <span class="call-L" id="call-L" style="color:rgba(255,255,255,0.2)">—</span>
-        <span class="call-N" id="call-N" style="color:rgba(255,255,255,0.12)">?</span>
+        <span class="call-L" id="call-L">—</span>
+        <span class="call-N" id="call-N">?</span>
       </div>
       <div class="call-info">
         <div class="call-label">CALLED</div>
         <div class="call-count"><span id="called-cnt">0</span>/75</div>
-        <div style="font-size:0.7rem;color:var(--muted);margin-top:4px" id="call-status">Click to call</div>
+        <div class="call-status" id="call-status">Click to call</div>
       </div>
     </div>
-    <!-- Called chips -->
+    <!-- Called chips scroll - Shows all called numbers -->
     <div class="chips-wrap" id="chips-wrap">
       <span style="color:var(--muted);font-size:0.75rem;padding:4px 0">No numbers called yet</span>
     </div>
+  </div>
+
+  <!-- Called numbers list - Shows numbers in a grid -->
+  <div class="called-numbers-section" style="margin:0 16px 16px;">
+    <div class="called-title">📞 የተጠሩ ቁጥሮች:</div>
+    <div id="called-numbers-list" class="called-list" style="display:flex; flex-wrap:wrap; gap:4px; min-height:30px; padding:5px; background:var(--surface); border-radius:4px;"></div>
   </div>
 
   <!-- BINGO button -->
@@ -1536,7 +1655,7 @@ let ws = null;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
 
-// Admin state - REAL DATA from API
+// Admin state
 let adminData = {
   payments: [],
   withdrawals: [],
@@ -1602,6 +1721,7 @@ const CHECKERS = {
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════════
 function getLetter(n) {
+  n = parseInt(n);
   if (n <= 15) return 'B';
   if (n <= 30) return 'I';
   if (n <= 45) return 'N';
@@ -1661,6 +1781,7 @@ function connectWebSocket() {
   
   ws.onmessage = function(event) {
     const data = JSON.parse(event.data);
+    console.log('📩 Received:', data.type, data);
     handleWebSocketMessage(data);
   };
   
@@ -1709,6 +1830,9 @@ function handleWebSocketMessage(data) {
     case 'game_reset':
       handleGameReset(data);
       break;
+    case 'room_settings_updated':
+      handleRoomSettingsUpdated(data);
+      break;
     case 'error':
       showToast(data.message, 'error');
       break;
@@ -1724,10 +1848,11 @@ function handleConnected(data) {
   currentRound = data.round || 1;
   
   document.getElementById('active-game-display').textContent = currentRound;
-  updateCalledNumbers();
+  updateCalledNumbersList();
+  updateChipsDisplay();
   
   if (gameStarted) {
-    document.getElementById('status').textContent = '🎮 Playing';
+    document.getElementById('call-status').textContent = 'Game in progress';
     document.getElementById('bingo-btn').disabled = false;
   }
 }
@@ -1760,18 +1885,71 @@ function handleCardsSelected(data) {
 
 function handleGameStarted(data) {
   gameStarted = true;
-  document.getElementById('status').textContent = '🎮 Playing';
+  document.getElementById('call-status').textContent = 'Game started!';
   document.getElementById('bingo-btn').disabled = false;
   document.getElementById('auto-start-timer').style.display = 'none';
   showToast('Game started!', 'success');
 }
 
 function handleNumberCalled(data) {
+  console.log('🎲 Number called:', data);
+  
+  // Update called numbers array
   called = data.called || [];
-  document.getElementById('last-number').textContent = `🎲 ${data.number}`;
-  document.getElementById('called-cnt').textContent = called.length;
-  updateCalledNumbers();
+  
+  // Update the last number display
+  const lastNumberEl = document.getElementById('last-number');
+  if (lastNumberEl) {
+    lastNumberEl.textContent = `🎲 ${data.number}`;
+    const letter = getLetter(data.number);
+    lastNumberEl.style.color = COLORS[letter] || '#4d96ff';
+  }
+  
+  // Update call-L and call-N display
+  const callL = document.getElementById('call-L');
+  const callN = document.getElementById('call-N');
+  if (callL && callN) {
+    const letter = getLetter(data.number);
+    callL.textContent = letter;
+    callL.style.color = COLORS[letter];
+    callN.textContent = data.number;
+    callN.style.color = COLORS[letter];
+    document.getElementById('call-status').textContent = `${letter}-${data.number}`;
+  }
+  
+  // Update called count
+  const calledCntEl = document.getElementById('called-cnt');
+  if (calledCntEl) {
+    calledCntEl.textContent = called.length;
+  }
+  
+  // Update chips display
+  updateChipsDisplay();
+  
+  // Update called numbers list
+  updateCalledNumbersList();
+  
+  // Auto-mark if enabled
+  if (autoMark) {
+    cards.forEach(card => {
+      if (card.suspended || card.won) return;
+      if (!card.marked) card.marked = Array(5).fill().map(() => Array(5).fill(false));
+      for(let col=0; col<5; col++) {
+        for(let row=0; row<5; row++) {
+          if(card.card[col][row] === data.number) {
+            card.marked[col][row] = true;
+            break;
+          }
+        }
+      }
+    });
+  }
+  
+  // Re-render cards
   renderCardsGrid();
+  
+  // Show toast notification
+  showToast(`📢 Number ${getLetter(data.number)}-${data.number} called!`, 'info');
 }
 
 function handleMarkResult(data) {
@@ -1779,7 +1957,7 @@ function handleMarkResult(data) {
     // Update local marked state
     const card = cards.find(c => c.id === data.card_id);
     if (card) {
-      // Find and mark the cell
+      if (!card.marked) card.marked = Array(5).fill().map(() => Array(5).fill(false));
       for(let col=0; col<5; col++) {
         for(let row=0; row<5; row++) {
           if(card.card[col][row] === data.number) {
@@ -1808,7 +1986,7 @@ function handleGameWon(data) {
   gameOver = true;
   wins++;
   
-  document.getElementById('status').textContent = '🏆 Winner!';
+  document.getElementById('call-status').textContent = 'Game Over';
   document.getElementById('bingo-btn').disabled = true;
   
   let winnerNames = data.winners.map(w => w.name).join(', ');
@@ -1845,13 +2023,66 @@ function handleGameReset(data) {
   suspended = false;
   suspendedCards.clear();
   
-  document.getElementById('status').textContent = '⏳ Waiting';
+  document.getElementById('call-status').textContent = 'Waiting for game';
   document.getElementById('bingo-btn').disabled = true;
   document.getElementById('last-number').textContent = '🎲 Ready';
+  document.getElementById('call-L').textContent = '—';
+  document.getElementById('call-N').textContent = '?';
   document.getElementById('win-overlay').classList.remove('show');
   
-  updateCalledNumbers();
+  updateCalledNumbersList();
+  updateChipsDisplay();
   renderCardsGrid();
+}
+
+function handleRoomSettingsUpdated(data) {
+  document.getElementById('pattern-name-short').textContent = data.pattern_name;
+  document.getElementById('pattern-hint-text').textContent = data.pattern_name;
+  showToast(`Room settings updated`, 'info');
+}
+
+// Helper functions for display
+function updateChipsDisplay() {
+  const wrap = document.getElementById('chips-wrap');
+  if (!wrap) return;
+  
+  if (called && called.length > 0) {
+    wrap.innerHTML = called.slice().reverse().map((n, i) => {
+      const L = getLetter(n);
+      return `<span class="chip ${L}${i === 0 ? ' newest' : ''}">${L}${n}</span>`;
+    }).join('');
+  } else {
+    wrap.innerHTML = '<span style="color:var(--muted);font-size:0.75rem;padding:4px 0">No numbers called yet</span>';
+  }
+}
+
+function updateCalledNumbersList() {
+  const list = document.getElementById('called-numbers-list');
+  if (!list) return;
+  
+  list.innerHTML = '';
+  
+  if (called && called.length > 0) {
+    called.forEach(num => {
+      const badge = document.createElement('span');
+      badge.className = 'called-badge';
+      badge.textContent = num;
+      badge.style.background = COLORS[getLetter(num)] + '33';
+      badge.style.color = COLORS[getLetter(num)];
+      badge.style.padding = '4px 8px';
+      badge.style.borderRadius = '12px';
+      badge.style.fontSize = '0.8rem';
+      badge.style.fontWeight = 'bold';
+      list.appendChild(badge);
+    });
+  } else {
+    const badge = document.createElement('span');
+    badge.className = 'called-badge';
+    badge.style.background = '#999';
+    badge.style.color = '#fff';
+    badge.textContent = 'No numbers called yet';
+    list.appendChild(badge);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1869,7 +2100,7 @@ function switchTab(tab) {
 }
 
 // ═══════════════════════════════════════════════════════
-// DEPOSIT FUNCTIONS - REAL API INTEGRATION
+// DEPOSIT FUNCTIONS
 // ═══════════════════════════════════════════════════════
 function selectAmount(amount) {
   selectedAmount = amount;
@@ -1900,7 +2131,6 @@ async function submitDeposit() {
   statusEl.className = 'deposit-status show';
   
   try {
-    // REAL API CALL
     const response = await fetch('/api/deposit', {
       method: 'POST',
       headers: {
@@ -1934,7 +2164,7 @@ async function submitDeposit() {
 }
 
 // ═══════════════════════════════════════════════════════
-// WITHDRAW FUNCTIONS - REAL API INTEGRATION
+// WITHDRAW FUNCTIONS
 // ═══════════════════════════════════════════════════════
 function setWithdrawAmount(value) {
   if (value === 'all') {
@@ -1964,7 +2194,6 @@ async function submitWithdraw() {
   }
   
   try {
-    // REAL API CALL
     const response = await fetch('/api/withdraw', {
       method: 'POST',
       headers: {
@@ -1980,10 +2209,8 @@ async function submitWithdraw() {
     const data = await response.json();
     
     if (data.success) {
-      // Optimistic update
       balance -= amount;
       updateBalanceDisplay();
-      
       showToast(`✅ Withdrawal of ${amount} ETB requested!`, 'success');
       document.getElementById('withdraw-amount').value = '';
     } else {
@@ -2192,7 +2419,9 @@ function renderCardsGrid() {
   const calledSet = new Set(called);
   
   grid.innerHTML = cards.map(card => {
-    const markedCount = card.marked ? card.marked.flat().filter(v => v).length - 1 : 0;
+    if (!card.marked) card.marked = Array(5).fill().map(() => Array(5).fill(false));
+    
+    const markedCount = card.marked.flat().filter(v => v).length - 1;
     
     let statusClass = '';
     let statusText = '';
@@ -2220,7 +2449,7 @@ function renderCardsGrid() {
         let cellClass = 'cell';
         if (num === 0) cellClass += ' free';
         else if (isWin) cellClass += ' win-cell';
-        else if (card.marked && card.marked[col] && card.marked[col][row]) cellClass += ' marked';
+        else if (card.marked[col] && card.marked[col][row]) cellClass += ' marked';
         else if (calledSet.has(num)) cellClass += ' called';
         
         const clickHandler = (num !== 0 && !card.suspended && !card.won && !isWin && gameStarted && card.marked)
@@ -2245,28 +2474,6 @@ function renderCardsGrid() {
   // Update suspension banner
   const hasSuspended = cards.some(c => c.suspended);
   document.getElementById('susp-banner').style.display = hasSuspended ? 'flex' : 'none';
-}
-
-function updateCalledNumbers() {
-  const list = document.getElementById('called-numbers-list');
-  if (!list) return;
-  
-  list.innerHTML = '';
-  
-  if (called && called.length > 0) {
-    called.forEach(num => {
-      const badge = document.createElement('span');
-      badge.className = 'called-badge';
-      badge.textContent = num;
-      list.appendChild(badge);
-    });
-  } else {
-    const badge = document.createElement('span');
-    badge.className = 'called-badge';
-    badge.style.background = '#999';
-    badge.textContent = 'No numbers called yet';
-    list.appendChild(badge);
-  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2315,7 +2522,7 @@ function selectPatternFromModal(id) {
 }
 
 // ═══════════════════════════════════════════════════════
-// ADMIN FUNCTIONS - REAL API INTEGRATION with Approve/Reject
+// ADMIN FUNCTIONS
 // ═══════════════════════════════════════════════════════
 async function loadAdminData() {
   if (!isAdmin) {
@@ -2324,7 +2531,6 @@ async function loadAdminData() {
   }
   
   try {
-    // REAL API CALL to get pending payments and history
     const response = await fetch(`/api/admin/payments?user_id=${userId}`);
     const data = await response.json();
     
@@ -2532,7 +2738,7 @@ function renderGameHistory() {
   `).join('');
 }
 
-// Admin Action Functions - REAL API CALLS
+// Admin Action Functions
 async function approvePayment(requestId) {
   if (!confirm('Approve this payment?')) return;
   
@@ -2552,7 +2758,7 @@ async function approvePayment(requestId) {
     
     if (data.success) {
       showToast(`✅ Payment approved!`, 'success');
-      loadAdminData(); // Refresh the data
+      loadAdminData();
     } else {
       showToast(`❌ ${data.error || 'Failed to approve'}`, 'error');
     }
@@ -2581,7 +2787,7 @@ async function rejectPayment(requestId) {
     
     if (data.success) {
       showToast(`❌ Payment rejected`, 'info');
-      loadAdminData(); // Refresh the data
+      loadAdminData();
     } else {
       showToast(`❌ ${data.error || 'Failed to reject'}`, 'error');
     }
@@ -2610,7 +2816,7 @@ async function approveWithdrawal(requestId) {
     
     if (data.success) {
       showToast(`✅ Withdrawal approved!`, 'success');
-      loadAdminData(); // Refresh the data
+      loadAdminData();
     } else {
       showToast(`❌ ${data.error || 'Failed to approve'}`, 'error');
     }
@@ -2639,7 +2845,7 @@ async function rejectWithdrawal(requestId) {
     
     if (data.success) {
       showToast(`❌ Withdrawal rejected`, 'info');
-      loadAdminData(); // Refresh the data
+      loadAdminData();
     } else {
       showToast(`❌ ${data.error || 'Failed to reject'}`, 'error');
     }
@@ -2671,8 +2877,6 @@ async function adminStartGame() {
     
     if (data.success) {
       showToast(`✅ Game started in Room ${roomId}!`, 'success');
-      
-      // Switch to game tab
       switchTab('game');
     } else {
       showToast(`❌ ${data.message || 'Failed to start game'}`, 'error');
@@ -2697,7 +2901,6 @@ async function adminSetRoomSettings() {
         admin_id: userId,
         game_id: parseInt(roomId),
         pattern: pattern
-        // price is optional - will use default if not specified
       })
     });
     
@@ -2825,6 +3028,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('stat-wins').textContent = wins;
   document.getElementById('stat-games').textContent = games;
   document.getElementById('deposit-amount').value = 100;
+  
+  // Initialize call display
+  document.getElementById('call-L').textContent = '—';
+  document.getElementById('call-N').textContent = '?';
+  document.getElementById('call-L').style.color = 'rgba(255,255,255,0.2)';
+  document.getElementById('call-N').style.color = 'rgba(255,255,255,0.12)';
   
   initAvailableCards();
   renderPatternsPage();
