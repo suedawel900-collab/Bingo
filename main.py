@@ -333,7 +333,7 @@ def check_pattern(marked_positions, pattern_name):
     
     return False
 
-# ==================== Game Class with Auto-Call ====================
+# ==================== Game Class with Fixed Auto-Call ====================
 
 class IntegratedBingoGame:
     def __init__(self):
@@ -866,38 +866,21 @@ class IntegratedBingoGame:
         # Broadcast game started
         await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_numbers[game_id]})
         
-        # IMPORTANT: Start auto-calling numbers
-        self.start_auto_call(game_id)
-        
-        logger.info(f"Room {game_id} started - auto-call task initiated")
+        # IMPORTANT: Start auto-calling numbers immediately
+        logger.info(f"Room {game_id} started - starting auto-call task")
+        asyncio.create_task(self.auto_call_numbers(game_id))
 
-    def start_auto_call(self, game_id: int):
-        """Start the auto-call task for a game"""
-        if game_id in self.auto_call_tasks:
-            self.auto_call_tasks[game_id].cancel()
+    async def auto_call_numbers(self, game_id: int):
+        """Automatically call numbers every 3 seconds"""
+        logger.info(f"✅ Auto-call started for room {game_id}")
         
-        async def auto_call_loop():
-            logger.info(f"Auto-call started for room {game_id}")
-            try:
-                while self.game_started.get(game_id, False) and not self.stop_number_generation.get(game_id, False):
-                    await asyncio.sleep(AUTO_CALL_INTERVAL)
-                    
-                    # Call the next number
-                    await self.call_next_number(game_id)
-                    
-                    # Check if we've called all numbers
-                    if game_id in self.number_pool and not self.number_pool[game_id]:
-                        logger.info(f"Room {game_id} - All numbers called")
-                        break
-                        
-            except asyncio.CancelledError:
-                logger.info(f"Auto-call cancelled for room {game_id}")
-            except Exception as e:
-                logger.error(f"Error in auto-call for room {game_id}: {e}")
-            finally:
-                logger.info(f"Auto-call stopped for room {game_id}")
+        while self.game_started.get(game_id, False) and not self.stop_number_generation.get(game_id, False):
+            await asyncio.sleep(AUTO_CALL_INTERVAL)
+            
+            # Call the next number
+            await self.call_next_number(game_id)
         
-        self.auto_call_tasks[game_id] = asyncio.create_task(auto_call_loop())
+        logger.info(f"Auto-call stopped for room {game_id}")
 
     async def call_next_number(self, game_id: int):
         """Call the next number in the sequence"""
@@ -1598,11 +1581,6 @@ class IntegratedBingoGame:
     async def reset_round(self, game_id: int = 1):
         """Reset round with card suspension cleanup"""
         logger.info(f"Resetting round for game {game_id}")
-        
-        # Cancel auto-call task
-        if game_id in self.auto_call_tasks:
-            self.auto_call_tasks[game_id].cancel()
-            del self.auto_call_tasks[game_id]
         
         # Clear card-specific suspension data for this game
         if game_id in self.suspended_cards:
