@@ -1,2504 +1,1374 @@
-import os
+"""
+COMPLETE TELEGRAM BINGO BOT with FULL ADMIN CONTROL
+Includes: Player Management, Statistics, Game Settings, Admin Management, Communication
+"""
+
+import logging
 import json
 import random
+import string
 import asyncio
-import logging
-import time
-import uuid
-import re
-import sys
 from datetime import datetime, timedelta
-from contextlib import asynccontextmanager
-from typing import Dict, Set, List, Any, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
+from enum import Enum
+from collections import defaultdict
+import pytz
 
-import aiohttp
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, ContextTypes
+    Application, CommandHandler, CallbackQueryHandler, 
+    MessageHandler, filters, ContextTypes, ConversationHandler
 )
-from telegram.error import BadRequest
+from telegram.constants import ParseMode
 
-from models import Database
+# ==================== CONFIGURATION ====================
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+SUPER_ADMIN_IDS = [123456789]  # Telegram user IDs of super admins
+TIMEZONE = pytz.timezone('Africa/Addis_Ababa')
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger(__name__)
-
-# Configuration
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-if not BOT_TOKEN:
-    logger.error("BOT_TOKEN environment variable not set")
-    raise ValueError("BOT_TOKEN environment variable not set")
-
-ADMIN_USER_ID = os.getenv('ADMIN_USER_ID')
-if not ADMIN_USER_ID:
-    logger.error("ADMIN_USER_ID environment variable not set")
-    raise ValueError("ADMIN_USER_ID environment variable not set")
-try:
-    ADMIN_USER_ID = int(ADMIN_USER_ID)
-except ValueError:
-    raise ValueError("ADMIN_USER_ID must be an integer")
-
-BOT_USERNAME = os.getenv('BOT_USERNAME', 'MK_BINGO_bot')
-RAILWAY_URL = os.getenv('RAILWAY_PUBLIC_DOMAIN')
-
-if not RAILWAY_URL:
-    RAILWAY_URL = "localhost:8080"
-    BASE_URL = f"http://{RAILWAY_URL}"
-    logger.warning(f"RAILWAY_PUBLIC_DOMAIN not set, using localhost: {BASE_URL}")
-else:
-    if not RAILWAY_URL.startswith('http'):
-        BASE_URL = f"https://{RAILWAY_URL}"
-    else:
-        BASE_URL = RAILWAY_URL
-
-# Card prices (in cents)
-CARD_PRICE_ROOM1 = 5000        # 50.00 ETB
-CARD_PRICE_ROOM2 = 10000       # 100.00 ETB
-CARD_PRICE_ROOM3 = 20000        # 200.00 ETB
-MAX_CARDS_PER_PLAYER = 8
-WELCOME_BONUS = 1000
-AUTO_START_DELAY = 30
-AUTO_CALL_INTERVAL = 3  # seconds
-HOUSE_PERCENT = 0.20
-ROUND_RESET_DELAY = 10
-ADMIN_CONTROL_TIMEOUT = 10  # seconds before auto-start
-
-logger.info(f"✅ Configuration loaded - BASE_URL: {BASE_URL}")
-
-# ==================== DATABASE INITIALIZATION ====================
-try:
-    db = Database()
-    logger.info("✅ Database initialized successfully")
-except Exception as e:
-    logger.error(f"❌ Database initialization failed: {e}")
-    raise
-
-# ==================== BINGO PATTERNS ====================
-PATTERNS = [
-    "ONE_LINE", "TWO_LINES", "THREE_LINES", "FOUR_LINES",
-    "FULL_HOUSE", "FOUR_CORNERS", "CENTER",
-    "X_PATTERN", "PLUS_PATTERN", "TOP_ROW", "BOTTOM_ROW",
-    "LEFT_COLUMN", "RIGHT_COLUMN", "DIAGONAL_MAIN", "DIAGONAL_SECOND",
-    "T_SHAPE", "L_SHAPE", "CROSS", "BOX", "OUTER_FRAME"
-]
-
-# Pattern mapping for frontend
-PATTERN_MAPPING = {
-    "any_row": "ONE_LINE",
-    "any_col": "ONE_LINE",
-    "diag_tl": "DIAGONAL_MAIN",
-    "diag_tr": "DIAGONAL_SECOND",
-    "any_line": "ONE_LINE",
-    "full_house": "FULL_HOUSE",
-    "four_corners": "FOUR_CORNERS",
-    "x_pattern": "X_PATTERN",
-    "plus_pattern": "PLUS_PATTERN",
-    "t_pattern": "T_SHAPE",
-    "l_pattern": "L_SHAPE",
-    "u_pattern": "CROSS",
-    "frame": "OUTER_FRAME",
-    "blackout": "FULL_HOUSE",
-    "two_rows": "TWO_LINES",
-    "two_cols": "TWO_LINES",
-    "top_bottom": "TWO_LINES",
-    "center_col": "CENTER",
-    "b_o_cols": "TWO_LINES",
-    "six_pack": "BOX"
-}
-
-def get_pattern_name(pattern_id: str) -> str:
-    """Convert pattern ID to display name"""
-    pattern_names = {
-        "any_line": "Any Line",
-        "any_row": "Any Row",
-        "any_col": "Any Column",
-        "diag_tl": "Diagonal TL→BR",
-        "diag_tr": "Diagonal TR→BL",
-        "full_house": "Full House",
-        "four_corners": "Four Corners",
-        "x_pattern": "X Pattern",
-        "plus_pattern": "Plus Pattern",
-        "t_pattern": "T Pattern",
-        "l_pattern": "L Pattern",
-        "u_pattern": "U Pattern",
-        "frame": "Frame",
-        "blackout": "Blackout",
-        "two_rows": "Two Rows",
-        "two_cols": "Two Columns",
-        "top_bottom": "Top & Bottom",
-        "center_col": "Center Column",
-        "b_o_cols": "B & O Columns",
-        "six_pack": "Six Pack"
-    }
-    return pattern_names.get(pattern_id, "Any Line")
-
-# Payment methods
-PAYMENT_METHODS = {
-    "telebirr": {
-        "name": "Telebirr",
-        "account": "0982372677",
-        "account_name": "MK Bingo",
-        "instructions": "Dial *127# and send money to 0982372677"
-    },
-    "cbebirr": {
-        "name": "CBE Birr",
-        "account": "0982372677",
-        "account_name": "MK Bingo",
-        "instructions": "Dial *847# and send money to 0982372677"
-    }
-}
-
-# ==================== CARDS ====================
-CARDS_FILE = "static/bingo_cards.json"
-
-def generate_default_cards():
-    """Generate 1000 bingo cards"""
-    cards = []
-    for i in range(1, 1001):
-        card = []
-        for col in range(5):
-            column = []
-            min_num = col * 15 + 1
-            max_num = (col + 1) * 15
-            numbers = random.sample(range(min_num, max_num + 1), 5)
-            column.extend(numbers)
-            card.append(column)
-        card[2][2] = "FREE"
-        cards.append({"id": i, "card": card})
-    logger.info(f"✅ Generated {len(cards)} cards (1-1000)")
-    return cards
-
-# Load or generate cards
-try:
-    os.makedirs("static", exist_ok=True)
-    if os.path.exists(CARDS_FILE):
-        with open(CARDS_FILE, 'r') as f:
-            BINGO_CARDS = json.load(f)
-        logger.info(f"✅ Loaded {len(BINGO_CARDS)} cards from file")
-        if len(BINGO_CARDS) < 1000:
-            BINGO_CARDS = generate_default_cards()
-            with open(CARDS_FILE, 'w') as f:
-                json.dump(BINGO_CARDS, f)
-    else:
-        BINGO_CARDS = generate_default_cards()
-        with open(CARDS_FILE, 'w') as f:
-            json.dump(BINGO_CARDS, f)
-except Exception as e:
-    logger.error(f"Error loading cards: {e}")
-    BINGO_CARDS = generate_default_cards()
-
-# Setup templates and static files
-templates = Jinja2Templates(directory="templates")
-os.makedirs("static", exist_ok=True)
-
-# ==================== PATTERN CHECKING FUNCTION ====================
-
-def check_pattern(marked_positions, pattern_name):
-    """
-    Check if marked positions satisfy the required pattern
-    marked_positions: list of (row, col) tuples that are marked
-    pattern_name: string from PATTERNS list
-    """
-    size = 5
-    p = pattern_name
-    
-    # Create 5x5 boolean grid
-    marked = [[False]*size for _ in range(size)]
-    for r, c in marked_positions:
-        if 0 <= r < size and 0 <= c < size:
-            marked[r][c] = True
-    
-    # ONE LINE
-    if p == "ONE_LINE":
-        return any(all(marked[r][c] for c in range(size)) for r in range(size)) or \
-               any(all(marked[r][c] for r in range(size)) for c in range(size))
-    
-    # TWO LINES
-    if p == "TWO_LINES":
-        lines = 0
-        for r in range(size):
-            if all(marked[r][c] for c in range(size)):
-                lines += 1
-        for c in range(size):
-            if all(marked[r][c] for r in range(size)):
-                lines += 1
-        return lines >= 2
-    
-    # THREE LINES
-    if p == "THREE_LINES":
-        lines = 0
-        for r in range(size):
-            if all(marked[r][c] for c in range(size)):
-                lines += 1
-        for c in range(size):
-            if all(marked[r][c] for r in range(size)):
-                lines += 1
-        return lines >= 3
-    
-    # FOUR LINES
-    if p == "FOUR_LINES":
-        lines = 0
-        for r in range(size):
-            if all(marked[r][c] for c in range(size)):
-                lines += 1
-        for c in range(size):
-            if all(marked[r][c] for r in range(size)):
-                lines += 1
-        return lines >= 4
-    
-    # FULL HOUSE
-    if p == "FULL_HOUSE":
-        return all(marked[r][c] for r in range(size) for c in range(size))
-    
-    # FOUR CORNERS
-    if p == "FOUR_CORNERS":
-        return marked[0][0] and marked[0][4] and marked[4][0] and marked[4][4]
-    
-    # CENTER
-    if p == "CENTER":
-        return marked[2][2]
-    
-    # X PATTERN
-    if p == "X_PATTERN":
-        return all(marked[i][i] for i in range(size)) and \
-               all(marked[i][size-i-1] for i in range(size))
-    
-    # PLUS PATTERN
-    if p == "PLUS_PATTERN":
-        return all(marked[2][c] for c in range(size)) and \
-               all(marked[r][2] for r in range(size))
-    
-    # TOP ROW
-    if p == "TOP_ROW":
-        return all(marked[0][c] for c in range(size))
-    
-    # BOTTOM ROW
-    if p == "BOTTOM_ROW":
-        return all(marked[4][c] for c in range(size))
-    
-    # LEFT COLUMN
-    if p == "LEFT_COLUMN":
-        return all(marked[r][0] for r in range(size))
-    
-    # RIGHT COLUMN
-    if p == "RIGHT_COLUMN":
-        return all(marked[r][4] for r in range(size))
-    
-    # DIAGONAL MAIN
-    if p == "DIAGONAL_MAIN":
-        return all(marked[i][i] for i in range(size))
-    
-    # DIAGONAL SECOND
-    if p == "DIAGONAL_SECOND":
-        return all(marked[i][size-i-1] for i in range(size))
-    
-    # BOX (center 3x3)
-    if p == "BOX":
-        return all(marked[r][c] for r in range(1,4) for c in range(1,4))
-    
-    # OUTER FRAME
-    if p == "OUTER_FRAME":
-        for i in range(size):
-            if not marked[0][i] or not marked[4][i]:
-                return False
-            if not marked[i][0] or not marked[i][4]:
-                return False
-        return True
-    
-    # L SHAPE
-    if p == "L_SHAPE":
-        return all(marked[r][0] for r in range(size)) and \
-               all(marked[4][c] for c in range(size))
-    
-    # T SHAPE
-    if p == "T_SHAPE":
-        return all(marked[0][c] for c in range(size)) and \
-               all(marked[r][2] for r in range(size))
-    
-    # CROSS
-    if p == "CROSS":
-        return all(marked[2][c] for c in range(size)) and \
-               all(marked[r][2] for r in range(size))
-    
-    return False
-
-# ==================== Game Class with Working Auto-Call ====================
-
-class IntegratedBingoGame:
+# Game Settings (configurable via admin panel)
+class GameConfig:
     def __init__(self):
-        # Per‑room data dictionaries
-        self.round_numbers = {}
-        self.called_numbers = {}
-        self.game_started = {}
-        self.total_pool = {}
-        self.house_profit = 0
-        self.active_games = {}
-        self.game_connections = {}
-        self.taken_cards = {}
-        self.game_winner = {}
-        self.countdown_timers = {}
-        self.game_locks = {}
-        self.auto_start_timers = {}
-        self.first_card_time = {}
-        self.reset_timers = {}
-        self.number_pool = {}  # For number calling
-        
-        # Auto-call tasks - FIXED: Use a separate dictionary for auto-call tasks
-        self.auto_call_tasks = {}  # game_id -> asyncio.Task
-        
-        # Admin control timers
-        self.admin_control_timer = {}  # game_id -> asyncio.Task
-        self.admin_control_timeout = ADMIN_CONTROL_TIMEOUT
-        
-        # Track last called number per game
-        self.last_called_number = {}  # game_id -> last number called
-        
-        # Track blocked cards (permanent for the round)
-        self.blocked_cards = {}  # game_id -> {user_id: set(blocked_card_ids)}
-        
-        # Track if a card has already won (to prevent multiple claims)
-        self.won_cards = {}  # game_id -> set(card_ids that have already won)
-        
-        # Pattern system
-        self.room_patterns = {}  # room_id -> pattern name
-        self.room_pattern_locked = {}  # room_id -> bool
-        self.room_price = {}  # room_id -> price in cents
-        self.suspended_players = {}  # room_id -> set of suspended user_ids
+        self.card_price = 10  # ETB
+        self.min_bet = 10
+        self.max_bet = 1000
+        self.base_win = 100
+        self.round_duration = 300  # seconds
+        self.number_call_speed = 3  # seconds
+        self.daily_bonus = 50
+        self.welcome_bonus = 100
+        self.max_cards_per_user = 5
+        self.house_commission = 0.20
+        self.auto_start_delay = 30
 
-        # Card-based suspension system (legacy)
-        self.suspended_cards = {}  # game_id -> {user_id: set(suspended_card_ids)}
-        self.false_bingo_attempts = {}  # game_id -> {user_id: int}
-        self.player_marked_numbers = {}  # game_id -> {user_id: {card_id: set(marked_numbers)}}
-        self.card_owners = {}  # game_id -> {card_id: user_id}
-        self.user_selected_cards = {}  # game_id -> {user_id: set(card_ids)}
+config = GameConfig()
 
-        self.bot_app = None
-        self.user_connections = {}
-        self.MAX_CONNECTIONS_PER_USER = 5
-        self.stop_number_generation = {}
-        self.heartbeat_task = None
+# ==================== ENUMS ====================
+class UserRole(Enum):
+    SUPER_ADMIN = "super_admin"
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+    PLAYER = "player"
 
-    def get_lock(self, game_id: int) -> asyncio.Lock:
-        if game_id not in self.game_locks:
-            self.game_locks[game_id] = asyncio.Lock()
-        return self.game_locks[game_id]
+class UserStatus(Enum):
+    ACTIVE = "active"
+    BANNED = "banned"
+    SUSPENDED = "suspended"
 
-    async def start_heartbeat(self):
-        """Send heartbeat to all connected clients"""
-        while True:
-            await asyncio.sleep(30)
-            for game_id, connections in self.game_connections.items():
-                for conn in connections:
-                    try:
-                        await conn.send_json({'type': 'heartbeat'})
-                    except:
-                        pass
+class TransactionType(Enum):
+    DEPOSIT = "deposit"
+    WITHDRAWAL = "withdrawal"
+    CARD_PURCHASE = "card_purchase"
+    WINNINGS = "winnings"
+    BONUS = "bonus"
+    ADMIN_CREDIT = "admin_credit"
+    REFUND = "refund"
 
-    async def start_auto_settings_timer(self, game_id: int):
-        """Auto-set pattern and price after 10 seconds if not set by admin"""
-        await asyncio.sleep(self.admin_control_timeout)
-        
-        async with self.get_lock(game_id):
-            if not self.room_pattern_locked.get(game_id, False):
-                # Auto-set random pattern and default price (10 ETB)
-                self.room_patterns[game_id] = random.choice(PATTERNS)
-                self.room_pattern_locked[game_id] = True
-                self.room_price[game_id] = 1000  # 10 ETB default
-                
-                logger.info(f"Room {game_id} auto-set pattern: {self.room_patterns[game_id]}, price: 10 ETB")
-                
-                # Broadcast update to all players
-                await self.broadcast(game_id, {
-                    'type': 'room_settings_updated',
-                    'pattern': self.room_patterns[game_id],
-                    'pattern_name': get_pattern_name(self.room_patterns[game_id]),
-                    'price': self.room_price[game_id] / 100,
-                    'pattern_locked': True
-                })
-
-    async def connect(self, game_id: int, websocket: WebSocket, user_id: int):
-        """Handle new WebSocket connection"""
-        if self.user_connections.get(user_id, 0) >= self.MAX_CONNECTIONS_PER_USER:
-            logger.warning(f"User {user_id} exceeded max connections ({self.MAX_CONNECTIONS_PER_USER}), rejecting")
-            await websocket.close(code=1008, reason="Too many connections")
-            return False
-
-        await websocket.accept()
-        self.user_connections[user_id] = self.user_connections.get(user_id, 0) + 1
-        user = db.get_or_create_user(user_id)
-
-        async with self.get_lock(game_id):
-            if game_id not in self.game_connections:
-                self.game_connections[game_id] = []
-                self.taken_cards[game_id] = set()
-                self.game_winner[game_id] = None
-                self.countdown_timers[game_id] = 15
-                self.round_numbers[game_id] = 1
-                self.called_numbers[game_id] = []
-                self.game_started[game_id] = False
-                self.stop_number_generation[game_id] = False
-                self.suspended_players[game_id] = set()
-                self.number_pool[game_id] = list(range(1, 76))
-                random.shuffle(self.number_pool[game_id])
-                
-                # Initialize new tracking structures
-                self.last_called_number[game_id] = None
-                self.blocked_cards[game_id] = {}
-                self.won_cards[game_id] = set()
-                
-                # Initialize card-based suspension structures
-                self.suspended_cards[game_id] = {}
-                self.false_bingo_attempts[game_id] = {}
-                self.player_marked_numbers[game_id] = {}
-                self.card_owners[game_id] = {}
-                self.user_selected_cards[game_id] = {}
-                
-                self.active_games[game_id] = {
-                    'called_numbers': [],
-                    'players': {},
-                    'prize_pool': 0,
-                    'total_cards_sold': 0,
-                    'last_winner': None,
-                }
-                
-                # Start admin control timer
-                self.start_admin_control_timer(game_id)
-
-            self.game_connections[game_id].append(websocket)
-            if user_id not in self.active_games[game_id]['players']:
-                self.active_games[game_id]['players'][user_id] = {
-                    'name': user.get('first_name', f"Player{user_id}"),
-                    'cards': [],
-                    'card_ids': [],
-                    'marked': {},
-                    'ready': False,
-                    'winner': False,
-                    'balance': user['balance'],
-                    'suspended': False
-                }
-                
-                # Initialize card suspension tracking for this user
-                if user_id not in self.suspended_cards[game_id]:
-                    self.suspended_cards[game_id][user_id] = set()
-                if user_id not in self.player_marked_numbers[game_id]:
-                    self.player_marked_numbers[game_id][user_id] = {}
-                if user_id not in self.user_selected_cards[game_id]:
-                    self.user_selected_cards[game_id][user_id] = set()
-                
-                # Initialize blocked cards for this user
-                if user_id not in self.blocked_cards[game_id]:
-                    self.blocked_cards[game_id][user_id] = set()
-
-            active_games_count = db.get_active_games_count(user_id)
-            total_stake = db.get_total_stake(user_id)
-
-            pattern_display = self.room_patterns.get(game_id, "any_line")
-            pattern_name = get_pattern_name(pattern_display)
-            
-            # Get room price
-            room_price = self.room_price.get(game_id, 1000) / 100
-            
-            # Send initial connection data
-            await websocket.send_json({
-                'type': 'connected',
-                'taken_cards': list(self.taken_cards[game_id]),
-                'players': self.get_players(game_id),
-                'round': self.round_numbers[game_id],
-                'game_started': self.game_started[game_id],
-                'winner': self.game_winner[game_id],
-                'called_numbers': self.active_games[game_id]['called_numbers'],
-                'countdown': self.countdown_timers[game_id],
-                'balance': user['balance'] / 100,
-                'active_games': active_games_count,
-                'total_stake': total_stake / 100,
-                'auto_start_delay': AUTO_START_DELAY,
-                'auto_start_active': game_id in self.auto_start_timers,
-                'pattern': pattern_display,
-                'pattern_name': pattern_name,
-                'pattern_locked': self.room_pattern_locked.get(game_id, False),
-                'room_price': room_price,
-                'manual_marking': True,
-                'admin_control_timeout': self.admin_control_timeout
-            })
-
-            # Send player's cards with their marked numbers
-            player = self.active_games[game_id]['players'][user_id]
-            for card_id in player['card_ids']:
-                card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-                if card_data:
-                    # Get manually marked numbers for this card
-                    marked_numbers = []
-                    if (game_id in self.player_marked_numbers and 
-                        user_id in self.player_marked_numbers[game_id] and 
-                        card_id in self.player_marked_numbers[game_id][user_id]):
-                        marked_numbers = list(self.player_marked_numbers[game_id][user_id][card_id])
-                    
-                    # Check if card is blocked
-                    is_blocked = card_id in self.blocked_cards.get(game_id, {}).get(user_id, set())
-                    
-                    await websocket.send_json({
-                        'type': 'your_card',
-                        'card': card_data['card'],
-                        'card_id': card_id,
-                        'marked': marked_numbers,
-                        'suspended': is_blocked,
-                        'blocked': is_blocked
-                    })
-
-            asyncio.create_task(self.update_countdown(game_id))
-            await self.broadcast(game_id, {'type': 'player_joined', 'players': self.get_players(game_id)})
-
-        return True
-
-    def start_admin_control_timer(self, game_id: int):
-        """Start timer for admin control timeout"""
-        if game_id in self.admin_control_timer:
-            self.admin_control_timer[game_id].cancel()
-        
-        async def timer():
-            await asyncio.sleep(self.admin_control_timeout)
-            async with self.get_lock(game_id):
-                if not self.room_pattern_locked.get(game_id, False):
-                    # Auto-set random pattern and default price
-                    self.room_patterns[game_id] = random.choice(PATTERNS)
-                    self.room_pattern_locked[game_id] = True
-                    self.room_price[game_id] = 1000  # 10 ETB
-                    
-                    logger.info(f"Room {game_id} auto-set pattern: {self.room_patterns[game_id]}, price: 10 ETB")
-                    
-                    # Broadcast update to all players
-                    await self.broadcast(game_id, {
-                        'type': 'room_settings_updated',
-                        'pattern': self.room_patterns[game_id],
-                        'pattern_name': get_pattern_name(self.room_patterns[game_id]),
-                        'price': self.room_price[game_id] / 100,
-                        'pattern_locked': True
-                    })
-        
-        self.admin_control_timer[game_id] = asyncio.create_task(timer())
-
-    async def set_room_settings(self, game_id: int, admin_id: int, pattern: str = None, price: int = None):
-        """Admin sets room pattern and price"""
-        if str(admin_id) != str(ADMIN_USER_ID):
-            return False, "Unauthorized"
-        
-        async with self.get_lock(game_id):
-            if pattern and pattern in PATTERNS:
-                self.room_patterns[game_id] = pattern
-                self.room_pattern_locked[game_id] = True
-            
-            if price:
-                self.room_price[game_id] = price * 100  # Convert to cents
-            
-            # Cancel admin control timer
-            if game_id in self.admin_control_timer:
-                self.admin_control_timer[game_id].cancel()
-                del self.admin_control_timer[game_id]
-            
-            # Broadcast update to all players
-            await self.broadcast(game_id, {
-                'type': 'room_settings_updated',
-                'pattern': self.room_patterns.get(game_id, "any_line"),
-                'pattern_name': get_pattern_name(self.room_patterns.get(game_id, "any_line")),
-                'price': self.room_price.get(game_id, 1000) / 100,
-                'pattern_locked': True
-            })
-            
-            logger.info(f"Admin set room {game_id} pattern: {pattern}, price: {price} ETB")
-            return True, "Settings updated"
-
-    async def admin_start_game(self, game_id: int, admin_id: int):
-        """Admin manually starts the game"""
-        if str(admin_id) != str(ADMIN_USER_ID):
-            return False, "Unauthorized"
-        
-        async with self.get_lock(game_id):
-            if game_id not in self.active_games:
-                return False, "Game not found"
-            
-            if self.game_started.get(game_id, False):
-                return False, "Game already started"
-            
-            if self.active_games[game_id]['total_cards_sold'] == 0:
-                return False, "No cards sold"
-            
-            # Start the round
-            await self.start_round(game_id)
-            return True, "Game started"
-
-    async def disconnect(self, game_id: int, websocket: WebSocket, user_id: int):
-        """Handle WebSocket disconnection"""
-        async with self.get_lock(game_id):
-            if game_id in self.game_connections and websocket in self.game_connections[game_id]:
-                self.game_connections[game_id].remove(websocket)
-            if user_id in self.user_connections:
-                self.user_connections[user_id] -= 1
-                if self.user_connections[user_id] <= 0:
-                    del self.user_connections[user_id]
-        logger.info(f"User {user_id} disconnected from game {game_id}")
-
-    async def broadcast(self, game_id: int, message: dict):
-        """Broadcast message to all clients in a game room"""
-        if game_id in self.game_connections:
-            for conn in self.game_connections[game_id][:]:
-                try:
-                    await conn.send_json(message)
-                except:
-                    if conn in self.game_connections[game_id]:
-                        self.game_connections[game_id].remove(conn)
-
-    def get_players(self, game_id: int):
-        """Get list of players in a game room"""
-        if game_id not in self.active_games:
-            return []
-        return [
-            {
-                'id': uid, 
-                'name': data['name'], 
-                'card_count': len(data['card_ids']), 
-                'ready': data['ready'], 
-                'winner': data['winner'],
-                'suspended': uid in self.suspended_players.get(game_id, set())
-            }
-            for uid, data in self.active_games[game_id]['players'].items()
-        ]
-
-    async def update_countdown(self, game_id: int):
-        """Update countdown timer for game room"""
-        try:
-            while game_id in self.active_games:
-                await asyncio.sleep(1)
-                if game_id in self.countdown_timers:
-                    if self.countdown_timers[game_id] > 0:
-                        self.countdown_timers[game_id] -= 1
-                        await self.broadcast(game_id, {'type': 'countdown', 'time': self.countdown_timers[game_id]})
-                    if self.countdown_timers[game_id] <= 0 and self.game_started.get(game_id, False):
-                        self.countdown_timers[game_id] = 15
-        except:
-            pass
-
-    async def select_cards(self, game_id: int, user_id: int, card_ids: List[int]) -> Tuple[bool, str, int, Optional[int]]:
-        """Select cards for a player"""
-        async with self.get_lock(game_id):
-            try:
-                # Initialize tracking structures
-                if game_id not in self.user_selected_cards:
-                    self.user_selected_cards[game_id] = {}
-                if user_id not in self.user_selected_cards[game_id]:
-                    self.user_selected_cards[game_id][user_id] = set()
-                
-                # Validate game state
-                if game_id not in self.active_games:
-                    return False, "Game not found", 0, None
-                
-                if self.game_started.get(game_id, False):
-                    return False, "Game already started", 0, None
-                
-                if user_id not in self.active_games[game_id]['players']:
-                    return False, "Player not found", 0, None
-                
-                player = self.active_games[game_id]['players'][user_id]
-                
-                # Check if player is suspended
-                if user_id in self.suspended_players.get(game_id, set()):
-                    return False, "You are suspended from this round", 0, None
-                
-                # Check if cards are already selected by this user
-                already_selected = [cid for cid in card_ids if cid in self.user_selected_cards[game_id][user_id]]
-                if already_selected:
-                    return False, f"Cards {already_selected} already selected", 0, None
-                
-                # Check maximum cards limit
-                if len(player['card_ids']) + len(card_ids) > MAX_CARDS_PER_PLAYER:
-                    return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", 0, None
-                
-                # Validate all cards exist and are available
-                price_per_card = self.room_price.get(game_id, 1000)
-                available_cards = []
-                
-                for card_id in card_ids:
-                    # Check if card exists
-                    card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-                    if not card_data:
-                        return False, f"Card {card_id} not found", 0, None
-                    
-                    # Check if card is already taken by someone else
-                    if card_id in self.taken_cards.get(game_id, set()):
-                        owner = self.card_owners.get(game_id, {}).get(card_id)
-                        if owner and owner != user_id:
-                            return False, f"Card {card_id} already taken by another player", 0, None
-                    
-                    available_cards.append(card_data)
-                
-                # Calculate total cost
-                total_cost = len(card_ids) * price_per_card
-                
-                # Check user balance
-                user = db.get_user(user_id)
-                if not user or user['balance'] < total_cost:
-                    return False, f"Insufficient balance. Need {total_cost/100} ETB", total_cost, None
-                
-                # Deduct balance
-                update_result = db.update_balance(
-                    user_id, 
-                    -total_cost, 
-                    'game_fee', 
-                    f'Selected {len(card_ids)} cards for game #{game_id}'
-                )
-                
-                if not update_result:
-                    return False, "Failed to deduct balance", total_cost, None
-                
-                new_balance = update_result['new_balance']
-                
-                # Initialize game structures if needed
-                if game_id not in self.taken_cards:
-                    self.taken_cards[game_id] = set()
-                if game_id not in self.card_owners:
-                    self.card_owners[game_id] = {}
-                if game_id not in self.suspended_cards:
-                    self.suspended_cards[game_id] = {}
-                if user_id not in self.suspended_cards.get(game_id, {}):
-                    self.suspended_cards.setdefault(game_id, {})[user_id] = set()
-                
-                # Initialize blocked cards for this user if needed
-                if game_id not in self.blocked_cards:
-                    self.blocked_cards[game_id] = {}
-                if user_id not in self.blocked_cards[game_id]:
-                    self.blocked_cards[game_id][user_id] = set()
-                
-                # Assign each card
-                for i, card_data in enumerate(available_cards):
-                    card_id = card_ids[i]
-                    
-                    # Mark card as taken
-                    self.taken_cards[game_id].add(card_id)
-                    self.card_owners[game_id][card_id] = user_id
-                    self.user_selected_cards[game_id][user_id].add(card_id)
-                    
-                    # Add to player's cards
-                    player['cards'].append(card_data['card'])
-                    player['card_ids'].append(card_id)
-                    player['marked'][card_id] = []
-                    
-                    # Initialize marked numbers for manual marking
-                    if game_id not in self.player_marked_numbers:
-                        self.player_marked_numbers[game_id] = {}
-                    if user_id not in self.player_marked_numbers[game_id]:
-                        self.player_marked_numbers[game_id][user_id] = {}
-                    if card_id not in self.player_marked_numbers[game_id][user_id]:
-                        self.player_marked_numbers[game_id][user_id][card_id] = set()
-                    
-                    # Save to database
-                    db.save_card_status(user_id, game_id, card_id, [], False)
-                
-                player['balance'] = new_balance
-                player['ready'] = True
-                
-                # Update game stats
-                self.active_games[game_id]['total_cards_sold'] += len(card_ids)
-                self.active_games[game_id]['prize_pool'] = self.active_games[game_id]['total_cards_sold'] * price_per_card
-                
-                # Start auto-start timer if conditions met
-                if (game_id != 2 and not self.game_started.get(game_id, False) and 
-                    self.active_games[game_id]['total_cards_sold'] >= 5):
-                    if game_id not in self.auto_start_timers:
-                        asyncio.create_task(self.start_auto_start_timer(game_id))
-                        await self.broadcast(game_id, {
-                            'type': 'auto_start_timer', 
-                            'delay': AUTO_START_DELAY
-                        })
-                
-                # Broadcast player ready
-                await self.broadcast(game_id, {
-                    'type': 'player_ready', 
-                    'players': self.get_players(game_id), 
-                    'user_id': user_id
-                })
-                
-                logger.info(f"User {user_id} successfully selected {len(card_ids)} cards in room {game_id}")
-                
-                return True, f"Selected {len(card_ids)} cards", total_cost, new_balance
-                
-            except Exception as e:
-                logger.error(f"Error in select_cards: {e}")
-                return False, f"Error selecting cards: {str(e)}", 0, None
-
-    async def start_auto_start_timer(self, game_id: int):
-        """Start auto-start timer for game"""
-        if game_id in self.auto_start_timers:
-            self.auto_start_timers[game_id].cancel()
-        self.first_card_time[game_id] = time.time()
-
-        async def auto_start():
-            await asyncio.sleep(AUTO_START_DELAY)
-            async with self.get_lock(game_id):
-                if not self.game_started.get(game_id, False) and game_id in self.active_games and self.active_games[game_id]['players']:
-                    await self.start_round(game_id)
-        self.auto_start_timers[game_id] = asyncio.create_task(auto_start())
-
-    async def start_round(self, game_id: int = 1):
-        """Start a new round"""
-        if self.game_started.get(game_id, False) or game_id not in self.active_games or self.active_games[game_id]['total_cards_sold'] == 0:
-            return
-        
-        self.game_started[game_id] = True
-        self.stop_number_generation[game_id] = False
-        
-        if game_id in self.auto_start_timers:
-            self.auto_start_timers[game_id].cancel()
-            del self.auto_start_timers[game_id]
-        
-        # Broadcast game started
-        await self.broadcast(game_id, {'type': 'game_started', 'round': self.round_numbers[game_id]})
-        
-        # IMPORTANT: Start auto-calling numbers
-        await self.start_auto_call(game_id)
-        
-        logger.info(f"Room {game_id} started - auto-call task initiated")
-
-    async def start_auto_call(self, game_id: int):
-        """Start the auto-call task for a game"""
-        # Cancel any existing auto-call task
-        if game_id in self.auto_call_tasks:
-            self.auto_call_tasks[game_id].cancel()
-            try:
-                await self.auto_call_tasks[game_id]
-            except:
-                pass
-        
-        # Create new auto-call task
-        self.auto_call_tasks[game_id] = asyncio.create_task(self.auto_call_loop(game_id))
-        logger.info(f"Auto-call task created for room {game_id}")
-
-    async def auto_call_loop(self, game_id: int):
-        """Auto-call numbers loop"""
-        logger.info(f"Auto-call loop started for room {game_id}")
-        try:
-            while self.game_started.get(game_id, False) and not self.stop_number_generation.get(game_id, False):
-                await asyncio.sleep(AUTO_CALL_INTERVAL)
-                
-                # Call the next number
-                await self.call_next_number(game_id)
-                
-                # Check if we've called all numbers
-                if game_id in self.number_pool and not self.number_pool[game_id]:
-                    logger.info(f"Room {game_id} - All numbers called")
-                    break
-                        
-        except asyncio.CancelledError:
-            logger.info(f"Auto-call loop cancelled for room {game_id}")
-        except Exception as e:
-            logger.error(f"Error in auto-call loop for room {game_id}: {e}")
-        finally:
-            logger.info(f"Auto-call loop stopped for room {game_id}")
-
-    async def call_next_number(self, game_id: int):
-        """Call the next number in the sequence"""
-        async with self.get_lock(game_id):
-            if not self.game_started.get(game_id, False):
-                return
-            
-            if self.stop_number_generation.get(game_id, False):
-                return
-            
-            if game_id not in self.number_pool or not self.number_pool[game_id]:
-                logger.info(f"Room {game_id} - No more numbers to call")
-                return
-            
-            number = self.number_pool[game_id].pop()
-            
-            # Store last called number
-            self.last_called_number[game_id] = number
-            
-            # Add to called numbers
-            if game_id not in self.called_numbers:
-                self.called_numbers[game_id] = []
-            self.called_numbers[game_id].append(number)
-            
-            if game_id in self.active_games:
-                self.active_games[game_id]['called_numbers'].append(number)
-            
-            logger.info(f"Room {game_id} - Called number: {number}")
-            
-            # Broadcast to all players
-            await self.broadcast(game_id, {
-                'type': 'number_called',
-                'number': number,
-                'called': self.called_numbers[game_id],
-                'auto_mark': False
-            })
-
-    async def handle_mark_number(self, game_id: int, user_id: int, card_id: int, number: int) -> dict:
-        """Handle manual marking of a called number"""
-        async with self.get_lock(game_id):
-            result = {
-                'success': False,
-                'message': '',
-                'card_id': card_id,
-                'number': number,
-                'pattern_completed': False,
-                'already_marked': False
-            }
-            
-            try:
-                # Validation checks
-                if not self.game_started.get(game_id, False):
-                    result['message'] = 'Game not started'
-                    return result
-                
-                if game_id not in self.active_games:
-                    result['message'] = 'Game not found'
-                    return result
-                
-                if user_id not in self.active_games[game_id]['players']:
-                    result['message'] = 'Player not found'
-                    return result
-                
-                player = self.active_games[game_id]['players'][user_id]
-                
-                # Check if player is suspended
-                if user_id in self.suspended_players.get(game_id, set()):
-                    result['message'] = 'You are suspended from this round'
-                    return result
-                
-                # Check if card is blocked
-                if (game_id in self.blocked_cards and 
-                    user_id in self.blocked_cards[game_id] and 
-                    card_id in self.blocked_cards[game_id][user_id]):
-                    result['message'] = f'Card {card_id} is blocked'
-                    return result
-                
-                # Check if card belongs to player
-                if card_id not in player['card_ids']:
-                    result['message'] = 'Card does not belong to you'
-                    return result
-                
-                # Check if number has been called
-                if number not in self.active_games[game_id]['called_numbers']:
-                    result['message'] = f'Number {number} has not been called yet'
-                    return result
-                
-                # Get card data
-                card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-                if not card_data:
-                    result['message'] = 'Card not found'
-                    return result
-                
-                # Check if number is on this card
-                number_found = False
-                for col in range(5):
-                    for row in range(5):
-                        val = card_data['card'][col][row]
-                        if val == number:
-                            number_found = True
-                            break
-                    if number_found:
-                        break
-                
-                if not number_found:
-                    result['message'] = f'Number {number} is not on this card'
-                    return result
-                
-                # Initialize marking structures if needed
-                if game_id not in self.player_marked_numbers:
-                    self.player_marked_numbers[game_id] = {}
-                if user_id not in self.player_marked_numbers[game_id]:
-                    self.player_marked_numbers[game_id][user_id] = {}
-                if card_id not in self.player_marked_numbers[game_id][user_id]:
-                    self.player_marked_numbers[game_id][user_id][card_id] = set()
-                
-                # Check if already marked
-                if number in self.player_marked_numbers[game_id][user_id][card_id]:
-                    result['message'] = f'Number {number} already marked on this card'
-                    result['already_marked'] = True
-                    return result
-                
-                # Mark the number
-                self.player_marked_numbers[game_id][user_id][card_id].add(number)
-                
-                # Also update player['marked'] for backward compatibility
-                if card_id not in player['marked']:
-                    player['marked'][card_id] = []
-                if number not in player['marked'][card_id]:
-                    player['marked'][card_id].append(number)
-                
-                # Save to database
-                marked_list = list(self.player_marked_numbers[game_id][user_id][card_id])
-                db.save_card_status(user_id, game_id, card_id, marked_list, 
-                                   card_id in self.blocked_cards.get(game_id, {}).get(user_id, set()))
-                
-                result['success'] = True
-                result['message'] = f'✓ Marked {number} on card {card_id}'
-                
-                # Check if this mark completes the pattern
-                is_winner = await self.check_winner_with_manual_marks(
-                    game_id, user_id, card_id
-                )
-                
-                if is_winner:
-                    result['pattern_completed'] = True
-                    result['message'] = f'🎉 BINGO! Card {card_id} completed the pattern! Click BINGO to claim!'
-                
-                logger.info(f"User {user_id} manually marked {number} on card {card_id}")
-                return result
-                
-            except Exception as e:
-                logger.error(f"Error in handle_mark_number: {e}")
-                result['message'] = f"Error: {str(e)}"
-                return result
-
-    async def add_card(self, game_id: int, user_id: int) -> Tuple[bool, str, Optional[int]]:
-        """Add a single card during the game"""
-        async with self.get_lock(game_id):
-            try:
-                if game_id not in self.active_games:
-                    return False, "Game not found", None
-                
-                if user_id not in self.active_games[game_id]['players']:
-                    return False, "Player not found", None
-                
-                player = self.active_games[game_id]['players'][user_id]
-                
-                # Check max cards
-                if len(player['card_ids']) >= MAX_CARDS_PER_PLAYER:
-                    return False, f"Maximum {MAX_CARDS_PER_PLAYER} cards per player", None
-                
-                # Check if player is suspended
-                if user_id in self.suspended_players.get(game_id, set()):
-                    return False, "You are suspended from this round", None
-                
-                # Get price
-                price_per_card = self.room_price.get(game_id, 1000)
-                
-                # Check balance
-                user = db.get_user(user_id)
-                if not user or user['balance'] < price_per_card:
-                    return False, f"Insufficient balance. Need {price_per_card/100} ETB", None
-                
-                # Generate new card
-                available_cards = [c for c in BINGO_CARDS if c['id'] not in self.taken_cards.get(game_id, set())]
-                if not available_cards:
-                    return False, "No available cards", None
-                
-                card_data = random.choice(available_cards)
-                card_id = card_data['id']
-                
-                # Deduct balance
-                update_result = db.update_balance(
-                    user_id, 
-                    -price_per_card, 
-                    'game_fee', 
-                    f'Added card during game #{game_id}'
-                )
-                
-                if not update_result:
-                    return False, "Failed to deduct balance", None
-                
-                new_balance = update_result['new_balance']
-                
-                # Add card
-                if game_id not in self.taken_cards:
-                    self.taken_cards[game_id] = set()
-                self.taken_cards[game_id].add(card_id)
-                
-                if game_id not in self.card_owners:
-                    self.card_owners[game_id] = {}
-                self.card_owners[game_id][card_id] = user_id
-                
-                player['cards'].append(card_data['card'])
-                player['card_ids'].append(card_id)
-                player['marked'][card_id] = []
-                player['balance'] = new_balance
-                
-                # Initialize marked numbers
-                if game_id not in self.player_marked_numbers:
-                    self.player_marked_numbers[game_id] = {}
-                if user_id not in self.player_marked_numbers[game_id]:
-                    self.player_marked_numbers[game_id][user_id] = {}
-                if card_id not in self.player_marked_numbers[game_id][user_id]:
-                    self.player_marked_numbers[game_id][user_id][card_id] = set()
-                
-                # Save to database
-                db.save_card_status(user_id, game_id, card_id, [], False)
-                
-                # Update game stats
-                self.active_games[game_id]['total_cards_sold'] += 1
-                self.active_games[game_id]['prize_pool'] += price_per_card
-                
-                logger.info(f"User {user_id} added card {card_id} during game {game_id}")
-                
-                return True, f"Card {card_id} added", new_balance
-                
-            except Exception as e:
-                logger.error(f"Error in add_card: {e}")
-                return False, f"Error: {str(e)}", None
-
-    def get_pattern_cells(self, pattern_name: str, card: List) -> List[Tuple[int, int]]:
-        """
-        Get all cell positions that are part of the winning pattern
-        Returns list of (col, row) tuples
-        """
-        # Convert pattern name to backend format if needed
-        backend_pattern = PATTERN_MAPPING.get(pattern_name, pattern_name)
-        
-        cells = []
-        
-        # ONE LINE patterns
-        if backend_pattern in ["ONE_LINE", "any_line", "any_row", "any_col"]:
-            # Check rows
-            for row in range(5):
-                cells = [(col, row) for col in range(5)]
-                break
-            # Check columns
-            if not cells:
-                for col in range(5):
-                    cells = [(col, row) for row in range(5)]
-                    break
-        
-        # FULL_HOUSE
-        elif backend_pattern in ["FULL_HOUSE", "full_house", "blackout"]:
-            cells = [(col, row) for col in range(5) for row in range(5)]
-        
-        # FOUR_CORNERS
-        elif backend_pattern in ["FOUR_CORNERS", "four_corners"]:
-            cells = [(0,0), (4,0), (0,4), (4,4)]
-        
-        # X_PATTERN
-        elif backend_pattern in ["X_PATTERN", "x_pattern"]:
-            cells = [(i,i) for i in range(5)] + [(i,4-i) for i in range(5)]
-            # Remove duplicate center
-            cells = list(dict.fromkeys(cells))
-        
-        # PLUS_PATTERN
-        elif backend_pattern in ["PLUS_PATTERN", "plus_pattern"]:
-            cells = [(2, i) for i in range(5)] + [(i, 2) for i in range(5)]
-            cells = list(dict.fromkeys(cells))
-        
-        # T_SHAPE
-        elif backend_pattern in ["T_SHAPE", "t_pattern"]:
-            cells = [(i, 0) for i in range(5)] + [(2, i) for i in range(1,5)]
-        
-        # L_SHAPE
-        elif backend_pattern in ["L_SHAPE", "l_pattern"]:
-            cells = [(0, i) for i in range(5)] + [(i, 4) for i in range(1,5)]
-        
-        # CROSS (U shape)
-        elif backend_pattern in ["CROSS", "u_pattern"]:
-            cells = [(0, i) for i in range(5)] + [(4, i) for i in range(5)] + [(i, 4) for i in range(1,4)]
-        
-        # OUTER_FRAME
-        elif backend_pattern in ["OUTER_FRAME", "frame"]:
-            cells = [(0, i) for i in range(5)] + [(4, i) for i in range(5)] + \
-                    [(i, 0) for i in range(1,4)] + [(i, 4) for i in range(1,4)]
-        
-        # BOX (center 3x3)
-        elif backend_pattern in ["BOX", "six_pack"]:
-            cells = [(col, row) for col in range(1,4) for row in range(1,4)]
-        
-        return cells
-
-    def is_number_in_pattern(self, game_id: int, card: List, pattern_name: str, number: int) -> bool:
-        """
-        Check if a specific number is part of the winning pattern
-        This is used for the "too late" rule
-        """
-        # Get pattern cells
-        pattern_cells = self.get_pattern_cells(pattern_name, card)
-        
-        # Check if the number is in any of the pattern cells
-        for col, row in pattern_cells:
-            val = card[col][row]
-            if val == number:
-                return True
-        
-        return False
-
-    async def handle_claim_bingo(self, game_id: int, user_id: int, card_id: int) -> dict:
-        """
-        Handle bingo claim with new rules:
-        1. Check if card is already blocked
-        2. Validate pattern
-        3. Check "too late" rule (last number must be in pattern)
-        4. Check if card already won
-        """
-        async with self.get_lock(game_id):
-            result = {
-                'success': False,
-                'type': 'error',
-                'message': '',
-                'card_blocked': False,
-                'too_late': False,
-                'false_bingo': False
-            }
-            
-            try:
-                # Validate game exists
-                if game_id not in self.active_games:
-                    result['message'] = 'Game not found'
-                    return result
-                
-                # Validate player exists
-                if user_id not in self.active_games[game_id]['players']:
-                    result['message'] = 'Player not found'
-                    return result
-                
-                player = self.active_games[game_id]['players'][user_id]
-                
-                # Check if card belongs to player
-                if card_id not in player['card_ids']:
-                    result['message'] = 'Card does not belong to you'
-                    return result
-                
-                # Initialize blocked cards tracking for this game/user
-                if game_id not in self.blocked_cards:
-                    self.blocked_cards[game_id] = {}
-                if user_id not in self.blocked_cards[game_id]:
-                    self.blocked_cards[game_id][user_id] = set()
-                
-                # Initialize won cards tracking
-                if game_id not in self.won_cards:
-                    self.won_cards[game_id] = set()
-                
-                # RULE 1: Check if card is already blocked
-                if card_id in self.blocked_cards[game_id][user_id]:
-                    result['card_blocked'] = True
-                    result['type'] = 'card_blocked'
-                    result['message'] = f'Card {card_id} is already blocked'
-                    return result
-                
-                # RULE 2: Check if card already won
-                if card_id in self.won_cards[game_id]:
-                    result['message'] = f'Card {card_id} has already won'
-                    return result
-                
-                # Get card data
-                card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-                if not card_data:
-                    result['message'] = 'Card not found'
-                    return result
-                
-                # Get current pattern for this room
-                pattern = self.room_patterns.get(game_id, "ONE_LINE")
-                
-                # Get called numbers
-                called_set = set(self.called_numbers.get(game_id, []))
-                
-                # Get manually marked numbers for this card
-                marked_set = set()
-                if (game_id in self.player_marked_numbers and 
-                    user_id in self.player_marked_numbers[game_id] and 
-                    card_id in self.player_marked_numbers[game_id][user_id]):
-                    marked_set = self.player_marked_numbers[game_id][user_id][card_id]
-                
-                # Convert to marked positions
-                marked_positions = []
-                for col in range(5):
-                    for row in range(5):
-                        val = card_data['card'][col][row]
-                        if val == 'FREE' or val in called_set or val in marked_set:
-                            marked_positions.append((row, col))
-                
-                # Check if pattern is satisfied
-                is_winner = check_pattern(marked_positions, pattern)
-                
-                # RULE 3: Check if pattern is valid
-                if not is_winner:
-                    # FALSE BINGO - Block this specific card
-                    self.blocked_cards[game_id][user_id].add(card_id)
-                    
-                    # Update database
-                    db.update_suspension_status(user_id, game_id, [card_id], "false_bingo")
-                    
-                    # Save win/loss record
-                    db.save_game_result(
-                        user_id=user_id,
-                        game_id=game_id,
-                        card_id=card_id,
-                        won=False,
-                        pattern=pattern,
-                        called_numbers=self.called_numbers.get(game_id, []),
-                        marked_numbers=list(marked_set),
-                        reason="false_bingo"
-                    )
-                    
-                    result['false_bingo'] = True
-                    result['type'] = 'card_suspended'
-                    result['message'] = f'❌ Wrong Bingo! Card {card_id} has been blocked for this round'
-                    
-                    logger.info(f"User {user_id} false bingo - Card {card_id} blocked")
-                    return result
-                
-                # RULE 4: Check "too late" rule - last called number must be in pattern
-                last_number = self.last_called_number.get(game_id)
-                
-                if last_number:
-                    # Check if last number is part of the winning pattern
-                    number_in_pattern = self.is_number_in_pattern(
-                        game_id, 
-                        card_data['card'], 
-                        pattern, 
-                        last_number
-                    )
-                    
-                    if not number_in_pattern:
-                        # Too late! The winning pattern was completed earlier
-                        result['too_late'] = True
-                        result['type'] = 'too_late'
-                        result['message'] = f'⏰ Too late! The last number {last_number} was not part of your winning pattern'
-                        
-                        logger.info(f"User {user_id} too late - last number {last_number} not in pattern")
-                        return result
-                
-                # VALID WIN! Mark card as won
-                self.won_cards[game_id].add(card_id)
-                
-                # Calculate prize
-                prize_pool = self.active_games[game_id]['prize_pool']
-                house_cut = int(prize_pool * HOUSE_PERCENT)
-                prize_amount = prize_pool - house_cut
-                
-                # Save win record
-                db.save_game_result(
-                    user_id=user_id,
-                    game_id=game_id,
-                    card_id=card_id,
-                    won=True,
-                    prize_amount=prize_amount,
-                    pattern=pattern,
-                    called_numbers=self.called_numbers.get(game_id, []),
-                    marked_numbers=list(marked_set),
-                    winning_number=last_number,
-                    reason="valid_bingo"
-                )
-                
-                result['success'] = True
-                result['type'] = 'winner'
-                result['message'] = f'🎉 BINGO! Card {card_id} wins!'
-                result['prize'] = prize_amount / 100
-                
-                logger.info(f"User {user_id} valid bingo on card {card_id}")
-                
-                return result
-                
-            except Exception as e:
-                logger.error(f"Error in handle_claim_bingo: {e}")
-                result['message'] = f"Error: {str(e)}"
-                return result
-
-    async def get_player_card_status(self, game_id: int, user_id: int) -> dict:
-        """Get status of all player's cards (active/blocked)"""
-        try:
-            if game_id not in self.active_games:
-                return {'error': 'Game not found'}
-            
-            if user_id not in self.active_games[game_id]['players']:
-                return {'error': 'Player not found'}
-            
-            player = self.active_games[game_id]['players'][user_id]
-            
-            # Get blocked cards
-            blocked = set()
-            if game_id in self.blocked_cards and user_id in self.blocked_cards[game_id]:
-                blocked = self.blocked_cards[game_id][user_id]
-            
-            # Get suspended cards (legacy)
-            suspended = set()
-            if game_id in self.suspended_cards and user_id in self.suspended_cards[game_id]:
-                suspended = self.suspended_cards[game_id][user_id]
-            
-            # Combine blocked and suspended
-            all_blocked = blocked.union(suspended)
-            
-            # Get false bingo attempts
-            attempts = 0
-            if game_id in self.false_bingo_attempts and user_id in self.false_bingo_attempts[game_id]:
-                attempts = self.false_bingo_attempts[game_id][user_id]
-            
-            result = {
-                'total_cards': len(player['card_ids']),
-                'active_cards': [],
-                'blocked_cards': [],
-                'false_bingo_attempts': attempts,
-                'fully_suspended': user_id in self.suspended_players.get(game_id, set())
-            }
-            
-            for card_id in player['card_ids']:
-                card_info = {
-                    'card_id': card_id,
-                    'status': 'blocked' if card_id in all_blocked else 'active'
-                }
-                
-                # Add marked numbers if any
-                marked_count = 0
-                marked_numbers = []
-                if (game_id in self.player_marked_numbers and 
-                    user_id in self.player_marked_numbers[game_id] and 
-                    card_id in self.player_marked_numbers[game_id][user_id]):
-                    marked_count = len(self.player_marked_numbers[game_id][user_id][card_id])
-                    marked_numbers = list(self.player_marked_numbers[game_id][user_id][card_id])
-                
-                card_info['marked_count'] = marked_count
-                card_info['marked_numbers'] = marked_numbers
-                
-                if card_id in all_blocked:
-                    result['blocked_cards'].append(card_info)
-                else:
-                    result['active_cards'].append(card_info)
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error getting card status: {e}")
-            return {'error': str(e)}
-
-    async def check_winner_with_manual_marks(self, game_id: int, user_id: int, card_id: int) -> bool:
-        """Check winner using only manually marked numbers"""
-        try:
-            if game_id not in self.active_games:
-                return False
-            
-            # Check if player is suspended
-            if user_id in self.suspended_players.get(game_id, set()):
-                return False
-            
-            # Check if card is blocked
-            if (game_id in self.blocked_cards and 
-                user_id in self.blocked_cards[game_id] and 
-                card_id in self.blocked_cards[game_id][user_id]):
-                return False
-            
-            # Check if card is suspended (legacy)
-            if (game_id in self.suspended_cards and 
-                user_id in self.suspended_cards[game_id] and 
-                card_id in self.suspended_cards[game_id][user_id]):
-                return False
-            
-            player = self.active_games[game_id]['players'].get(user_id)
-            if not player:
-                return False
-            
-            # Find the card
-            if card_id not in player['card_ids']:
-                return False
-            
-            card_data = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-            if not card_data:
-                return False
-            
-            # Get ONLY manually marked numbers (not auto-marked)
-            marked_numbers = set()
-            if (game_id in self.player_marked_numbers and 
-                user_id in self.player_marked_numbers[game_id] and 
-                card_id in self.player_marked_numbers[game_id][user_id]):
-                marked_numbers = self.player_marked_numbers[game_id][user_id][card_id]
-            
-            # Convert to marked positions
-            marked_positions = []
-            for row in range(5):
-                for col in range(5):
-                    val = card_data['card'][col][row]
-                    if val == 'FREE':
-                        marked_positions.append((row, col))
-                    elif val in marked_numbers:  # Only count manually marked numbers
-                        marked_positions.append((row, col))
-            
-            # Get room pattern
-            pattern = self.room_patterns.get(game_id, "ONE_LINE")
-            
-            # Check if pattern is satisfied
-            return check_pattern(marked_positions, pattern)
-            
-        except Exception as e:
-            logger.error(f"Error checking winner with manual marks: {e}")
-            return False
-
-    async def finish_round_multi(self, game_id: int, winners: List[Tuple[int, int]]):
-        """Finish a round with multiple winners"""
-        if game_id not in self.active_games:
-            return
-
-        self.stop_number_generation[game_id] = True
-        winner_ids = [w[0] for w in winners]
-        logger.info(f"Finishing round {game_id} - Winners: {winner_ids}")
-
-        prize_pool = self.active_games[game_id]['prize_pool']
-        house_cut = int(prize_pool * HOUSE_PERCENT)
-        total_prize = prize_pool - house_cut
-        prize_per_winner = total_prize // len(winners)
-        remainder = total_prize - (prize_per_winner * len(winners))
-        house_cut += remainder
-        self.house_profit += house_cut
-
-        for user_id, winning_card_id in winners:
-            if user_id in self.active_games[game_id]['players']:
-                player = self.active_games[game_id]['players'][user_id]
-                update_result = db.update_balance(
-                    user_id=user_id,
-                    amount=prize_per_winner,
-                    transaction_type='game_win',
-                    description=f'Won round {self.round_numbers[game_id]} in room #{game_id} (shared win)'
-                )
-                if update_result:
-                    player['balance'] = update_result['new_balance']
-                    player['winner'] = True
-
-        winning_card_data = None
-        if winners:
-            first_winner_id, first_card_id = winners[0]
-            card = next((c for c in BINGO_CARDS if c['id'] == first_card_id), None)
-            if card:
-                winning_card_data = card['card']
-
-        pattern_display = self.room_patterns.get(game_id, "ONE_LINE")
-        pattern_name = get_pattern_name(pattern_display)
-        await self.broadcast(game_id, {
-            'type': 'game_won',
-            'winners': [
-                {
-                    'user_id': uid,
-                    'name': self.active_games[game_id]['players'][uid]['name'],
-                    'card_id': cid
-                } for uid, cid in winners
-            ],
-            'prize_per_winner': prize_per_winner / 100,
-            'total_prize': total_prize / 100,
-            'house_fee': house_cut / 100,
-            'winning_card': winning_card_data,
-            'winning_card_id': winners[0][1] if winners else None,
-            'pattern': pattern_display,
-            'pattern_name': pattern_name
-        })
-
-        if self.bot_app:
-            for user_id, _ in winners:
-                try:
-                    await self.bot_app.bot.send_message(
-                        chat_id=user_id,
-                        text=f"🎉 እንኳን ደስ አለዎት! 🎉\n\nበክፍል {game_id} ዙር {self.round_numbers[game_id]} አሸንፈዋል!\nየእርስዎ ድርሻ: {prize_per_winner/100} ብር"
-                    )
-                except:
-                    pass
-
-        if game_id in self.reset_timers:
-            self.reset_timers[game_id].cancel()
-        self.reset_timers[game_id] = asyncio.create_task(self.delayed_reset(game_id))
-
-    async def delayed_reset(self, game_id: int):
-        """Delayed reset after round ends"""
-        await asyncio.sleep(ROUND_RESET_DELAY)
-        await self.reset_round(game_id)
-
-    async def reset_round(self, game_id: int = 1):
-        """Reset round with card suspension cleanup"""
-        logger.info(f"Resetting round for game {game_id}")
-        
-        # Cancel auto-call task
-        if game_id in self.auto_call_tasks:
-            self.auto_call_tasks[game_id].cancel()
-            try:
-                await self.auto_call_tasks[game_id]
-            except:
-                pass
-            del self.auto_call_tasks[game_id]
-        
-        # Clear card-specific suspension data for this game
-        if game_id in self.suspended_cards:
-            del self.suspended_cards[game_id]
-        if game_id in self.false_bingo_attempts:
-            del self.false_bingo_attempts[game_id]
-        if game_id in self.player_marked_numbers:
-            del self.player_marked_numbers[game_id]
-        if game_id in self.card_owners:
-            del self.card_owners[game_id]
-        if game_id in self.user_selected_cards:
-            del self.user_selected_cards[game_id]
-        
-        # Clear blocked cards and won cards
-        if game_id in self.blocked_cards:
-            del self.blocked_cards[game_id]
-        if game_id in self.won_cards:
-            del self.won_cards[game_id]
-        
-        # Clear player suspensions
-        if game_id in self.suspended_players:
-            del self.suspended_players[game_id]
-        
-        # Clear admin control timer
-        if game_id in self.admin_control_timer:
-            self.admin_control_timer[game_id].cancel()
-            del self.admin_control_timer[game_id]
-        
-        # Reset round numbers
-        self.round_numbers[game_id] = self.round_numbers.get(game_id, 1) + 1
-        self.called_numbers[game_id] = []
-        self.game_started[game_id] = False
-        self.stop_number_generation[game_id] = False
-        self.number_pool[game_id] = list(range(1, 76))
-        random.shuffle(self.number_pool[game_id])
-        
-        # Clear last called number
-        self.last_called_number[game_id] = None
-        
-        # Reset pattern lock
-        self.room_pattern_locked[game_id] = False
-        
-        # Start new admin control timer
-        self.start_admin_control_timer(game_id)
-        
-        # Cancel timers
-        if game_id in self.auto_start_timers:
-            self.auto_start_timers[game_id].cancel()
-            del self.auto_start_timers[game_id]
-        if game_id in self.first_card_time:
-            del self.first_card_time[game_id]
-        if game_id in self.reset_timers:
-            del self.reset_timers[game_id]
-        
-        self.game_winner[game_id] = None
-        
-        # Reset game data
-        if game_id in self.active_games:
-            self.active_games[game_id]['called_numbers'] = []
-            self.active_games[game_id]['prize_pool'] = 0
-            self.active_games[game_id]['total_cards_sold'] = 0
-            for player in self.active_games[game_id]['players'].values():
-                player['cards'] = []
-                player['card_ids'] = []
-                player['marked'] = {}
-                player['ready'] = False
-                player['winner'] = False
-        
-        self.taken_cards[game_id] = set()
-        
-        pattern_display = self.room_patterns.get(game_id, "ONE_LINE")
-        pattern_name = get_pattern_name(pattern_display)
-        logger.info(f"✅ Room {game_id} round {self.round_numbers[game_id]} ready")
-        
-        await self.broadcast(game_id, {
-            'type': 'game_reset',
-            'round': self.round_numbers[game_id],
-            'players': self.get_players(game_id),
-            'countdown': 15,
-            'pattern': pattern_display,
-            'pattern_name': pattern_name
-        })
-
-# Initialize game manager
-game_manager = IntegratedBingoGame()
-
-# ==================== FastAPI App Setup ====================
-app = FastAPI(title="MK BINGO Game")
-
-# Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# ==================== Web Routes ====================
-
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "status": "online",
-        "service": "MK BINGO",
-        "cards": len(BINGO_CARDS),
-        "price_per_card": CARD_PRICE_ROOM1 / 100,
-        "max_cards_per_player": MAX_CARDS_PER_PLAYER
-    }
-
-@app.get("/health")
-async def health():
-    """Health check endpoint for Railway"""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
-@app.get("/rooms", response_class=HTMLResponse)
-async def rooms_page(request: Request, user_id: int):
-    """Room selection page"""
-    try:
-        user = db.get_or_create_user(user_id)
-        return templates.TemplateResponse("rooms.html", {
-            "request": request,
-            "user_id": user_id,
-            "balance": user['balance'] / 100,
-            "price_room1": CARD_PRICE_ROOM1 / 100,
-            "price_room2": CARD_PRICE_ROOM2 / 100,
-            "price_room3": CARD_PRICE_ROOM3 / 100,
-            "bot_username": BOT_USERNAME
-        })
-    except Exception as e:
-        logger.error(f"Error loading rooms page: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.get("/game", response_class=HTMLResponse)
-async def game_page(request: Request, user_id: int, game_id: int = 1):
-    """Main game page"""
-    try:
-        user = db.get_or_create_user(user_id)
-        
-        # Get pattern
-        pattern = game_manager.room_patterns.get(game_id, "any_line")
-        pattern_name = get_pattern_name(pattern)
-        
-        # Get price
-        if game_id == 1:
-            price = CARD_PRICE_ROOM1 / 100
-        elif game_id == 2:
-            price = CARD_PRICE_ROOM2 / 100
-        else:
-            price = CARD_PRICE_ROOM3 / 100
-        
-        return templates.TemplateResponse("bingo.html", {
-            "request": request,
-            "user_id": user_id,
-            "game_id": game_id,
-            "pattern": pattern,
-            "pattern_name": pattern_name,
-            "price_per_card": price,
-            "max_cards": MAX_CARDS_PER_PLAYER,
-            "initial_balance": user['balance'] / 100,
-            "initial_active_games": db.get_active_games_count(user_id),
-            "initial_stake": db.get_total_stake(user_id) / 100,
-            "auto_start_delay": AUTO_START_DELAY,
-            "base_url": BASE_URL,
-            "is_admin": str(user_id) == str(ADMIN_USER_ID)
-        })
-    except Exception as e:
-        logger.error(f"Error loading game page: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.get("/api/room-stats")
-async def get_room_stats():
-    """Get statistics for all rooms"""
-    try:
-        stats = {}
-        for room_id in [1, 2, 3]:
-            if room_id in game_manager.active_games:
-                total_cards = game_manager.active_games[room_id]['total_cards_sold']
-                player_count = len(game_manager.active_games[room_id]['players'])
-                game_started = game_manager.game_started.get(room_id, False)
-                pattern = game_manager.room_patterns.get(room_id, "any_line")
-                pattern_name = get_pattern_name(pattern)
-                pattern_locked = game_manager.room_pattern_locked.get(room_id, False)
-                price = game_manager.room_price.get(room_id, 1000) / 100
-            else:
-                total_cards = 0
-                player_count = 0
-                game_started = False
-                pattern = "any_line"
-                pattern_name = "Any Line"
-                pattern_locked = False
-                price = 50
-            
-            stats[room_id] = {
-                "total_cards": total_cards,
-                "players": player_count,
-                "game_started": game_started,
-                "pattern": pattern,
-                "pattern_name": pattern_name,
-                "pattern_locked": pattern_locked,
-                "price": price
-            }
-        return stats
-    except Exception as e:
-        logger.error(f"Error getting room stats: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.get("/api/user/{user_id}")
-async def get_user_info(user_id: int):
-    """Get user information"""
-    try:
-        user = db.get_user(user_id) or db.get_or_create_user(user_id)
-        return {
-            "user_id": user_id,
-            "balance": user['balance'],
-            "balance_etb": user['balance'] / 100,
-            "active_games": db.get_active_games_count(user_id),
-            "total_stake": db.get_total_stake(user_id) / 100,
-            "games_played": user['games_played'],
-            "games_won": user['games_won']
+# ==================== DATABASE (In-memory for demo - use real DB in production) ====================
+class Database:
+    def __init__(self):
+        self.users = {}  # user_id -> user data
+        self.admins = {}  # admin_id -> role
+        self.games = []  # game history
+        self.cards = {}  # card_id -> card data
+        self.transactions = []
+        self.withdrawals = []
+        self.withdrawal_requests = []
+        self.bans = set()
+        self.statistics = {
+            'total_players': 0,
+            'active_today': 0,
+            'games_played_today': 0,
+            'total_chips': 0,
+            'total_revenue': 0,
+            'total_winnings': 0,
+            'active_games': 0,
+            'daily_players': defaultdict(int),
+            'hourly_active': defaultdict(int)
         }
-    except Exception as e:
-        logger.error(f"Error getting user {user_id}: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.post("/api/deposit")
-async def create_deposit(request: Request):
-    """Create a deposit request (called from web app)"""
-    try:
-        data = await request.json()
-        user_id = data.get('user_id')
-        amount = data.get('amount')
-        txid = data.get('txid')
+        self.admin_log = []
+        self.announcements = []
+        self.current_game = None
+        self.called_numbers = []
+        self.players_in_game = set()
+        self.game_started = False
+        self.game_ended = False
+        self.taken_cards = set()
         
-        if not all([user_id, amount, txid]):
-            return JSONResponse(content={"error": "Missing fields"}, status_code=400)
+    def get_user(self, user_id, user_data=None):
+        if user_id not in self.users:
+            role = UserRole.SUPER_ADMIN if user_id in SUPER_ADMIN_IDS else UserRole.PLAYER
+            username = user_data.username if user_data else None
+            first_name = user_data.first_name if user_data else None
+            
+            self.users[user_id] = {
+                'user_id': user_id,
+                'username': username,
+                'first_name': first_name,
+                'balance': 0,
+                'cards': [],
+                'role': role,
+                'status': UserStatus.ACTIVE,
+                'joined_at': datetime.now(TIMEZONE),
+                'last_active': datetime.now(TIMEZONE),
+                'games_played': 0,
+                'games_won': 0,
+                'total_spent': 0,
+                'total_won': 0,
+                'daily_bonus_claimed': None,
+                'referred_by': None,
+                'referrals': [],
+                'notes': ''
+            }
+            self.statistics['total_players'] += 1
+            
+        if user_data:
+            self.users[user_id]['username'] = user_data.username or self.users[user_id]['username']
+            self.users[user_id]['first_name'] = user_data.first_name or self.users[user_id]['first_name']
         
-        # Create payment request
-        methods = db.get_payment_methods(type='mobile_money', active_only=True)
-        if not methods:
-            return JSONResponse(content={"error": "No payment methods"}, status_code=400)
-        
-        request_id = db.create_payment_request(
-            user_id=user_id,
-            method_id=methods[0]['id'],
-            amount=amount * 100,
-            sender_phone=""
-        )
-        
-        if not request_id:
-            return JSONResponse(content={"error": "Failed to create request"}, status_code=500)
-        
-        db.add_payment_proof(request_id, 'text', txid)
-        
-        return JSONResponse(content={
-            "success": True,
-            "request_id": request_id,
-            "status": "pending"
-        })
-    except Exception as e:
-        logger.error(f"Error creating deposit: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.post("/api/withdraw")
-async def create_withdrawal(request: Request):
-    """Create a withdrawal request (called from web app)"""
-    try:
-        data = await request.json()
-        user_id = data.get('user_id')
-        amount = data.get('amount')
-        phone = data.get('phone')
-        
-        if not all([user_id, amount, phone]):
-            return JSONResponse(content={"error": "Missing fields"}, status_code=400)
-        
-        # Check balance
-        user = db.get_user(user_id)
-        if not user or user['balance'] < amount * 100:
-            return JSONResponse(content={"error": "Insufficient balance"}, status_code=400)
-        
-        request_id = db.create_withdrawal_request(user_id, amount * 100, phone)
-        
-        if not request_id:
-            return JSONResponse(content={"error": "Failed to create request"}, status_code=500)
-        
-        return JSONResponse(content={
-            "success": True,
-            "request_id": request_id,
-            "status": "pending"
-        })
-    except Exception as e:
-        logger.error(f"Error creating withdrawal: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.get("/api/admin/payments")
-async def get_pending_payments(user_id: int):
-    """Get pending payments (admin only)"""
-    if str(user_id) != str(ADMIN_USER_ID):
-        return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
+        self.users[user_id]['last_active'] = datetime.now(TIMEZONE)
+        return self.users[user_id]
     
-    try:
-        payments = db.get_pending_payment_requests(limit=50)
-        withdrawals = db.get_pending_withdrawal_requests(limit=50)
-        payment_history = db.get_payment_history(limit=50)
-        withdrawal_history = db.get_withdrawal_history(limit=50)
-        game_history = db.get_game_history(limit=50)
-        
-        return JSONResponse(content={
-            "payments": payments,
-            "withdrawals": withdrawals,
-            "payment_history": payment_history,
-            "withdrawal_history": withdrawal_history,
-            "game_history": game_history
+    def is_admin(self, user_id):
+        user = self.get_user(user_id)
+        return user['role'] in [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MODERATOR]
+    
+    def is_super_admin(self, user_id):
+        return user_id in SUPER_ADMIN_IDS
+    
+    def add_admin(self, user_id, role, added_by):
+        if user_id not in self.users:
+            self.get_user(user_id)
+        self.users[user_id]['role'] = role
+        self.admin_log.append({
+            'action': 'add_admin',
+            'user_id': user_id,
+            'role': role.value,
+            'added_by': added_by,
+            'timestamp': datetime.now(TIMEZONE)
         })
-    except Exception as e:
-        logger.error(f"Error getting pending payments: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.post("/api/admin/approve-payment")
-async def approve_payment(request: Request):
-    """Approve a payment (admin only)"""
-    try:
-        data = await request.json()
-        admin_id = data.get('admin_id')
-        request_id = data.get('request_id')
+    
+    def remove_admin(self, user_id, removed_by):
+        if user_id not in SUPER_ADMIN_IDS:  # Can't remove super admin
+            self.users[user_id]['role'] = UserRole.PLAYER
+            self.admin_log.append({
+                'action': 'remove_admin',
+                'user_id': user_id,
+                'removed_by': removed_by,
+                'timestamp': datetime.now(TIMEZONE)
+            })
+    
+    def ban_user(self, user_id, banned_by, reason=""):
+        self.users[user_id]['status'] = UserStatus.BANNED
+        self.bans.add(user_id)
+        self.admin_log.append({
+            'action': 'ban',
+            'user_id': user_id,
+            'banned_by': banned_by,
+            'reason': reason,
+            'timestamp': datetime.now(TIMEZONE)
+        })
+    
+    def unban_user(self, user_id, unbanned_by):
+        self.users[user_id]['status'] = UserStatus.ACTIVE
+        self.bans.discard(user_id)
+        self.admin_log.append({
+            'action': 'unban',
+            'user_id': user_id,
+            'unbanned_by': unbanned_by,
+            'timestamp': datetime.now(TIMEZONE)
+        })
+    
+    def add_transaction(self, user_id, amount, type_, status='completed', ref=None, notes=""):
+        tx = {
+            'id': len(self.transactions) + 1,
+            'user_id': user_id,
+            'amount': amount,
+            'type': type_,
+            'status': status,
+            'ref': ref or ''.join(random.choices(string.ascii_uppercase + string.digits, k=12)),
+            'created_at': datetime.now(TIMEZONE),
+            'notes': notes
+        }
+        self.transactions.append(tx)
         
-        if str(admin_id) != str(ADMIN_USER_ID):
-            return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
+        # Update statistics
+        if type_ == TransactionType.DEPOSIT.value:
+            self.statistics['total_chips'] += amount
+        elif type_ == TransactionType.WITHDRAWAL.value:
+            self.statistics['total_chips'] -= amount
+        elif type_ == TransactionType.ADMIN_CREDIT.value:
+            self.statistics['total_chips'] += amount
         
-        payment = db.get_payment_request(request_id)
-        if not payment:
-            return JSONResponse(content={"error": "Payment not found"}, status_code=404)
+        return tx
+    
+    def add_withdrawal_request(self, user_id, amount, phone):
+        wd = {
+            'id': len(self.withdrawal_requests) + 1,
+            'user_id': user_id,
+            'amount': amount,
+            'phone': phone,
+            'status': 'pending',
+            'created_at': datetime.now(TIMEZONE),
+            'processed_by': None,
+            'processed_at': None
+        }
+        self.withdrawal_requests.append(wd)
+        return wd
+    
+    def update_statistics(self):
+        """Update various statistics"""
+        now = datetime.now(TIMEZONE)
+        today = now.date()
         
-        db.update_payment_request_status(request_id, 'approved', 'Approved by admin', admin_id)
-        result = db.update_balance(
-            payment['user_id'],
-            payment['amount'],
-            'deposit',
-            f'Payment approved - {request_id}'
+        # Active today
+        self.statistics['active_today'] = sum(
+            1 for u in self.users.values() 
+            if u['last_active'].date() == today
         )
         
-        if not result:
-            return JSONResponse(content={"error": "Failed to update balance"}, status_code=500)
+        # Total chips in circulation
+        self.statistics['total_chips'] = sum(u['balance'] for u in self.users.values())
         
-        return JSONResponse(content={"success": True})
-    except Exception as e:
-        logger.error(f"Error approving payment: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.post("/api/admin/reject-payment")
-async def reject_payment(request: Request):
-    """Reject a payment (admin only)"""
-    try:
-        data = await request.json()
-        admin_id = data.get('admin_id')
-        request_id = data.get('request_id')
-        
-        if str(admin_id) != str(ADMIN_USER_ID):
-            return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
-        
-        db.update_payment_request_status(request_id, 'rejected', 'Rejected by admin', admin_id)
-        
-        return JSONResponse(content={"success": True})
-    except Exception as e:
-        logger.error(f"Error rejecting payment: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-@app.post("/api/admin/approve-withdrawal")
-async def approve_withdrawal(request: Request):
-    """Approve a withdrawal (admin only)"""
-    try:
-        data = await request.json()
-        admin_id = data.get('admin_id')
-        request_id = data.get('request_id')
-        
-        if str(admin_id) != str(ADMIN_USER_ID):
-            return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
-        
-        withdrawal = db.get_withdrawal_request(request_id)
-        if not withdrawal:
-            return JSONResponse(content={"error": "Withdrawal not found"}, status_code=404)
-        
-        # Check balance
-        user = db.get_user(withdrawal['user_id'])
-        if not user or user['balance'] < withdrawal['amount']:
-            return JSONResponse(content={"error": "Insufficient balance"}, status_code=400)
-        
-        db.update_balance(
-            withdrawal['user_id'],
-            -withdrawal['amount'],
-            'withdrawal',
-            f'Withdrawal approved - {request_id}'
+        # Games played today
+        self.statistics['games_played_today'] = sum(
+            1 for g in self.games 
+            if g.get('ended_at') and g['ended_at'].date() == today
         )
-        db.update_withdrawal_request_status(request_id, 'approved', 'Approved by admin', admin_id)
         
-        return JSONResponse(content={"success": True})
-    except Exception as e:
-        logger.error(f"Error approving withdrawal: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        # Revenue (house commission from games)
+        self.statistics['total_revenue'] = sum(
+            g.get('house_fee', 0) for g in self.games
+        )
 
-@app.post("/api/admin/reject-withdrawal")
-async def reject_withdrawal(request: Request):
-    """Reject a withdrawal (admin only)"""
-    try:
-        data = await request.json()
-        admin_id = data.get('admin_id')
-        request_id = data.get('request_id')
-        
-        if str(admin_id) != str(ADMIN_USER_ID):
-            return JSONResponse(content={"error": "Unauthorized"}, status_code=403)
-        
-        db.update_withdrawal_request_status(request_id, 'rejected', 'Rejected by admin', admin_id)
-        
-        return JSONResponse(content={"success": True})
-    except Exception as e:
-        logger.error(f"Error rejecting withdrawal: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+db = Database()
 
-@app.post("/api/admin/set-room-settings")
-async def set_room_settings(request: Request):
-    """Admin sets room pattern and price"""
-    try:
-        data = await request.json()
-        admin_id = data.get('admin_id')
-        game_id = data.get('game_id')
-        pattern = data.get('pattern')
-        price = data.get('price')
-        
-        success, message = await game_manager.set_room_settings(game_id, admin_id, pattern, price)
-        
-        return JSONResponse(content={"success": success, "message": message})
-    except Exception as e:
-        logger.error(f"Error setting room settings: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+# ==================== BINGO CARD GENERATOR ====================
+def generate_bingo_card() -> List[List]:
+    """Generate a 5x5 bingo card with numbers 1-75"""
+    card = []
+    col_ranges = [(1, 15), (16, 30), (31, 45), (46, 60), (61, 75)]
+    
+    for col in range(5):
+        numbers = random.sample(range(col_ranges[col][0], col_ranges[col][1] + 1), 5)
+        card.append(numbers)
+    
+    # Free space in center
+    card[2][2] = "FREE"
+    
+    return card
 
-@app.post("/api/admin/start-game")
-async def admin_start_game(request: Request):
-    """Admin manually starts the game"""
-    try:
-        data = await request.json()
-        admin_id = data.get('admin_id')
-        game_id = data.get('game_id')
-        
-        success, message = await game_manager.admin_start_game(game_id, admin_id)
-        
-        return JSONResponse(content={"success": success, "message": message})
-    except Exception as e:
-        logger.error(f"Error starting game: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+def format_bingo_card(card: List[List], marked: List[int] = None) -> str:
+    """Format bingo card for display with marked numbers"""
+    marked = marked or []
+    result = "╔════╦════╦════╦════╦════╗\n"
+    result += "║  B ║  I ║  N ║  G ║  O ║\n"
+    result += "╠════╬════╬════╬════╬════╣\n"
+    
+    for row in range(5):
+        row_text = "║"
+        for col in range(5):
+            val = card[col][row]
+            if val == "FREE":
+                row_text += " 😊 ║"
+            elif val in marked:
+                row_text += f" ✅{str(val):>2}║"
+            else:
+                row_text += f"{str(val):>4}║"
+        result += row_text + "\n"
+        if row < 4:
+            result += "╠════╬════╬════╬════╬════╣\n"
+    
+    result += "╚════╩════╩════╩════╩════╝"
+    return result
 
-# ==================== WebSocket Endpoint ====================
-
-@app.websocket("/ws/{game_id}/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, game_id: int, user_id: int):
-    """WebSocket endpoint for real-time gameplay"""
-    connected = await game_manager.connect(game_id, websocket, user_id)
-    if not connected:
+# ==================== MAIN MENU ====================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Main start command with dynamic menu based on role"""
+    user = update.effective_user
+    db_user = db.get_user(user.id, user)
+    
+    # Check if banned
+    if db_user['status'] == UserStatus.BANNED:
+        await update.message.reply_text("❌ You are banned from using this bot.")
         return
     
-    try:
-        while True:
-            data = await websocket.receive_json()
-            logger.info(f"WebSocket message: {data['type']} from user {user_id}")
-            
-            if data['type'] == 'select_cards':
-                success, msg, cost, new_bal = await game_manager.select_cards(game_id, user_id, data['card_ids'])
-                await websocket.send_json({
-                    'type': 'cards_selected', 
-                    'success': success, 
-                    'message': msg, 
-                    'cost': cost, 
-                    'new_balance': new_bal, 
-                    'card_ids': data['card_ids'] if success else []
-                })
-                if success:
-                    for card_id in data['card_ids']:
-                        card = next((c for c in BINGO_CARDS if c['id'] == card_id), None)
-                        if card:
-                            await websocket.send_json({
-                                'type': 'your_card', 
-                                'card': card['card'], 
-                                'card_id': card_id,
-                                'marked': [],
-                                'suspended': False
-                            })
-            
-            elif data['type'] == 'mark_number':
-                # Player manually marks a called number
-                result = await game_manager.handle_mark_number(
-                    game_id, user_id, data['card_id'], data['number']
-                )
-                
-                await websocket.send_json({
-                    'type': 'mark_result',
-                    **result
-                })
-                
-                # If pattern completed, highlight the bingo button
-                if result.get('pattern_completed'):
-                    await websocket.send_json({
-                        'type': 'pattern_completed',
-                        'card_id': data['card_id'],
-                        'message': result['message']
-                    })
-            
-            elif data['type'] == 'claim_bingo':
-                card_id = data.get('card_id')
-                if not card_id:
-                    await websocket.send_json({
-                        'type': 'error',
-                        'message': 'No card specified'
-                    })
-                    continue
-                
-                # Use the new handler with all rules
-                result = await game_manager.handle_claim_bingo(game_id, user_id, card_id)
-                
-                if result['success']:
-                    # Valid bingo - proceed with win
-                    logger.info(f"Valid bingo by user {user_id} on card {card_id}")
-                    winners = [(user_id, card_id)]
-                    game_manager.stop_number_generation[game_id] = True
-                    await game_manager.finish_round_multi(game_id, winners)
-                else:
-                    # Send appropriate error message based on result type
-                    await websocket.send_json({
-                        'type': result['type'],
-                        'message': result['message'],
-                        'card_id': card_id,
-                        'card_blocked': result.get('card_blocked', False),
-                        'too_late': result.get('too_late', False)
-                    })
-            
-            elif data['type'] == 'false_bingo':
-                # Handle false bingo from client (backup)
-                card_id = data.get('card_id')
-                logger.info(f"False bingo report from user {user_id} on card {card_id}")
-                success, message, status = await game_manager.handle_false_bingo(
-                    game_id, user_id, card_id
-                )
-                await websocket.send_json({
-                    'type': 'false_bingo_result',
-                    'success': success,
-                    'message': message,
-                    'claimed_card_id': card_id,
-                    'new_status': status
-                })
-            
-            elif data['type'] == 'add_card':
-                success, message, new_balance = await game_manager.add_card(game_id, user_id)
-                await websocket.send_json({
-                    'type': 'add_card_result',
-                    'success': success,
-                    'message': message,
-                    'new_balance': new_balance
-                })
-            
-            elif data['type'] == 'get_card_status':
-                status = await game_manager.get_player_card_status(game_id, user_id)
-                await websocket.send_json({
-                    'type': 'card_status',
-                    'status': status
-                })
-            
-            elif data['type'] == 'call_number':
-                await game_manager.call_next_number(game_id)
-            
-            elif data['type'] == 'heartbeat':
-                await websocket.send_json({'type': 'heartbeat_ack'})
-            
-            elif data['type'] == 'ping':
-                await websocket.send_json({'type': 'pong'})
-                
-    except WebSocketDisconnect:
-        await game_manager.disconnect(game_id, websocket, user_id)
-        logger.info(f"User {user_id} disconnected from room {game_id}")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        await game_manager.disconnect(game_id, websocket, user_id)
-
-# ==================== Simplified Telegram Bot Handlers ====================
-# Only essential commands - all financial transactions in web app
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start command - opens mini app"""
-    user = update.effective_user
-    
-    # Create or get user
-    user_data = db.get_or_create_user(
-        user_id=user.id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name
+    # Welcome message
+    welcome_text = (
+        f"🎯 *WELCOME TO MK BINGO!* 🎯\n\n"
+        f"👤 *Player:* {db_user['first_name'] or db_user['username']}\n"
+        f"💰 *Balance:* `{db_user['balance']} ETB`\n"
+        f"🎮 *Cards owned:* {len(db_user['cards'])}\n"
+        f"📊 *Games played:* {db_user['games_played']}\n"
+        f"🏆 *Games won:* {db_user['games_won']}\n\n"
+        f"⚙️ *Game Settings:*\n"
+        f"• Card Price: {config.card_price} ETB\n"
+        f"• Max Cards: {config.max_cards_per_user}\n"
+        f"• Win Rate: {config.base_win} ETB base\n\n"
+        f"👇 *Choose an option:*"
     )
     
-    balance = user_data['balance'] / 100
-    
-    # Create mini app URL
-    webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
-    
-    # Create keyboard with mini app button
+    # Main menu keyboard
     keyboard = [
-        [InlineKeyboardButton("🎮 Open MK BINGO", web_app={'url': webapp_url})],
-        [InlineKeyboardButton("💰 Balance", callback_data="balance")],
-        [InlineKeyboardButton("❓ Help", callback_data="help")]
+        [InlineKeyboardButton("💰 Deposit", callback_data="deposit"),
+         InlineKeyboardButton("💳 Withdraw", callback_data="withdraw")],
+        [InlineKeyboardButton("🎮 Buy Cards", callback_data="buy_cards"),
+         InlineKeyboardButton("📊 My Cards", callback_data="my_cards")],
+        [InlineKeyboardButton("🎯 Join Game", callback_data="join_game"),
+         InlineKeyboardButton("📈 Statistics", callback_data="player_stats")],
+        [InlineKeyboardButton("🎁 Daily Bonus", callback_data="daily_bonus"),
+         InlineKeyboardButton("📞 Support", callback_data="support")]
     ]
     
-    # Add admin button if user is admin
-    if str(user.id) == str(ADMIN_USER_ID):
-        keyboard.append([InlineKeyboardButton("⚙️ Admin Panel", callback_data="admin")])
+    # Admin button for admins
+    if db.is_admin(user.id):
+        keyboard.append([InlineKeyboardButton("⚙️ Admin Panel", callback_data="admin_panel")])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    welcome_text = (
-        f"🎉 እንኳን ደስ አለዎት {user.first_name}! 🎉\n\n"
-        f"💰 ቀሪ ሂሳብ: {balance:.2f} ብር\n\n"
-        f"ከታች ያለውን ቁልፍ በመጫን ወደ ጨዋታው ይሂዱ 👇\n"
-        f"📱 ገንዘብ መሙላት እና ማውጣት በዌብ አፕ ውስጥ ይቻላል"
-    )
     
     await update.message.reply_text(
         welcome_text,
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=reply_markup
     )
 
-async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /play command - opens mini app directly"""
-    user = update.effective_user
-    webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
-    
-    keyboard = [[InlineKeyboardButton("🎮 Open MK BINGO", web_app={'url': webapp_url})]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "ከታች ያለውን ቁልፍ ተጫን ወደ ጨዋታው ለመግባት 👇",
-        reply_markup=reply_markup
-    )
-
-async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /balance command - shows balance and link to web app"""
-    user_id = update.effective_user.id
-    user_data = db.get_user(user_id)
-    
-    if not user_data:
-        user_data = db.get_or_create_user(
-            user_id, 
-            update.effective_user.username, 
-            update.effective_user.first_name, 
-            update.effective_user.last_name
-        )
-    
-    balance = user_data['balance'] / 100
-    games_won = user_data.get('games_won', 0)
-    games_played = user_data.get('games_played', 0)
-    
-    webapp_url = f"{BASE_URL}/rooms?user_id={user_id}"
-    
-    message = (
-        f"💰 **የእርስዎ ቀሪ ሂሳብ**\n\n"
-        f"ጠቅላላ ቀሪ: **{balance:.2f} ብር**\n"
-        f"ያሸነፉባቸው ጨዋታዎች: **{games_won}**\n"
-        f"የተጫወቱባቸው ጨዋታዎች: **{games_played}**\n\n"
-        f"ለመጫወት፣ ገንዘብ ለመሙላት ወይም ለማውጣት ከታች ያለውን ቁልፍ ይጫኑ 👇"
-    )
-    
-    keyboard = [[InlineKeyboardButton("🎮 ወደ ጨዋታ ይሂዱ", web_app={'url': webapp_url})]]
-    
-    await update.message.reply_text(
-        message,
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /help command"""
-    webapp_url = f"{BASE_URL}/rooms?user_id={update.effective_user.id}"
-    
-    help_text = (
-        "❓ **የMK BINGO እገዛ**\n\n"
-        "**እንዴት እንደሚጫወት:**\n"
-        "1. ከታች ያለውን '🎮 Open MK BINGO' ቁልፍ ይጫኑ\n"
-        "2. ክፍል ይምረጡ (1-3)\n"
-        "3. ካርዶችን ይምረጡ (እስከ 8 ካርዶች)\n"
-        "4. 5 ካርዶች ከተሸጡ በኋላ ጨዋታው ይጀምራል\n"
-        "5. ቁጥሮች በየ 3 ሰከንድ ይጠራሉ\n"
-        "6. በካርድዎ ላይ ቁጥሮችን ምልክት ያድርጉ\n"
-        "7. ንድፉን ሲያጠናቅቁ BINGO ይጫኑ\n\n"
-        f"**ዋጋዎች:**\n"
-        f"• ክፍል 1: {CARD_PRICE_ROOM1/100} ብር በካርድ\n"
-        f"• ክፍል 2: {CARD_PRICE_ROOM2/100} ብር በካርድ\n"
-        f"• ክፍል 3: {CARD_PRICE_ROOM3/100} ብር በካርድ\n\n"
-        "**ገንዘብ መሙላት እና ማውጣት:**\n"
-        "• በዌብ አፕ ውስጥ በ WALLET ትር ውስጥ ይቻላል\n"
-        "• የTelebirr ቁጥር: `0982372677`\n"
-        "• ክፍያዎች በአስተዳዳሪ ይጸድቃሉ\n\n"
-        "**ትዕዛዛት:**\n"
-        "/start - ጀምር\n"
-        "/play - ወደ ጨዋታ ሂድ\n"
-        "/balance - ቀሪ ሂሳብ\n"
-        "/help - እገዛ"
-    )
-    
-    keyboard = [[InlineKeyboardButton("🎮 ወደ ጨዋታ ይሂዱ", web_app={'url': webapp_url})]]
-    
-    await update.message.reply_text(
-        help_text,
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle button callbacks"""
+# ==================== PLAYER FUNCTIONS ====================
+async def daily_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Claim daily bonus"""
     query = update.callback_query
     await query.answer()
     
     user = update.effective_user
-    data = query.data
+    db_user = db.get_user(user.id)
     
-    if data == "balance":
-        user_id = user.id
-        user_data = db.get_user(user_id)
-        balance = user_data['balance'] / 100 if user_data else 0
-        games_won = user_data.get('games_won', 0) if user_data else 0
-        
-        webapp_url = f"{BASE_URL}/rooms?user_id={user_id}"
-        
-        message = (
-            f"💰 **ቀሪ ሂሳብ:** {balance:.2f} ብር\n"
-            f"🏆 **ያሸነፉባቸው:** {games_won}\n\n"
-            f"ለመጫወት፣ ገንዘብ ለመሙላት ወይም ለማውጣት ከታች ያለውን ቁልፍ ይጫኑ 👇"
-        )
-        
-        keyboard = [[InlineKeyboardButton("🎮 ወደ ጨዋታ ይሂዱ", web_app={'url': webapp_url})]]
-        
+    now = datetime.now(TIMEZONE)
+    last_claimed = db_user.get('daily_bonus_claimed')
+    
+    if last_claimed and last_claimed.date() == now.date():
         await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "❌ You've already claimed your daily bonus today!\n"
+            "Come back tomorrow."
         )
+        return
     
-    elif data == "help":
-        webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
-        
-        help_text = (
-            "❓ **እገዛ**\n\n"
-            "• ጨዋታ ለመጀመር 'Open MK BINGO' ይጫኑ\n"
-            "• ቀሪ ሂሳብ ለማየት /balance\n"
-            "• ገንዘብ መሙላት/ማውጣት በዌብ አፕ ውስጥ\n"
-            "• ክፍያዎች በአስተዳዳሪ ይጸድቃሉ\n"
-            "• እገዛ ለማግኘት /help"
-        )
-        
-        keyboard = [[InlineKeyboardButton("🎮 ወደ ጨዋታ ይሂዱ", web_app={'url': webapp_url})]]
-        
-        await query.edit_message_text(
-            help_text,
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+    # Give bonus
+    bonus = config.daily_bonus
+    db_user['balance'] += bonus
+    db_user['daily_bonus_claimed'] = now
     
-    elif data == "admin" and str(user.id) == str(ADMIN_USER_ID):
-        stats = db.get_system_stats()
-        
-        webapp_url = f"{BASE_URL}/rooms?user_id={user.id}"
-        
-        message = (
-            f"⚙️ **አስተዳዳሪ ፓነል**\n\n"
-            f"👥 ተጠቃሚዎች: {stats['total_users']}\n"
-            f"💰 ጠቅላላ ቀሪ: {stats['total_balance']/100:.2f} ብር\n"
-            f"⏳ በመጠባበቅ ላይ ያሉ ክፍያዎች: {stats.get('pending_payments', 0)}\n"
-            f"💸 በመጠባበቅ ላይ ያሉ ማውጫዎች: {stats.get('pending_withdrawals', 0)}\n"
-            f"📊 ጠቅላላ ጨዋታዎች: {stats.get('total_games', 0)}\n"
-            f"🏆 አሸናፊዎች: {stats.get('total_winners', 0)}\n\n"
-            f"ክፍያዎችን ለማረጋገጥ ወደ ዌብ አፕ ይሂዱ 👇"
-        )
-        
-        keyboard = [[InlineKeyboardButton("⚙️ ወደ አስተዳዳሪ ፓነል", web_app={'url': webapp_url})]]
-        
-        await query.edit_message_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+    db.add_transaction(user.id, bonus, TransactionType.BONUS.value, notes="Daily bonus")
+    
+    await query.edit_message_text(
+        f"🎁 *Daily Bonus Claimed!*\n\n"
+        f"You received: *{bonus} ETB*\n"
+        f"New balance: *{db_user['balance']} ETB*\n\n"
+        f"Come back tomorrow for another bonus!",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
-# ==================== Bot Setup ====================
+async def player_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show player's personal statistics"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = update.effective_user
+    db_user = db.get_user(user.id)
+    
+    # Get win rate
+    win_rate = 0
+    if db_user['games_played'] > 0:
+        win_rate = (db_user['games_won'] / db_user['games_played']) * 100
+    
+    # Get recent transactions
+    recent_txs = [t for t in db.transactions if t['user_id'] == user.id][-5:]
+    
+    text = (
+        f"📊 *Your Statistics*\n\n"
+        f"👤 *Profile:*\n"
+        f"• User ID: `{user.id}`\n"
+        f"• Username: @{db_user['username'] or 'None'}\n"
+        f"• Joined: {db_user['joined_at'].strftime('%Y-%m-%d')}\n\n"
+        f"💰 *Financial:*\n"
+        f"• Current Balance: `{db_user['balance']} ETB`\n"
+        f"• Total Spent: `{db_user['total_spent']} ETB`\n"
+        f"• Total Won: `{db_user['total_won']} ETB`\n"
+        f"• Net Profit: `{db_user['total_won'] - db_user['total_spent']} ETB`\n\n"
+        f"🎮 *Gaming:*\n"
+        f"• Cards Owned: {len(db_user['cards'])}\n"
+        f"• Games Played: {db_user['games_played']}\n"
+        f"• Games Won: {db_user['games_won']}\n"
+        f"• Win Rate: {win_rate:.1f}%\n\n"
+    )
+    
+    if recent_txs:
+        text += "📝 *Recent Transactions:*\n"
+        for tx in recent_txs[-3:]:
+            emoji = "📥" if tx['amount'] > 0 else "📤"
+            text += f"{emoji} {tx['type']}: {abs(tx['amount'])} ETB\n"
+    
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]]
+    
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-async def setup_bot():
-    """Setup and start the Telegram bot with all handlers"""
-    application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
+# ==================== ADMIN PANEL ====================
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Main admin panel with all controls"""
+    query = update.callback_query
+    await query.answer()
     
-    # Add command handlers - only essential commands
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("play", play_command))
-    application.add_handler(CommandHandler("balance", balance_command))
-    application.add_handler(CommandHandler("help", help_command))
+    user_id = update.effective_user.id
+    if not db.is_admin(user_id):
+        await query.edit_message_text("❌ Unauthorized access.")
+        return
     
-    # Add callback query handler for buttons
-    application.add_handler(CallbackQueryHandler(button_callback))
+    is_super = db.is_super_admin(user_id)
     
-    # Initialize and start
-    await application.initialize()
-    await application.start()
+    # Update statistics
+    db.update_statistics()
     
-    # Set webhook
-    webhook_url = f"{BASE_URL}/webhook"
-    success = await application.bot.set_webhook(url=webhook_url)
+    text = (
+        f"⚙️ *Admin Control Panel*\n\n"
+        f"📊 *System Overview:*\n"
+        f"• Total Players: {db.statistics['total_players']}\n"
+        f"• Active Today: {db.statistics['active_today']}\n"
+        f"• Games Today: {db.statistics['games_played_today']}\n"
+        f"• Total Chips: {db.statistics['total_chips']:.0f} ETB\n"
+        f"• Revenue: {db.statistics['total_revenue']:.0f} ETB\n"
+        f"• Active Games: {db.statistics['active_games']}\n\n"
+        f"👑 Your Role: {db.users[user_id]['role'].value}\n\n"
+        f"👇 *Select a category:*"
+    )
     
-    if success:
-        logger.info(f"✅ Webhook set to {webhook_url}")
-        
-        # Get webhook info to verify
-        webhook_info = await application.bot.get_webhook_info()
-        logger.info(f"📡 Webhook info: {webhook_info.url} - {webhook_info.pending_update_count} pending updates")
-    else:
-        logger.error("❌ Failed to set webhook")
+    # Admin menu based on role
+    keyboard = [
+        [InlineKeyboardButton("👥 Player Management", callback_data="admin_players")],
+        [InlineKeyboardButton("📊 Statistics", callback_data="admin_stats")],
+        [InlineKeyboardButton("⚙️ Game Settings", callback_data="admin_settings")],
+        [InlineKeyboardButton("📢 Communications", callback_data="admin_comms")],
+        [InlineKeyboardButton("💰 Financial", callback_data="admin_financial")]
+    ]
     
-    return application
+    # Super admin only options
+    if is_super:
+        keyboard.extend([
+            [InlineKeyboardButton("👑 Admin Management", callback_data="admin_manage_admins")],
+            [InlineKeyboardButton("📋 Activity Log", callback_data="admin_log")]
+        ])
+    
+    keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")])
+    
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-# ==================== Webhook Endpoint ====================
+# ==================== PLAYER MANAGEMENT ====================
+async def admin_player_management(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Player management interface"""
+    query = update.callback_query
+    await query.answer()
+    
+    text = (
+        "👥 *Player Management*\n\n"
+        "Select an option:"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("📋 View All Players", callback_data="admin_list_players")],
+        [InlineKeyboardButton("🔍 Search Player", callback_data="admin_search_player")],
+        [InlineKeyboardButton("🚫 Ban/Unban Player", callback_data="admin_ban_player")],
+        [InlineKeyboardButton("💰 Give Chips", callback_data="admin_give_chips")],
+        [InlineKeyboardButton("🎁 Give Bonus to All", callback_data="admin_bonus_all")],
+        [InlineKeyboardButton("📜 Player History", callback_data="admin_player_history")],
+        [InlineKeyboardButton("👀 Online Status", callback_data="admin_online_status")],
+        [InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_panel")]
+    ]
+    
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-@app.post("/webhook")
-async def webhook(request: Request):
-    """Telegram webhook endpoint"""
+async def admin_list_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """List all players with pagination"""
+    query = update.callback_query
+    await query.answer()
+    
+    page = int(context.user_data.get('player_page', 0))
+    players_per_page = 10
+    
+    all_players = list(db.users.values())
+    total_pages = (len(all_players) + players_per_page - 1) // players_per_page
+    
+    start = page * players_per_page
+    end = start + players_per_page
+    players_page = all_players[start:end]
+    
+    text = f"📋 *Players List (Page {page + 1}/{total_pages})*\n\n"
+    
+    for p in players_page:
+        status_emoji = "🟢" if p['status'] == UserStatus.ACTIVE else "🔴"
+        role_emoji = "👑" if p['role'] == UserRole.SUPER_ADMIN else "⚙️" if p['role'] == UserRole.ADMIN else "🛡️" if p['role'] == UserRole.MODERATOR else "👤"
+        text += f"{status_emoji}{role_emoji} `{p['user_id']}` | @{p['username'] or 'None'} | {p['balance']} ETB\n"
+    
+    keyboard = []
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️ Prev", callback_data="admin_players_prev"))
+    if page < total_pages - 1:
+        nav_buttons.append(InlineKeyboardButton("Next ▶️", callback_data="admin_players_next"))
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
+    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="admin_players")])
+    
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def admin_give_chips(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Give chips to specific player"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text(
+        "💰 *Give Chips to Player*\n\n"
+        "Please enter the user ID and amount in format:\n"
+        "`<user_id> <amount>`\n\n"
+        "Example: `123456789 500`",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    context.user_data['awaiting_give_chips'] = True
+
+async def process_give_chips(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process giving chips"""
+    if not context.user_data.get('awaiting_give_chips'):
+        return
+    
     try:
-        data = await request.json()
-        update = Update.de_json(data, game_manager.bot_app.bot)
-        await game_manager.bot_app.process_update(update)
-        return {"ok": True}
+        args = update.message.text.split()
+        if len(args) != 2:
+            await update.message.reply_text("❌ Invalid format. Use: `<user_id> <amount>`")
+            return
+        
+        target_id = int(args[0])
+        amount = float(args[1])
+        
+        if amount <= 0:
+            await update.message.reply_text("❌ Amount must be positive.")
+            return
+        
+        admin_id = update.effective_user.id
+        target_user = db.get_user(target_id)
+        
+        # Give chips
+        target_user['balance'] += amount
+        db.add_transaction(target_id, amount, TransactionType.ADMIN_CREDIT.value, 
+                          notes=f"Credited by admin {admin_id}")
+        
+        # Notify target
+        try:
+            await context.bot.send_message(
+                target_id,
+                f"💰 *You received {amount} ETB from admin!*\n"
+                f"New balance: {target_user['balance']} ETB",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
+        
+        await update.message.reply_text(
+            f"✅ Successfully gave {amount} ETB to user {target_id}\n"
+            f"User's new balance: {target_user['balance']} ETB"
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID or amount.")
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return JSONResponse(content={"ok": False, "error": str(e)}, status_code=500)
-
-# ==================== Lifespan ====================
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup/shutdown events"""
-    logger.info("🚀 Starting up MK BINGO application...")
+        await update.message.reply_text(f"❌ Error: {str(e)}")
     
-    # Start bot
+    context.user_data.pop('awaiting_give_chips', None)
+
+async def admin_bonus_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Give bonus to all active players"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text(
+        "🎁 *Give Bonus to All Players*\n\n"
+        "Enter the bonus amount for each player:",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    context.user_data['awaiting_bonus_all'] = True
+
+async def process_bonus_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process bonus for all players"""
+    if not context.user_data.get('awaiting_bonus_all'):
+        return
+    
     try:
-        game_manager.bot_app = await setup_bot()
-        logger.info("✅ Telegram bot started successfully")
-    except Exception as e:
-        logger.error(f"❌ Failed to start Telegram bot: {e}")
-        logger.exception("Bot startup error details:")
+        amount = float(update.message.text)
+        
+        if amount <= 0:
+            await update.message.reply_text("❌ Amount must be positive.")
+            return
+        
+        admin_id = update.effective_user.id
+        count = 0
+        
+        for user_id, user_data in db.users.items():
+            if user_data['status'] == UserStatus.ACTIVE:
+                user_data['balance'] += amount
+                db.add_transaction(user_id, amount, TransactionType.BONUS.value,
+                                  notes=f"Global bonus from admin {admin_id}")
+                count += 1
+                
+                # Try to notify
+                try:
+                    await context.bot.send_message(
+                        user_id,
+                        f"🎁 *Global Bonus!*\n\n"
+                        f"You received {amount} ETB from admin!\n"
+                        f"New balance: {user_data['balance']} ETB",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except:
+                    pass
+        
+        await update.message.reply_text(
+            f"✅ Successfully gave {amount} ETB to {count} active players!"
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Invalid amount.")
     
-    # Start heartbeat
-    asyncio.create_task(game_manager.start_heartbeat())
-    logger.info("✅ Heartbeat task started")
+    context.user_data.pop('awaiting_bonus_all', None)
+
+# ==================== GAME SETTINGS MANAGEMENT ====================
+async def admin_game_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Game settings interface"""
+    query = update.callback_query
+    await query.answer()
     
-    yield
+    text = (
+        f"⚙️ *Game Settings*\n\n"
+        f"Current Configuration:\n"
+        f"• Card Price: `{config.card_price} ETB`\n"
+        f"• Min Bet: `{config.min_bet} ETB`\n"
+        f"• Max Bet: `{config.max_bet} ETB`\n"
+        f"• Base Win: `{config.base_win} ETB`\n"
+        f"• Round Duration: `{config.round_duration}s`\n"
+        f"• Call Speed: `{config.number_call_speed}s`\n"
+        f"• Daily Bonus: `{config.daily_bonus} ETB`\n"
+        f"• Welcome Bonus: `{config.welcome_bonus} ETB`\n"
+        f"• Max Cards/User: `{config.max_cards_per_user}`\n"
+        f"• House Commission: `{config.house_commission * 100}%`\n\n"
+        f"Select a setting to change:"
+    )
     
-    # Shutdown
-    logger.info("🛑 Shutting down...")
+    keyboard = [
+        [InlineKeyboardButton("💰 Card Price", callback_data="set_card_price")],
+        [InlineKeyboardButton("🎲 Min/Max Bet", callback_data="set_bet_limits")],
+        [InlineKeyboardButton("🏆 Base Win", callback_data="set_base_win")],
+        [InlineKeyboardButton("⏱️ Round Duration", callback_data="set_round_duration")],
+        [InlineKeyboardButton("⚡ Call Speed", callback_data="set_call_speed")],
+        [InlineKeyboardButton("🎁 Daily Bonus", callback_data="set_daily_bonus")],
+        [InlineKeyboardButton("📊 Max Cards", callback_data="set_max_cards")],
+        [InlineKeyboardButton("🏠 House Commission", callback_data="set_commission")],
+        [InlineKeyboardButton("🔙 Back", callback_data="admin_panel")]
+    ]
     
-    # Close all WebSocket connections
-    for connections in game_manager.game_connections.values():
-        for conn in connections:
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# ==================== ADMIN MANAGEMENT (SUPER ADMIN ONLY) ====================
+async def admin_manage_admins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin management interface (super admin only)"""
+    query = update.callback_query
+    await query.answer()
+    
+    if not db.is_super_admin(update.effective_user.id):
+        await query.edit_message_text("❌ Super admin access required.")
+        return
+    
+    # List current admins
+    admins = [u for u in db.users.values() 
+              if u['role'] in [UserRole.ADMIN, UserRole.MODERATOR]]
+    
+    text = "👑 *Admin Management*\n\n"
+    text += "Current Admins:\n"
+    
+    for admin in admins:
+        role_emoji = "⚙️" if admin['role'] == UserRole.ADMIN else "🛡️"
+        text += f"{role_emoji} @{admin['username'] or 'None'} (`{admin['user_id']}`) - {admin['role'].value}\n"
+    
+    text += "\nSelect an action:"
+    
+    keyboard = [
+        [InlineKeyboardButton("➕ Add Admin", callback_data="add_admin")],
+        [InlineKeyboardButton("➖ Remove Admin", callback_data="remove_admin")],
+        [InlineKeyboardButton("📋 Admin Activity Log", callback_data="admin_activity_log")],
+        [InlineKeyboardButton("🔙 Back", callback_data="admin_panel")]
+    ]
+    
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Add new admin"""
+    query = update.callback_query
+    await query.answer()
+    
+    if not db.is_super_admin(update.effective_user.id):
+        return
+    
+    await query.edit_message_text(
+        "👑 *Add New Admin*\n\n"
+        "Please enter the user ID and role in format:\n"
+        "`<user_id> <role>`\n\n"
+        "Roles: `admin` or `moderator`\n\n"
+        "Example: `123456789 admin`",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    context.user_data['awaiting_add_admin'] = True
+
+async def process_add_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process adding admin"""
+    if not context.user_data.get('awaiting_add_admin'):
+        return
+    
+    try:
+        args = update.message.text.split()
+        if len(args) != 2:
+            await update.message.reply_text("❌ Invalid format. Use: `<user_id> <role>`")
+            return
+        
+        target_id = int(args[0])
+        role_str = args[1].lower()
+        
+        if role_str == 'admin':
+            role = UserRole.ADMIN
+        elif role_str == 'moderator':
+            role = UserRole.MODERATOR
+        else:
+            await update.message.reply_text("❌ Role must be 'admin' or 'moderator'")
+            return
+        
+        admin_id = update.effective_user.id
+        
+        db.add_admin(target_id, role, admin_id)
+        
+        # Notify new admin
+        try:
+            await context.bot.send_message(
+                target_id,
+                f"👑 *You've been made {role_str}*\n\n"
+                f"Added by: {admin_id}\n"
+                f"Use /start to access admin features.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
+        
+        await update.message.reply_text(
+            f"✅ Successfully added user {target_id} as {role_str}"
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID.")
+    
+    context.user_data.pop('awaiting_add_admin', None)
+
+# ==================== COMMUNICATIONS ====================
+async def admin_communications(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Communications interface"""
+    query = update.callback_query
+    await query.answer()
+    
+    text = (
+        "📢 *Communications Center*\n\n"
+        "Send messages to players:"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("📢 Broadcast to All", callback_data="broadcast_all")],
+        [InlineKeyboardButton("💬 Private Message", callback_data="private_message")],
+        [InlineKeyboardButton("📅 Schedule Message", callback_data="schedule_message")],
+        [InlineKeyboardButton("🎁 Promotional Offer", callback_data="send_promo")],
+        [InlineKeyboardButton("🔙 Back", callback_data="admin_panel")]
+    ]
+    
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def broadcast_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Broadcast message to all players"""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text(
+        "📢 *Broadcast to All Players*\n\n"
+        "Enter the message you want to send to everyone:",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    context.user_data['awaiting_broadcast'] = True
+
+async def process_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process broadcast message"""
+    if not context.user_data.get('awaiting_broadcast'):
+        return
+    
+    message = update.message.text
+    admin_id = update.effective_user.id
+    sent = 0
+    failed = 0
+    
+    await update.message.reply_text("📨 Sending broadcast...")
+    
+    for user_id, user_data in db.users.items():
+        if user_data['status'] == UserStatus.ACTIVE:
             try:
-                await conn.close()
+                await context.bot.send_message(
+                    user_id,
+                    f"📢 *Announcement from Admin*\n\n{message}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                sent += 1
+                await asyncio.sleep(0.05)  # Rate limit
+            except:
+                failed += 1
+    
+    await update.message.reply_text(
+        f"✅ Broadcast complete!\n"
+        f"Sent: {sent}\n"
+        f"Failed: {failed}"
+    )
+    
+    context.user_data.pop('awaiting_broadcast', None)
+
+# ==================== WITHDRAWAL APPROVAL ====================
+async def handle_withdrawal_approval(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle admin approval/rejection of withdrawals"""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    parts = data.split('_')
+    
+    if parts[0] == 'approve':
+        wd_id = int(parts[2])
+        wd = next((w for w in db.withdrawal_requests if w['id'] == wd_id), None)
+        
+        if wd:
+            wd['status'] = 'approved'
+            wd['processed_by'] = update.effective_user.id
+            wd['processed_at'] = datetime.now(TIMEZONE)
+            
+            # Process actual TeleBirr transfer
+            # In production, call TeleBirr API here
+            
+            # Notify user
+            try:
+                await context.bot.send_message(
+                    wd['user_id'],
+                    f"✅ *Withdrawal Approved!*\n\n"
+                    f"Amount: {wd['amount']} ETB\n"
+                    f"Phone: {wd['phone']}\n\n"
+                    f"Funds have been sent to your TeleBirr account.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
             except:
                 pass
+            
+            await query.edit_message_text(f"✅ Withdrawal #{wd_id} approved!")
     
-    # Stop bot
-    if game_manager.bot_app:
-        await game_manager.bot_app.stop()
-        await game_manager.bot_app.shutdown()
-    
-    logger.info("✅ Shutdown complete")
+    elif parts[0] == 'reject':
+        wd_id = int(parts[2])
+        wd = next((w for w in db.withdrawal_requests if w['id'] == wd_id), None)
+        
+        if wd:
+            wd['status'] = 'rejected'
+            wd['processed_by'] = update.effective_user.id
+            wd['processed_at'] = datetime.now(TIMEZONE)
+            
+            # Refund user
+            db.get_user(wd['user_id'])['balance'] += wd['amount']
+            
+            # Notify user
+            try:
+                await context.bot.send_message(
+                    wd['user_id'],
+                    f"❌ *Withdrawal Rejected*\n\n"
+                    f"Amount: {wd['amount']} ETB\n\n"
+                    f"Funds have been returned to your balance.\n"
+                    f"Please contact support if you have questions.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                pass
+            
+            await query.edit_message_text(f"✅ Withdrawal #{wd_id} rejected and refunded.")
 
-# Set lifespan
-app.router.lifespan_context = lifespan
-
-# ==================== Main Entry Point ====================
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv('PORT', 8080))
-    host = os.getenv('HOST', '0.0.0.0')
+# ==================== MAIN CALLBACK HANDLER ====================
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle all button callbacks"""
+    query = update.callback_query
+    data = query.data
     
-    logger.info(f"🚀 Starting server on {host}:{port}")
-    logger.info(f"📁 Static files: {os.path.abspath('static')}")
-    logger.info(f"📁 Templates: {os.path.abspath('templates')}")
-    logger.info(f"💰 Card price room 1: {CARD_PRICE_ROOM1/100} ETB")
-    logger.info(f"💰 Card price room 2: {CARD_PRICE_ROOM2/100} ETB")
-    logger.info(f"💰 Card price room 3: {CARD_PRICE_ROOM3/100} ETB")
+    # Handle withdrawal approvals specially
+    if data.startswith('approve_wd_') or data.startswith('reject_wd_'):
+        await handle_withdrawal_approval(update, context)
+        return
     
-    uvicorn.run(
-        "main:app",
-        host=host,
-        port=port,
-        log_level="info",
-        reload=False
+    # Main menu navigation
+    handlers = {
+        'deposit': deposit,
+        'withdraw': withdraw,
+        'buy_cards': buy_cards,
+        'my_cards': my_cards,
+        'join_game': join_game,
+        'player_stats': player_statistics,
+        'daily_bonus': daily_bonus,
+        'admin_panel': admin_panel,
+        'back_to_menu': lambda u, c: start(u, c) if u.callback_query else None,
+        
+        # Player management
+        'admin_players': admin_player_management,
+        'admin_list_players': admin_list_players,
+        'admin_give_chips': admin_give_chips,
+        'admin_bonus_all': admin_bonus_all,
+        
+        # Game settings
+        'admin_settings': admin_game_settings,
+        
+        # Communications
+        'admin_comms': admin_communications,
+        'broadcast_all': broadcast_all,
+        
+        # Admin management (super admin)
+        'admin_manage_admins': admin_manage_admins,
+        'add_admin': add_admin,
+    }
+    
+    # Pagination
+    if data == 'admin_players_next':
+        context.user_data['player_page'] = context.user_data.get('player_page', 0) + 1
+        await admin_list_players(update, context)
+        return
+    elif data == 'admin_players_prev':
+        context.user_data['player_page'] = max(0, context.user_data.get('player_page', 0) - 1)
+        await admin_list_players(update, context)
+        return
+    
+    if data in handlers:
+        await handlers[data](update, context)
+
+# ==================== CONVERSATION HANDLERS ====================
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle text messages"""
+    user_id = update.effective_user.id
+    
+    # Check if user is banned
+    if db.users.get(user_id, {}).get('status') == UserStatus.BANNED:
+        await update.message.reply_text("❌ You are banned.")
+        return
+    
+    # Process various await states
+    if context.user_data.get('awaiting_deposit'):
+        await process_deposit_amount(update, context)
+    elif context.user_data.get('awaiting_withdraw_amount'):
+        await process_withdraw_amount(update, context)
+    elif context.user_data.get('awaiting_withdraw_phone'):
+        await process_withdraw_phone(update, context)
+    elif context.user_data.get('awaiting_give_chips'):
+        await process_give_chips(update, context)
+    elif context.user_data.get('awaiting_bonus_all'):
+        await process_bonus_all(update, context)
+    elif context.user_data.get('awaiting_add_admin'):
+        await process_add_admin(update, context)
+    elif context.user_data.get('awaiting_broadcast'):
+        await process_broadcast(update, context)
+    else:
+        # Default to help message
+        await update.message.reply_text(
+            "Use /start to see the main menu.\n"
+            "Available commands:\n"
+            "/start - Main menu\n"
+            "/balance - Check balance\n"
+            "/cards - My cards\n"
+            "/bingo - Check for bingo"
+        )
+
+# ==================== DEPOSIT/WITHDRAWAL FUNCTIONS ====================
+async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle deposit"""
+    query = update.callback_query
+    await query.answer()
+    
+    text = (
+        "💰 *TeleBirr Deposit*\n\n"
+        "Please enter the amount you want to deposit (minimum 10 ETB):"
     )
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+    context.user_data['awaiting_deposit'] = True
+
+async def process_deposit_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process deposit amount"""
+    try:
+        amount = float(update.message.text)
+        if amount < 10:
+            await update.message.reply_text("❌ Minimum deposit is 10 ETB.")
+            return
+        
+        # Simulate payment
+        ref = ''.join(random.choices(string.ascii_uppercase + string.digits, k=12))
+        tx = db.add_transaction(update.effective_user.id, amount, 'deposit', status='pending', ref=ref)
+        
+        text = (
+            f"✅ *Payment Initiated!*\n\n"
+            f"Amount: {amount} ETB\n"
+            f"Reference: `{ref}`\n\n"
+            f"In a real implementation, you would receive a TeleBirr payment link.\n"
+            f"For demo, your balance will be updated in 10 seconds."
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        
+        # Simulate payment confirmation
+        await asyncio.sleep(10)
+        tx['status'] = 'completed'
+        db.get_user(update.effective_user.id)['balance'] += amount
+        
+        await update.message.reply_text(
+            f"✅ Payment confirmed! Your balance is now {db.get_user(update.effective_user.id)['balance']} ETB"
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Invalid amount.")
+    
+    context.user_data.pop('awaiting_deposit', None)
+
+async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle withdrawal"""
+    query = update.callback_query
+    await query.answer()
+    
+    text = (
+        "💳 *Withdrawal Request*\n\n"
+        "Please enter the amount you want to withdraw (minimum 20 ETB):"
+    )
+    
+    await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+    context.user_data['awaiting_withdraw_amount'] = True
+
+async def process_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process withdrawal amount"""
+    try:
+        amount = float(update.message.text)
+        user = update.effective_user
+        db_user = db.get_user(user.id)
+        
+        if amount < 20:
+            await update.message.reply_text("❌ Minimum withdrawal is 20 ETB.")
+            return
+        
+        if amount > db_user['balance']:
+            await update.message.reply_text("❌ Insufficient balance.")
+            return
+        
+        await update.message.reply_text(
+            "📱 Please enter your TeleBirr phone number (format: 09xxxxxxxx):"
+        )
+        context.user_data['withdraw_amount'] = amount
+        context.user_data['awaiting_withdraw_phone'] = True
+        
+    except ValueError:
+        await update.message.reply_text("❌ Invalid amount.")
+
+async def process_withdraw_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Process withdrawal phone number"""
+    phone = update.message.text.strip()
+    
+    if not phone.startswith('09') or len(phone) != 10 or not phone.isdigit():
+        await update.message.reply_text("❌ Invalid phone number. Use format: 09xxxxxxxx")
+        return
+    
+    user = update.effective_user
+    amount = context.user_data.get('withdraw_amount')
+    
+    # Create withdrawal request
+    wd = db.add_withdrawal_request(user.id, amount, phone)
+    
+    # Lock funds
+    db.get_user(user.id)['balance'] -= amount
+    
+    # Notify admins
+    for admin_id in [uid for uid, data in db.users.items() if data['role'] in [UserRole.ADMIN, UserRole.SUPER_ADMIN]]:
+        try:
+            text = (
+                f"💰 *New Withdrawal Request*\n\n"
+                f"User: @{db.users[user.id]['username'] or 'None'} (ID: {user.id})\n"
+                f"Amount: {amount} ETB\n"
+                f"Phone: {phone}\n"
+                f"Request ID: {wd['id']}"
+            )
+            keyboard = [[
+                InlineKeyboardButton("✅ Approve", callback_data=f"approve_wd_{wd['id']}"),
+                InlineKeyboardButton("❌ Reject", callback_data=f"reject_wd_{wd['id']}")
+            ]]
+            await context.bot.send_message(
+                admin_id,
+                text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        except:
+            pass
+    
+    await update.message.reply_text(
+        f"✅ *Withdrawal Request Submitted!*\n\n"
+        f"Amount: {amount} ETB\n"
+        f"Phone: {phone}\n"
+        f"Status: ⏳ Pending Admin Approval\n\n"
+        f"You will be notified once processed.",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    context.user_data.pop('awaiting_withdraw_amount', None)
+    context.user_data.pop('awaiting_withdraw_phone', None)
+    context.user_data.pop('withdraw_amount', None)
+
+# ==================== BUY CARDS ====================
+async def buy_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Buy cards interface"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = update.effective_user
+    db_user = db.get_user(user.id)
+    
+    # Calculate max affordable
+    max_affordable = min(
+        config.max_cards_per_user - len(db_user['cards']),
+        int(db_user['balance'] / config.card_price)
+    )
+    
+    if max_affordable <= 0:
+        await query.edit_message_text(
+            "❌ Cannot buy cards:\n"
+            f"- You own {len(db_user['cards'])}/{config.max_cards_per_user} cards\n"
+            f"- Balance: {db_user['balance']} ETB\n"
+            f"- Card price: {config.card_price} ETB\n\n"
+            "Please deposit or wait for next round."
+        )
+        return
+    
+    # Show available cards (first 30)
+    available = [i for i in range(1, 1001) if i not in db.taken_cards][:30]
+    
+    text = (
+        f"🎮 *Buy Cards*\n\n"
+        f"Your balance: {db_user['balance']} ETB\n"
+        f"Price per card: {config.card_price} ETB\n"
+        f"You can buy up to {max_affordable} more cards.\n\n"
+        f"Available cards (select below):"
+    )
+    
+    # Create card grid
+    keyboard = []
+    row = []
+    for card_id in available:
+        row.append(InlineKeyboardButton(str(card_id), callback_data=f"select_card_{card_id}"))
+        if len(row) == 5:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    
+    keyboard.append([InlineKeyboardButton("✅ Done", callback_data="done_selecting")])
+    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="back_to_menu")])
+    
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    
+    context.user_data['selecting_cards'] = []
+    context.user_data['max_select'] = max_affordable
+
+# ==================== MY CARDS ====================
+async def my_cards(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user's cards"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = update.effective_user
+    db_user = db.get_user(user.id)
+    
+    if not db_user['cards']:
+        await query.edit_message_text(
+            "You don't have any cards yet.\nUse /buy to purchase cards.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🎮 Buy Cards", callback_data="buy_cards"),
+                InlineKeyboardButton("🔙 Back", callback_data="back_to_menu")
+            ]])
+        )
+        return
+    
+    # Show first 3 cards
+    text = f"📊 *Your Cards ({len(db_user['cards'])} total)*\n\n"
+    
+    for i, card_id in enumerate(db_user['cards'][:3]):
+        if card_id in db.cards:
+            card = db.cards[card_id]['numbers']
+            marked = db.cards[card_id].get('marked', [])
+            text += f"*Card #{card_id}:*\n"
+            text += f"```\n{format_bingo_card(card, marked)}\n```\n"
+    
+    if len(db_user['cards']) > 3:
+        text += f"\n... and {len(db_user['cards']) - 3} more cards."
+    
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]]
+    
+    await query.edit_message_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# ==================== JOIN GAME ====================
+async def join_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Join current game"""
+    query = update.callback_query
+    await query.answer()
+    
+    user = update.effective_user
+    db_user = db.get_user(user.id)
+    
+    if not db_user['cards']:
+        await query.edit_message_text(
+            "❌ You need cards to join the game!\n"
+            "Use /buy to purchase cards.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🎮 Buy Cards", callback_data="buy_cards")
+            ]])
+        )
+        return
+    
+    if user.id in db.players_in_game:
+        await query.edit_message_text("You're already in the game!")
+        return
+    
+    db.players_in_game.add(user.id)
+    
+    # Start auto-start if first player
+    if len(db.players_in_game) == 1:
+        asyncio.create_task(auto_start_timer(context))
+    
+    await query.edit_message_text(
+        f"✅ You've joined the game!\n"
+        f"Players in game: {len(db.players_in_game)}\n\n"
+        f"Game will start in {config.auto_start_delay} seconds or when ready."
+    )
+
+async def auto_start_timer(context: ContextTypes.DEFAULT_TYPE):
+    """Auto-start game after delay"""
+    await asyncio.sleep(config.auto_start_delay)
+    
+    if len(db.players_in_game) >= 1 and not db.game_started:
+        await start_game(context)
+
+async def start_game(context: ContextTypes.DEFAULT_TYPE):
+    """Start the game"""
+    db.game_started = True
+    
+    # Calculate prize pool
+    total_cards = sum(len(db.get_user(pid)['cards']) for pid in db.players_in_game)
+    prize_pool = total_cards * config.card_price
+    
+    await broadcast_to_players(
+        context,
+        f"🎯 *GAME STARTED!*\n\n"
+        f"Players: {len(db.players_in_game)}\n"
+        f"Total Cards: {total_cards}\n"
+        f"Prize Pool: {prize_pool} ETB\n"
+        f"Winner Prize: {prize_pool * (1 - config.house_commission)} ETB\n\n"
+        f"Get ready to mark your numbers!"
+    )
+    
+    # Start calling numbers
+    asyncio.create_task(call_numbers_loop(context))
+
+async def call_numbers_loop(context: ContextTypes.DEFAULT_TYPE):
+    """Call numbers loop"""
+    numbers = list(range(1, 76))
+    random.shuffle(numbers)
+    
+    for number in numbers:
+        if not db.game_started:
+            break
+        
+        await asyncio.sleep(config.number_call_speed)
+        db.called_numbers.append(number)
+        
+        await broadcast_to_players(
+            context,
+            f"🔔 *Number Called: {number}* 🔔\n\n"
+            f"Called: {', '.join(map(str, db.called_numbers[-10:]))}"
+        )
+
+async def broadcast_to_players(context: ContextTypes.DEFAULT_TYPE, text: str):
+    """Broadcast to all players in game"""
+    for user_id in db.players_in_game:
+        try:
+            await context.bot.send_message(user_id, text, parse_mode=ParseMode.MARKDOWN)
+        except:
+            pass
+
+# ==================== MAIN ====================
+def main():
+    """Start the bot"""
+    # Create application
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("balance", lambda u,c: start(u,c)))
+    application.add_handler(CommandHandler("cards", my_cards))
+    application.add_handler(CommandHandler("bingo", check_bingo))
+    
+    # Callback query handler
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    # Message handler (for text input)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Start the bot
+    print("🤖 Bingo bot started!")
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()
