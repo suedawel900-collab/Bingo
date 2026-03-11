@@ -78,7 +78,7 @@ def run_web_app():
         # Import here to avoid circular imports
         import web_app
         
-        port = 8000  # Fixed port for web app
+        port = 8000  # FIXED: Use port 8000 for web app, NOT 8080
         logger.info(f"🌐 Starting web app on port {port}")
         
         # Run uvicorn with the app
