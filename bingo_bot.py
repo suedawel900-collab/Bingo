@@ -1,10 +1,10 @@
 # bingo_bot.py
 """
-MK BINGO Telegram Bot - Main bot file
+MK BINGO Telegram Bot - Fixed Async Version
 """
 import os
 import logging
-import sys
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -164,8 +164,8 @@ async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Health check command"""
     await update.message.reply_text("✅ Bot is running! Health OK.")
 
-def main():
-    """Main bot function"""
+async def main_async():
+    """Async main function"""
     logger.info("🤖 Starting MK BINGO Bot...")
     
     # Create application
@@ -178,7 +178,39 @@ def main():
     
     # Start bot
     logger.info("✅ Bot started, polling for updates...")
-    app.run_polling()
+    
+    # Use run_polling which handles the event loop properly
+    await app.initialize()
+    await app.start()
+    
+    # Start polling
+    await app.updater.start_polling()
+    
+    # Keep running
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        # Stop gracefully
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+
+def main():
+    """Entry point for bot - creates new event loop"""
+    # Create new event loop for this thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        # Run the async main function
+        loop.run_until_complete(main_async())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
     main()
