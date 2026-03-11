@@ -56,6 +56,16 @@ def run_health_server():
     
     logger.info("🛑 Health server stopped")
 
+def run_web_app():
+    """Run the FastAPI web app"""
+    try:
+        import web_app
+        port = int(os.environ.get('PORT', 8000))
+        uvicorn.run(web_app.app, host="0.0.0.0", port=port, log_level="info")
+    except Exception as e:
+        logger.error(f"❌ Web app error: {e}")
+        logger.error("Make sure web_app.py exists in the current directory")
+
 def run_bot():
     """Run the Telegram bot"""
     try:
@@ -66,28 +76,21 @@ def run_bot():
         import traceback
         traceback.print_exc()
 
-def run_web_app():
-    """Run the FastAPI web app"""
-    try:
-        import web_app
-        port = int(os.environ.get('PORT', 8000))
-        uvicorn.run(web_app.app, host="0.0.0.0", port=port, log_level="info")
-    except Exception as e:
-        logger.error(f"❌ Web app error: {e}")
-
 # Start health server
 health_thread = threading.Thread(target=run_health_server, daemon=True)
 health_thread.start()
 
-# Start web app in a separate thread
+# Start web app
+logger.info("🚀 Starting web app...")
 web_thread = threading.Thread(target=run_web_app, daemon=True)
 web_thread.start()
-logger.info("✅ Web app started on port 8000")
 
 # Start bot
-logger.info("🚀 Application started successfully")
+logger.info("🚀 Starting bot...")
 bot_thread = threading.Thread(target=run_bot, daemon=True)
 bot_thread.start()
+
+logger.info("✅ All services started successfully")
 
 # Monitor threads
 try:
@@ -95,15 +98,15 @@ try:
         time.sleep(5)
         
         # Check if threads died
-        if not bot_thread.is_alive():
-            logger.error("❌ Bot thread died! Restarting...")
-            bot_thread = threading.Thread(target=run_bot, daemon=True)
-            bot_thread.start()
-        
         if not web_thread.is_alive():
             logger.error("❌ Web app thread died! Restarting...")
             web_thread = threading.Thread(target=run_web_app, daemon=True)
             web_thread.start()
+        
+        if not bot_thread.is_alive():
+            logger.error("❌ Bot thread died! Restarting...")
+            bot_thread = threading.Thread(target=run_bot, daemon=True)
+            bot_thread.start()
         
         if not health_thread.is_alive():
             logger.error("❌ Health server died! Restarting...")
