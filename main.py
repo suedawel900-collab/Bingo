@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global flag to keep running
+# Global flag
 running = True
 
 def signal_handler(signum, frame):
@@ -23,7 +23,6 @@ def signal_handler(signum, frame):
     logger.info("🛑 Shutdown signal received, stopping gracefully...")
     running = False
 
-# Register signal handlers
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
@@ -39,7 +38,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
     
     def log_message(self, format, *args):
-        pass  # Suppress logs
+        pass
 
 def run_health_server():
     """Run health check server"""
@@ -47,7 +46,6 @@ def run_health_server():
     server = HTTPServer(('0.0.0.0', port), HealthHandler)
     logger.info(f"✅ Health server running on port {port}")
     
-    # Run server in a non-blocking way
     server.timeout = 1
     while running:
         server.handle_request()
@@ -57,36 +55,42 @@ def run_health_server():
 def run_bot():
     """Run the Telegram bot"""
     try:
+        # Add the current directory to Python path
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Import the bot
         from bingo_bot import main as bot_main
         
-        # Run bot in a way that can be interrupted
+        # Run bot in a separate thread
         bot_thread = threading.Thread(target=bot_main, daemon=True)
         bot_thread.start()
         logger.info("✅ Bot thread started")
         
-        # Keep bot thread alive
+        # Monitor bot thread
         while bot_thread.is_alive() and running:
             time.sleep(1)
             
     except ImportError as e:
         logger.error(f"❌ Failed to import bot: {e}")
+        logger.info("Make sure bingo_bot.py exists in the current directory")
         logger.info("Running with minimal functionality...")
         
-        # Even without bot, keep running
+        # Keep running even without bot
         while running:
             time.sleep(1)
     except Exception as e:
         logger.error(f"❌ Bot error: {e}")
+        while running:
+            time.sleep(1)
 
-# Start health server in background
+# Start health server
 health_thread = threading.Thread(target=run_health_server, daemon=True)
 health_thread.start()
 
 # Start bot
+logger.info("🚀 Application started successfully")
 bot_thread = threading.Thread(target=run_bot, daemon=True)
 bot_thread.start()
-
-logger.info("🚀 Application started successfully")
 
 # Keep main thread alive
 try:
