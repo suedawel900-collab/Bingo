@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 import signal
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Configure logging
@@ -53,49 +54,41 @@ def run_health_server():
     logger.info("🛑 Health server stopped")
 
 def run_bot():
-    """Run the Telegram bot"""
+    """Run the Telegram bot in a separate thread with its own event loop"""
     try:
-        # Add the current directory to Python path
-        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-        
         # Import the bot
-        from bingo_bot import main as bot_main
+        import bingo_bot
         
-        # Run bot in a separate thread
-        bot_thread = threading.Thread(target=bot_main, daemon=True)
-        bot_thread.start()
-        logger.info("✅ Bot thread started")
+        # Run bot main function (which creates its own event loop)
+        bingo_bot.main()
         
-        # Monitor bot thread
-        while bot_thread.is_alive() and running:
-            time.sleep(1)
-            
-    except ImportError as e:
-        logger.error(f"❌ Failed to import bot: {e}")
-        logger.info("Make sure bingo_bot.py exists in the current directory")
-        logger.info("Running with minimal functionality...")
-        
-        # Keep running even without bot
-        while running:
-            time.sleep(1)
     except Exception as e:
         logger.error(f"❌ Bot error: {e}")
-        while running:
-            time.sleep(1)
+        import traceback
+        traceback.print_exc()
 
-# Start health server
+# Start health server in a daemon thread
 health_thread = threading.Thread(target=run_health_server, daemon=True)
 health_thread.start()
 
-# Start bot
-logger.info("🚀 Application started successfully")
+# Start bot in a daemon thread
 bot_thread = threading.Thread(target=run_bot, daemon=True)
 bot_thread.start()
 
-# Keep main thread alive
+logger.info("🚀 Application started successfully")
+
+# Keep main thread alive and monitor bot thread
 try:
     while running:
         time.sleep(1)
+        
+        # Check if bot thread died
+        if not bot_thread.is_alive():
+            logger.error("❌ Bot thread died! Restarting...")
+            # Restart bot thread
+            bot_thread = threading.Thread(target=run_bot, daemon=True)
+            bot_thread.start()
+            
 except KeyboardInterrupt:
     logger.info("Keyboard interrupt received")
     running = False
