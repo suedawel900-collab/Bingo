@@ -2,6 +2,9 @@
 import os
 import sys
 import logging
+import threading
+import uvicorn
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 # Configure logging
@@ -11,66 +14,55 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def main():
-    """Main entry point for Railway deployment"""
-    logger.info("🚀 Starting Bingo Bot Application...")
+# Simple health check server
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
+        else:
+            self.send_response(404)
+            self.end_headers()
     
-    # Check for required environment variables
-    bot_token = os.environ.get("BOT_TOKEN")
-    if not bot_token:
-        logger.error("❌ BOT_TOKEN environment variable not set!")
-        sys.exit(1)
-    
-    logger.info(f"✅ Bot token found: {bot_token[:5]}...")
-    
-    # Import and run your bot here
-    try:
-        # Import your bot module
-        from bingo_bot import main as bot_main
-        
-        # Run the bot
-        bot_main()
-    except ImportError as e:
-        logger.error(f"❌ Failed to import bot module: {e}")
-        logger.info("Creating a simple health server instead...")
-        run_health_server()
+    def log_message(self, format, *args):
+        pass  # Suppress logs
 
 def run_health_server():
-    """Run a simple HTTP server for health checks"""
-    from http.server import HTTPServer, BaseHTTPRequestHandler
-    import threading
-    
-    class HealthHandler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            if self.path == '/health':
-                self.send_response(200)
-                self.send_header('Content-type', 'text/plain')
-                self.end_headers()
-                self.wfile.write(b'OK')
-            else:
-                self.send_response(404)
-                self.end_headers()
-        
-        def log_message(self, format, *args):
-            # Suppress log messages
-            pass
-    
-    # Start HTTP server in a separate thread
-    def run_server():
-        server = HTTPServer(('0.0.0.0', 8000), HealthHandler)
-        logger.info("✅ Health check server running on port 8000")
-        server.serve_forever()
-    
-    server_thread = threading.Thread(target=run_server, daemon=True)
-    server_thread.start()
-    
-    # Keep the main thread alive
-    try:
-        while True:
-            import time
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("Shutting down...")
+    """Run health check server on Railway PORT"""
+    port = int(os.environ.get('PORT', 8000))
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    logger.info(f"✅ Health server running on port {port}")
+    server.serve_forever()
 
-if __name__ == "__main__":
-    main()
+# Start health server in background
+health_thread = threading.Thread(target=run_health_server, daemon=True)
+health_thread.start()
+
+# Import and run your main application
+try:
+    # Try to import your FastAPI app if it exists
+    from web_app import app
+    import uvicorn
+    
+    # Run FastAPI in another thread
+    def run_fastapi():
+        port = int(os.environ.get('PORT', 8000))
+        uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    
+    api_thread = threading.Thread(target=run_fastapi, daemon=True)
+    api_thread.start()
+    logger.info("✅ FastAPI web app started")
+    
+except ImportError:
+    logger.info("No FastAPI app found, running bot only")
+
+# Keep main thread alive
+try:
+    while True:
+        import time
+        time.sleep(1)
+except KeyboardInterrupt:
+    logger.info("Shutting down...")
+    sys.exit(0)
