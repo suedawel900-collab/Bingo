@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Bingo Galaxy · 1000 cards</title>
+    <title>Bingo Galaxy · TeleBirr Payments</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     <style>
@@ -15,7 +15,7 @@
             padding: 12px;
         }
         .game-container {
-            max-width: 1000px;
+            max-width: 1200px;
             width: 100%;
             background: rgba(255,255,255,0.05);
             backdrop-filter: blur(10px);
@@ -202,14 +202,57 @@
         .bingo-cell.marked { background: #2e7d32; border-color: gold; color: white; }
         .bingo-cell.free { background: #ffd966; border-color: #b8860b; }
 
-        /* right column */
-        .game-right { width: 230px; }
+        /* right column - UPDATED with payment section */
+        .game-right { width: 280px; }
 
         .balance-display {
             background: #1e3a2b; border-radius: 20px; padding: 15px; text-align: center;
             color: white; border: 2px solid #4caf50; margin-bottom: 12px;
         }
         .balance-amount { font-size: 1.8rem; font-weight: 800; color: #90ee90; }
+
+        /* NEW: TeleBirr Payment Section */
+        .payment-section {
+            background: #1e3a5f; border-radius: 20px; padding: 15px; margin-bottom: 15px;
+            border: 1px solid #4a90e2; color: white;
+        }
+        .payment-section h3 { color: gold; margin-bottom: 12px; font-size: 1.1rem; }
+        .payment-input-group {
+            display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
+        }
+        .payment-input-group input {
+            flex: 1; padding: 10px; border-radius: 30px; border: none; background: #2c4a6e;
+            color: white; font-weight: 600; text-align: center;
+        }
+        .payment-input-group input::placeholder { color: #9bb9e0; }
+        .payment-btn {
+            background: #27ae60; color: white; border: none; padding: 10px 16px;
+            border-radius: 30px; font-weight: bold; cursor: pointer; white-space: nowrap;
+        }
+        .payment-btn.withdraw { background: #e67e22; }
+        .payment-btn:disabled { opacity: 0.4; }
+        .transaction-link {
+            margin-top: 8px; text-align: right; font-size: 0.8rem;
+        }
+        .transaction-link a { color: #90caf9; text-decoration: none; }
+
+        /* Admin Panel (hidden by default) */
+        .admin-panel {
+            background: #2c3e50; border-radius: 20px; padding: 15px; margin-top: 15px;
+            display: none; border: 2px solid gold;
+        }
+        .admin-panel h4 { color: gold; margin-bottom: 10px; }
+        .pending-item {
+            background: #34495e; margin: 8px 0; padding: 10px; border-radius: 12px;
+            font-size: 0.8rem; color: white; display: flex; justify-content: space-between;
+            align-items: center;
+        }
+        .admin-btn { 
+            border: none; border-radius: 20px; padding: 4px 12px; font-weight: bold;
+            cursor: pointer; margin-left: 5px;
+        }
+        .admin-btn.approve { background: #27ae60; color: white; }
+        .admin-btn.reject { background: #c0392b; color: white; }
 
         .prize-display {
             background: #3f2e1e; border-radius: 20px; padding: 12px; text-align: center;
@@ -255,6 +298,22 @@
         .message.error { background: #b71c1c; color: white; display: block; }
         .message.info { background: #0288d1; color: white; display: block; }
 
+        /* Modal for transaction history */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: #1e2a3a; padding: 25px; border-radius: 30px; width: 90%; max-width: 500px;
+            max-height: 70vh; overflow-y: auto; color: white;
+        }
+        .close-modal { float: right; font-size: 24px; cursor: pointer; color: gold; }
+        .transaction-item {
+            background: #2c3e50; margin: 8px 0; padding: 8px; border-radius: 12px;
+            display: flex; justify-content: space-between;
+        }
+
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } }
         @keyframes winnerGlow { 0% { box-shadow: 0 0 3px gold; } 50% { box-shadow: 0 0 12px gold; } }
     </style>
@@ -262,8 +321,10 @@
 <body>
 <div class="game-container">
     <div class="header">
-        <h1>🎯 BINGO GALAXY</h1>
-        <p>Game #<span id="game-id">0</span> | Player: <span id="player-id">0</span></p>
+        <h1>🎯 BINGO GALAXY · TeleBirr</h1>
+        <p>Game #<span id="game-id">0</span> | Player: <span id="player-id">0</span> 
+           <span id="admin-badge" style="display:none; background:gold; color:black; padding:2px 12px; border-radius:30px; margin-left:10px;">ADMIN</span>
+        </p>
         <div><span id="status">⏳ WAITING</span><span id="connection-status" class="connection-status">✅ Connected</span></div>
     </div>
 
@@ -340,49 +401,103 @@
                 </div>
             </div>
 
-            <!-- RIGHT -->
+            <!-- RIGHT COLUMN - WITH TELEBIRR PAYMENTS -->
             <div class="game-right">
+                <!-- Balance -->
                 <div class="balance-display">
                     <div>Your Balance</div>
                     <div class="balance-amount" id="game-balance">0.00 ETB</div>
                 </div>
+
+                <!-- NEW: TeleBirr Payment Section -->
+                <div class="payment-section">
+                    <h3>💳 TeleBirr Wallet</h3>
+                    
+                    <!-- Deposit -->
+                    <div class="payment-input-group">
+                        <input type="number" id="deposit-amount" placeholder="Amount ETB" min="10" step="1">
+                        <button class="payment-btn" onclick="initiateDeposit()" id="deposit-btn">Deposit</button>
+                    </div>
+                    
+                    <!-- Withdrawal -->
+                    <div class="payment-input-group">
+                        <input type="number" id="withdraw-amount" placeholder="Amount" min="20" step="1">
+                        <input type="text" id="withdraw-phone" placeholder="09xxxxxxxx">
+                        <button class="payment-btn withdraw" onclick="requestWithdrawal()" id="withdraw-btn">Pull</button>
+                    </div>
+                    
+                    <div class="transaction-link">
+                        <a href="#" onclick="showTransactionHistory()">📋 My transactions</a>
+                    </div>
+                </div>
+
+                <!-- Prize Display -->
                 <div class="prize-display">
                     <div class="prize-label">🏆 Winner Prize</div>
                     <div class="prize-amount" id="winner-prize">0 ETB</div>
                     <div class="winner-only">(90% of pool)</div>
                 </div>
+
+                <!-- Auto-mark & Timer -->
                 <div class="auto-mark" style="margin:6px 0">
                     <label style="color:white"><input type="checkbox" id="autoDaub" onchange="toggleAutoDaub()"> 🤖 Auto-mark</label>
                 </div>
                 <div class="auto-start-timer" id="auto-start-timer">
                     ⏱️ Game starting in <span id="timer-seconds">20</span>s
                 </div>
+
+                <!-- BINGO Button -->
                 <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 CLAIM BINGO!</button>
+
+                <!-- Players List -->
                 <div class="players-list" id="players-list"></div>
+
+                <!-- NEW: Admin Panel (hidden for non-admins) -->
+                <div id="admin-panel" class="admin-panel">
+                    <h4>👑 Admin Control · Withdrawals</h4>
+                    <div id="pending-withdrawals-list"></div>
+                    <div style="margin-top:10px; text-align:center;">
+                        <button onclick="refreshPendingWithdrawals()" style="background:#3498db; border:none; color:white; padding:5px 15px; border-radius:30px;">↻ Refresh</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     <div id="message" class="message"></div>
 </div>
 
+<!-- Transaction History Modal -->
+<div id="transaction-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeTransactionModal()">&times;</span>
+        <h3 style="color:gold; margin-bottom:15px;">📋 My Transactions</h3>
+        <div id="transaction-list" style="max-height:400px; overflow-y:auto;"></div>
+    </div>
+</div>
+
 <script>
-    // ---------- CONFIG (will be replaced by jinja) ----------
+    // ============================================
+    // CONFIGURATION (replace with backend variables)
+    // ============================================
     const userId = parseInt('{{ user_id }}' || '123');
     const gameId = parseInt('{{ game_id }}' || '1');
     const pricePerCard = parseFloat('{{ price_per_card }}' || '10');
     const maxCards = parseInt('{{ max_cards }}' || '5');
     const AUTO_START_DELAY = parseInt('{{ auto_start_delay }}' || '20');
     const initialBalance = parseFloat('{{ initial_balance }}' || '200');
+    const IS_ADMIN = {{ is_admin | default(false) }};  // set from backend
 
     const TOTAL_CARDS = 1000;
     const HOUSE_COMMISSION = 0.2;
 
-    // state
+    // ============================================
+    // GAME STATE
+    // ============================================
     let ws = null;
-    let selectedCards = [];                 // locally selected (before server confirm)
-    let myCards = {};                       // cardId -> 5x5 matrix
+    let selectedCards = [];
+    let myCards = {};
     let myCardIds = [];
-    let marked = {};                         // cardId -> marked numbers array
+    let marked = {};
     let called = [];
     let players = [];
     let takenCards = new Set();
@@ -397,21 +512,39 @@
     let autoDaubEnabled = false;
     let autoStartTimer = null;
     let autoStartSeconds = AUTO_START_DELAY;
+    
+    // Payment polling
+    let paymentPollInterval = null;
 
-    // DOM elements shortcuts
+    // ============================================
+    // DOM SHORTCUTS
+    // ============================================
     const $ = id => document.getElementById(id);
 
-    // init
+    // ============================================
+    // INIT
+    // ============================================
     document.addEventListener('DOMContentLoaded', () => {
         $('game-id').textContent = gameId;
         $('player-id').textContent = userId;
         $('max-cards-display').textContent = maxCards;
         $('price-per-card').textContent = pricePerCard + ' ETB';
         $('game-balance').textContent = balance.toFixed(2) + ' ETB';
+        
+        // Show admin badge and panel if admin
+        if (IS_ADMIN) {
+            $('admin-badge').style.display = 'inline-block';
+            $('admin-panel').style.display = 'block';
+            loadPendingWithdrawals();
+        }
+        
         loadCardGrid();
         connectWebSocket();
     });
 
+    // ============================================
+    // CARD GRID (1-1000)
+    // ============================================
     function loadCardGrid() {
         const grid = $('card-grid');
         grid.innerHTML = '';
@@ -444,7 +577,6 @@
                 showMessage(`Card #${cardId} taken`, 'error'); return;
             }
             selectedCards.push(cardId);
-            // send to server immediately (in real game)
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'select_cards', card_ids: [cardId] }));
             }
@@ -457,9 +589,7 @@
     function updateSelectedDisplay() {
         const scroll = $('selected-scroll');
         const total = $('total-cost');
-        const clearBtn = $('clear-btn');
         $('selected-count').textContent = `${selectedCards.length}/${maxCards}`;
-
         scroll.innerHTML = '';
         selectedCards.forEach(id => {
             const div = document.createElement('div');
@@ -471,7 +601,7 @@
         });
         const cost = selectedCards.length * pricePerCard;
         total.textContent = `Total: ${cost.toFixed(2)} ETB`;
-        clearBtn.disabled = (gameStarted || gameEnded || roundLocked);
+        $('clear-btn').disabled = (gameStarted || gameEnded || roundLocked);
     }
 
     function removeCard(cardId) {
@@ -498,7 +628,9 @@
         });
     }
 
-    // navigation
+    // ============================================
+    // CARD NAVIGATION & RENDERING
+    // ============================================
     function navigateCard(direction) {
         if (myCardIds.length === 0) return;
         currentCardIndex = (currentCardIndex + direction + myCardIds.length) % myCardIds.length;
@@ -545,12 +677,14 @@
         ws.send(JSON.stringify({ type: 'mark_number', card_id: cardId, number: n }));
     }
 
+    // ============================================
+    // BINGO CHECK
+    // ============================================
     function checkBingo() {
         if (!gameStarted || !currentCardId) return;
         const card = myCards[currentCardId];
         const markedNums = marked[currentCardId] || [];
-        const isMarked = (val) => val === 'FREE' || markedNums.includes(parseInt(val));
-
+        
         // rows
         for (let r=0; r<5; r++) {
             if (card[0][r]!=='FREE' && !markedNums.includes(card[0][r])) continue;
@@ -590,7 +724,9 @@
         showMessage('BINGO claimed, verifying...','info');
     }
 
-    // websocket
+    // ============================================
+    // WEBSOCKET
+    // ============================================
     function connectWebSocket() {
         const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         ws = new WebSocket(`${proto}//${window.location.host}/ws/${gameId}/${userId}`);
@@ -727,6 +863,9 @@
 
     function manualReconnect() { reconnectAttempts = 0; connectWebSocket(); }
 
+    // ============================================
+    // UI UPDATES
+    // ============================================
     function updateCalledNumbers() {
         const list = $('called-numbers-list');
         list.innerHTML = '';
@@ -804,7 +943,233 @@
         setTimeout(() => msg.style.display = 'none', 3000);
     }
 
-    // expose for onclick
+    // ============================================
+    // TELEBIRR PAYMENT FUNCTIONS
+    // ============================================
+
+    // Initiate deposit
+    async function initiateDeposit() {
+        const amount = parseFloat($('deposit-amount').value);
+        if (amount < 10) {
+            showMessage('Minimum deposit 10 ETB', 'error');
+            return;
+        }
+        
+        $('deposit-btn').disabled = true;
+        showMessage('Initiating payment...', 'info');
+        
+        try {
+            // In real implementation, call your backend
+            const response = await fetch('/api/payment/telebirr/initiate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, amount })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                // Open TeleBirr payment page
+                window.open(data.paymentUrl, '_blank');
+                showMessage('Payment initiated! Complete in new tab.', 'success');
+                
+                // Start polling for payment status
+                startPaymentPolling(data.transactionRef);
+            } else {
+                showMessage('Payment initiation failed', 'error');
+            }
+        } catch (error) {
+            showMessage('Network error', 'error');
+        } finally {
+            $('deposit-btn').disabled = false;
+        }
+    }
+
+    // Poll for payment completion (auto-approve simulation)
+    function startPaymentPolling(transactionRef) {
+        if (paymentPollInterval) clearInterval(paymentPollInterval);
+        
+        paymentPollInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/api/payment/status/${transactionRef}`);
+                const { status, newBalance } = await response.json();
+                
+                if (status === 'approved') {
+                    clearInterval(paymentPollInterval);
+                    paymentPollInterval = null;
+                    
+                    // Update balance
+                    balance = newBalance;
+                    $('game-balance').textContent = balance.toFixed(2) + ' ETB';
+                    showMessage('✅ Payment received! Balance updated.', 'success');
+                    
+                    // Refresh transaction history if modal open
+                    if ($('transaction-modal').style.display === 'flex') {
+                        loadTransactionHistory();
+                    }
+                }
+            } catch (e) {
+                console.log('Polling error', e);
+            }
+        }, 3000);
+        
+        // Stop polling after 3 minutes
+        setTimeout(() => {
+            if (paymentPollInterval) {
+                clearInterval(paymentPollInterval);
+                paymentPollInterval = null;
+            }
+        }, 180000);
+    }
+
+    // Request withdrawal (requires admin approval)
+    async function requestWithdrawal() {
+        const amount = parseFloat($('withdraw-amount').value);
+        const phone = $('withdraw-phone').value.trim();
+        
+        if (amount < 20) {
+            showMessage('Minimum withdrawal 20 ETB', 'error');
+            return;
+        }
+        if (!/^09\d{8}$/.test(phone)) {
+            showMessage('Enter valid 09xxxxxxxx phone', 'error');
+            return;
+        }
+        if (amount > balance) {
+            showMessage('Insufficient balance', 'error');
+            return;
+        }
+        
+        $('withdraw-btn').disabled = true;
+        
+        try {
+            const response = await fetch('/api/withdrawal/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, amount, phoneNumber: phone })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                // Update local balance (funds locked)
+                balance -= amount;
+                $('game-balance').textContent = balance.toFixed(2) + ' ETB';
+                showMessage('Withdrawal requested! Awaiting admin approval.', 'success');
+                
+                // If admin, refresh pending list
+                if (IS_ADMIN) loadPendingWithdrawals();
+                
+                // Clear inputs
+                $('withdraw-amount').value = '';
+                $('withdraw-phone').value = '';
+            } else {
+                showMessage(data.error || 'Request failed', 'error');
+            }
+        } catch (error) {
+            showMessage('Network error', 'error');
+        } finally {
+            $('withdraw-btn').disabled = false;
+        }
+    }
+
+    // Show transaction history modal
+    async function showTransactionHistory() {
+        $('transaction-modal').style.display = 'flex';
+        await loadTransactionHistory();
+    }
+
+    async function loadTransactionHistory() {
+        try {
+            const response = await fetch(`/api/user/${userId}/transactions`);
+            const transactions = await response.json();
+            
+            const container = $('transaction-list');
+            container.innerHTML = '';
+            
+            if (transactions.length === 0) {
+                container.innerHTML = '<p style="color:#aaa; text-align:center;">No transactions yet</p>';
+                return;
+            }
+            
+            transactions.forEach(tx => {
+                const div = document.createElement('div');
+                div.className = 'transaction-item';
+                div.innerHTML = `
+                    <span>${tx.type === 'deposit' ? '📥' : '📤'} ${tx.type}</span>
+                    <span>${tx.amount} ETB</span>
+                    <span style="color:${tx.status === 'approved' ? '#2ecc71' : tx.status === 'pending' ? '#f39c12' : '#e74c33'}">${tx.status}</span>
+                    <span style="font-size:0.7rem;">${new Date(tx.date).toLocaleDateString()}</span>
+                `;
+                container.appendChild(div);
+            });
+        } catch (e) {
+            $('transaction-list').innerHTML = '<p style="color:#e74c3c;">Failed to load</p>';
+        }
+    }
+
+    function closeTransactionModal() {
+        $('transaction-modal').style.display = 'none';
+    }
+
+    // ============================================
+    // ADMIN FUNCTIONS (auto-approve/reject)
+    // ============================================
+    async function loadPendingWithdrawals() {
+        if (!IS_ADMIN) return;
+        
+        try {
+            const response = await fetch('/api/admin/withdrawals/pending');
+            const withdrawals = await response.json();
+            
+            const list = $('pending-withdrawals-list');
+            if (withdrawals.length === 0) {
+                list.innerHTML = '<p style="color:#aaa;">No pending withdrawals</p>';
+                return;
+            }
+            
+            list.innerHTML = withdrawals.map(w => `
+                <div class="pending-item">
+                    <div>
+                        <strong>User ${w.userId}</strong><br>
+                        ${w.amount} ETB → ${w.phoneNumber}
+                    </div>
+                    <div>
+                        <button class="admin-btn approve" onclick="approveWithdrawal(${w.id})">✓</button>
+                        <button class="admin-btn reject" onclick="rejectWithdrawal(${w.id})">✗</button>
+                    </div>
+                </div>
+            `).join('');
+        } catch (e) {
+            $('pending-withdrawals-list').innerHTML = '<p style="color:#e74c3c;">Error loading</p>';
+        }
+    }
+
+    async function approveWithdrawal(withdrawalId) {
+        try {
+            await fetch(`/api/admin/withdrawal/${withdrawalId}/approve`, { method: 'POST' });
+            showMessage('Withdrawal approved', 'success');
+            loadPendingWithdrawals();
+        } catch (e) {
+            showMessage('Action failed', 'error');
+        }
+    }
+
+    async function rejectWithdrawal(withdrawalId) {
+        try {
+            await fetch(`/api/admin/withdrawal/${withdrawalId}/reject`, { method: 'POST' });
+            showMessage('Withdrawal rejected', 'success');
+            loadPendingWithdrawals();
+        } catch (e) {
+            showMessage('Action failed', 'error');
+        }
+    }
+
+    function refreshPendingWithdrawals() {
+        loadPendingWithdrawals();
+    }
+
+    // ============================================
+    // GLOBAL EXPOSURE
+    // ============================================
     window.toggleCardSelection = toggleCardSelection;
     window.removeCard = removeCard;
     window.clearSelection = clearSelection;
@@ -813,6 +1178,18 @@
     window.checkBingo = checkBingo;
     window.manualReconnect = manualReconnect;
     window.toggleAutoDaub = toggleAutoDaub;
+    
+    // Payment functions
+    window.initiateDeposit = initiateDeposit;
+    window.requestWithdrawal = requestWithdrawal;
+    window.showTransactionHistory = showTransactionHistory;
+    window.closeTransactionModal = closeTransactionModal;
+    
+    // Admin functions
+    window.approveWithdrawal = approveWithdrawal;
+    window.rejectWithdrawal = rejectWithdrawal;
+    window.refreshPendingWithdrawals = refreshPendingWithdrawals;
+    window.loadPendingWithdrawals = loadPendingWithdrawals;
 </script>
 </body>
 </html>
