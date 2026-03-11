@@ -5,7 +5,6 @@ import logging
 import threading
 import time
 import signal
-import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Configure logging
@@ -49,45 +48,48 @@ def run_health_server():
     
     server.timeout = 1
     while running:
-        server.handle_request()
+        try:
+            server.handle_request()
+        except:
+            pass
     
     logger.info("🛑 Health server stopped")
 
 def run_bot():
-    """Run the Telegram bot in a separate thread with its own event loop"""
+    """Run the Telegram bot"""
     try:
-        # Import the bot
         import bingo_bot
-        
-        # Run bot main function (which creates its own event loop)
         bingo_bot.main()
-        
     except Exception as e:
         logger.error(f"❌ Bot error: {e}")
         import traceback
         traceback.print_exc()
 
-# Start health server in a daemon thread
+# Start health server
 health_thread = threading.Thread(target=run_health_server, daemon=True)
 health_thread.start()
 
-# Start bot in a daemon thread
+# Start bot
+logger.info("🚀 Application started successfully")
 bot_thread = threading.Thread(target=run_bot, daemon=True)
 bot_thread.start()
 
-logger.info("🚀 Application started successfully")
-
-# Keep main thread alive and monitor bot thread
+# Monitor threads
 try:
     while running:
-        time.sleep(1)
+        time.sleep(5)
         
         # Check if bot thread died
         if not bot_thread.is_alive():
             logger.error("❌ Bot thread died! Restarting...")
-            # Restart bot thread
             bot_thread = threading.Thread(target=run_bot, daemon=True)
             bot_thread.start()
+        
+        # Check health server
+        if not health_thread.is_alive():
+            logger.error("❌ Health server died! Restarting...")
+            health_thread = threading.Thread(target=run_health_server, daemon=True)
+            health_thread.start()
             
 except KeyboardInterrupt:
     logger.info("Keyboard interrupt received")
