@@ -1,1195 +1,682 @@
+<!-- templates/bingo.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Bingo Galaxy · TeleBirr Payments</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MK BINGO - Buy Cards</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, system-ui, sans-serif; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
         body {
-            background: linear-gradient(145deg, #0b1120 0%, #19223f 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 12px;
+            padding: 20px;
         }
-        .game-container {
+        
+        .container {
             max-width: 1200px;
-            width: 100%;
-            background: rgba(255,255,255,0.05);
-            backdrop-filter: blur(10px);
-            border-radius: 32px;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,215,0,0.2);
-            overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.1);
+            margin: 0 auto;
         }
-
+        
         /* Header */
         .header {
-            background: linear-gradient(145deg, #1e2b5a, #141f44);
-            color: white;
-            padding: 16px 20px;
-            text-align: center;
-            border-bottom: 1px solid #ffd966;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-        .header h1 { font-size: 2rem; letter-spacing: 2px; text-shadow: 0 2px 5px #00000050; }
-        .header p { font-size: 0.9rem; opacity: 0.9; }
-        #status { 
-            display: inline-block; padding: 4px 16px; background: #ffd966; color: #1e2b5a;
-            border-radius: 40px; font-weight: 700; margin-top: 6px; font-size: 0.85rem;
+        
+        .header h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
         }
-        .connection-status {
-            background: #2e7d32; color: white; padding: 4px 12px; border-radius: 30px;
-            font-size: 0.75rem; margin-left: 10px; font-weight: 600;
-        }
-        .connection-status.error { background: #b71c1c; }
-
-        /* pattern bar */
-        .pattern-bar {
-            background: #ffd966; color: #141f44; padding: 8px 20px;
-            display: flex; justify-content: space-between; font-weight: 700;
-        }
-        .pattern-name { background: #141f44; color: #ffd966; padding: 4px 16px; border-radius: 30px; }
-
-        /* info bar */
-        .info-bar {
-            background: #1e2b5a; color: white; padding: 14px 20px;
-            display: flex; justify-content: space-between; border-bottom: 1px solid #ffd96630;
-        }
-        .info-item { text-align: center; }
-        .info-label { font-size: 0.7rem; opacity: 0.8; }
-        .info-value { font-size: 1.5rem; font-weight: 800; }
-        .prize-value { color: #ffd966; }
-
-        /* house fee */
-        .house-fee-bar {
-            background: #341f4b; color: white; padding: 8px 20px;
-            display: flex; justify-content: space-between; font-size: 0.9rem;
-            border-bottom: 1px solid #b39ddb;
-        }
-        .house-fee { color: gold; font-weight: 700; }
-
-        /* reconnect */
-        .reconnect-bar {
-            background: #f57c00; color: white; padding: 10px; text-align: center;
-            display: none; font-weight: 600;
-        }
-        .reconnect-bar button {
-            background: white; color: #f57c00; border: none; border-radius: 30px;
-            padding: 4px 16px; margin-left: 12px; cursor: pointer; font-weight: 700;
-        }
-
-        /* main content */
-        .main-content {
-            display: flex; flex-direction: column; gap: 18px; padding: 18px;
-            background: #0f1a2f;
-        }
-
-        /* SELECTED CARDS — horizontal strip */
-        .selected-section {
-            background: #1b2a41; border-radius: 24px; padding: 16px;
-            border: 1px solid #ffb74d;
-        }
-        .selected-header {
-            display: flex; justify-content: space-between; font-weight: 700;
-            color: #ffb74d; margin-bottom: 12px; font-size: 1rem;
-        }
-        .selected-scroll {
-            display: flex; flex-direction: row; gap: 12px; overflow-x: auto;
-            padding-bottom: 8px; min-height: 95px;
-        }
-        .selected-scroll::-webkit-scrollbar { height: 6px; }
-        .selected-scroll::-webkit-scrollbar-track { background: #2c3e5a; border-radius: 10px; }
-        .selected-scroll::-webkit-scrollbar-thumb { background: #ff9800; border-radius: 10px; }
-
-        .selected-card {
-            flex: 0 0 auto; width: 95px; background: #fffbf0; border-radius: 16px;
-            padding: 10px 4px; text-align: center; border-left: 5px solid #ff9800;
-            position: relative; box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        }
-        .selected-card-number { font-size: 1.3rem; font-weight: 800; color: #d9480f; }
-        .selected-card-price { font-size: 0.75rem; color: #2e7d32; font-weight: 700; }
-        .selected-card-remove {
-            position: absolute; top: -6px; right: -6px; width: 22px; height: 22px;
-            background: #dc3545; color: white; border: none; border-radius: 50%;
-            font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-        }
-        .total-cost { text-align: right; font-weight: 700; color: #ffb74d; margin-top: 8px; border-top: 1px dashed #ffb74d; padding-top: 8px; }
-
-        /* CARD GRID 1-1000 */
-        .grid-section {
-            background: #132237; border-radius: 24px; padding: 16px; border: 1px solid #4a5f7a;
-        }
-        .grid-title {
-            display: flex; justify-content: space-between; color: white; margin-bottom: 10px;
-            font-weight: 600; font-size: 0.9rem;
-        }
-        .card-grid-container {
-            max-height: 190px; overflow-y: auto; background: #0a1622; border-radius: 20px; padding: 10px;
-        }
-        .card-grid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 3px; }
-        .card-btn {
-            aspect-ratio: 1; background: #2f4b7c; color: white; border: none;
-            border-radius: 4px; font-size: 0.65rem; font-weight: 600; cursor: pointer;
-            transition: 0.1s; border: 1px solid #5e7fb0;
-        }
-        .card-btn.selected { background: #2e7d32; box-shadow: 0 0 0 2px gold; border-color: white; }
-        .card-btn.taken { background: #a13131; opacity: 0.5; cursor: not-allowed; }
-        .card-btn:hover:not(.taken) { background: #3d5f9e; transform: scale(0.95); }
-
-        /* action buttons */
-        .action-buttons { display: flex; gap: 12px; margin-top: 14px; }
-        .action-btn { flex: 1; padding: 12px; border: none; border-radius: 40px; font-weight: 800; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
-        .clear-btn { background: #c0392b; color: white; }
-        .clear-btn:hover:not(:disabled) { background: #a93226; transform: translateY(-2px); }
-        .clear-btn:disabled { opacity: 0.3; }
-
-        /* GAME SECTION two columns */
-        .game-section { display: flex; gap: 18px; margin-top: 4px; }
-
-        /* left column */
-        .game-left { flex: 1; }
-
-        /* called numbers */
-        .called-numbers-section {
-            background: #1a293b; border-radius: 20px; padding: 12px; margin-bottom: 12px;
-        }
-        .called-title { font-size: 0.8rem; color: #ccc; margin-bottom: 5px; }
-        .called-list {
-            display: flex; flex-wrap: wrap; gap: 6px; background: #0e1a28; padding: 10px;
-            border-radius: 18px; min-height: 50px; max-height: 95px; overflow-y: auto;
-        }
-        .called-badge {
-            background: #27ae60; color: white; padding: 5px 12px; border-radius: 40px;
-            font-weight: 700; font-size: 0.9rem;
-        }
-
-        .last-number {
-            background: #1e4d3a; color: white; font-size: 2.2rem; font-weight: 800;
-            text-align: center; padding: 12px; border-radius: 30px; margin-bottom: 12px;
-            border: 2px solid gold;
-        }
-
-        /* current card */
-        .current-card-section {
-            background: #15273f; border-radius: 24px; padding: 16px; border: 2px solid #5f7faf;
-        }
-        .card-navigation {
-            display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
-        }
-        .card-nav-btn {
-            background: #2c3e6e; color: white; border: none; border-radius: 30px;
-            padding: 6px 18px; font-weight: 600; cursor: pointer;
-        }
-        .card-nav-btn:disabled { opacity: 0.2; }
-        .card-counter { color: gold; font-weight: 600; }
-
-        .bingo-header {
-            display: grid; grid-template-columns: repeat(5,1fr); gap: 5px; margin-bottom: 5px;
-        }
-        .bingo-header div {
-            background: #2f4b7c; color: white; padding: 5px; text-align: center; border-radius: 12px; font-weight: 800;
-        }
-        .bingo-grid {
-            display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; background: #0d1b2b; padding: 10px; border-radius: 20px;
-        }
-        .bingo-cell {
-            aspect-ratio: 1; background: white; border: 2px solid #6279a3; border-radius: 12px;
-            display: flex; align-items: center; justify-content: center; font-weight: 800;
-            font-size: 1rem; cursor: pointer; transition: 0.1s;
-        }
-        .bingo-cell.marked { background: #2e7d32; border-color: gold; color: white; }
-        .bingo-cell.free { background: #ffd966; border-color: #b8860b; }
-
-        /* right column - UPDATED with payment section */
-        .game-right { width: 280px; }
-
-        .balance-display {
-            background: #1e3a2b; border-radius: 20px; padding: 15px; text-align: center;
-            color: white; border: 2px solid #4caf50; margin-bottom: 12px;
-        }
-        .balance-amount { font-size: 1.8rem; font-weight: 800; color: #90ee90; }
-
-        /* NEW: TeleBirr Payment Section */
-        .payment-section {
-            background: #1e3a5f; border-radius: 20px; padding: 15px; margin-bottom: 15px;
-            border: 1px solid #4a90e2; color: white;
-        }
-        .payment-section h3 { color: gold; margin-bottom: 12px; font-size: 1.1rem; }
-        .payment-input-group {
-            display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
-        }
-        .payment-input-group input {
-            flex: 1; padding: 10px; border-radius: 30px; border: none; background: #2c4a6e;
-            color: white; font-weight: 600; text-align: center;
-        }
-        .payment-input-group input::placeholder { color: #9bb9e0; }
-        .payment-btn {
-            background: #27ae60; color: white; border: none; padding: 10px 16px;
-            border-radius: 30px; font-weight: bold; cursor: pointer; white-space: nowrap;
-        }
-        .payment-btn.withdraw { background: #e67e22; }
-        .payment-btn:disabled { opacity: 0.4; }
-        .transaction-link {
-            margin-top: 8px; text-align: right; font-size: 0.8rem;
-        }
-        .transaction-link a { color: #90caf9; text-decoration: none; }
-
-        /* Admin Panel (hidden by default) */
-        .admin-panel {
-            background: #2c3e50; border-radius: 20px; padding: 15px; margin-top: 15px;
-            display: none; border: 2px solid gold;
-        }
-        .admin-panel h4 { color: gold; margin-bottom: 10px; }
-        .pending-item {
-            background: #34495e; margin: 8px 0; padding: 10px; border-radius: 12px;
-            font-size: 0.8rem; color: white; display: flex; justify-content: space-between;
+        
+        .user-info {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 15px;
             align-items: center;
         }
-        .admin-btn { 
-            border: none; border-radius: 20px; padding: 4px 12px; font-weight: bold;
-            cursor: pointer; margin-left: 5px;
+        
+        .balance-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 15px;
+            font-size: 1.2em;
+            flex: 1;
         }
-        .admin-btn.approve { background: #27ae60; color: white; }
-        .admin-btn.reject { background: #c0392b; color: white; }
-
-        .prize-display {
-            background: #3f2e1e; border-radius: 20px; padding: 12px; text-align: center;
-            border: 2px solid #ff9800; margin-bottom: 12px;
+        
+        .balance-box .amount {
+            font-size: 2em;
+            font-weight: bold;
         }
-        .prize-label { color: #ffb74d; font-size: 0.75rem; }
-        .prize-amount { font-size: 1.8rem; font-weight: 800; color: #ffb74d; }
-        .winner-only { font-size: 0.7rem; color: #cddc39; }
-
-        .auto-start-timer {
-            background: #ff9800; color: black; font-weight: 800; padding: 10px;
-            border-radius: 40px; text-align: center; margin-bottom: 12px; display: none;
+        
+        .user-id-box {
+            background: #e9ecef;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 0.9em;
         }
-        .bingo-btn {
-            width: 100%; padding: 14px; background: linear-gradient(145deg, #f9a826, #f57c00);
-            border: none; border-radius: 60px; color: white; font-weight: 800; font-size: 1.2rem;
-            margin-bottom: 12px; cursor: pointer; animation: pulse 1.5s infinite;
+        
+        .user-id-box span {
+            font-family: monospace;
+            font-size: 1.2em;
+            color: #667eea;
         }
-        .bingo-btn:disabled { opacity: 0.3; animation: none; }
-
-        .players-list {
-            background: #1f2b3f; padding: 12px; border-radius: 24px; min-height: 70px;
-            max-height: 110px; overflow-y: auto; border: 1px solid #6279a3;
+        
+        .back-to-bot {
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 50px;
+            text-decoration: none;
+            display: inline-block;
         }
-        .player-badge {
-            display: inline-block; background: #34495e; color: white; padding: 4px 10px;
-            border-radius: 40px; margin: 3px; font-size: 0.7rem; font-weight: 600;
+        
+        /* Buy Section */
+        .buy-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            text-align: center;
         }
-        .player-badge.ready { background: #2e7d32; }
-        .player-badge.winner { background: gold; color: black; animation: winnerGlow 1s infinite; }
-
-        .winner-announcement {
-            background: linear-gradient(145deg, #f1c40f, #f39c12); color: #1e2a3a;
-            padding: 15px; border-radius: 30px; text-align: center; font-weight: 800;
-            font-size: 1.2rem; margin-bottom: 15px; display: none; border: 2px solid white;
+        
+        .price-info {
+            font-size: 1.3em;
+            color: #333;
+            margin-bottom: 20px;
         }
-        .winner-amount { background: white; display: inline-block; padding: 4px 20px; border-radius: 50px; margin-top: 8px; }
-
+        
+        .price-info span {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 2em;
+        }
+        
+        .buy-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 20px 60px;
+            font-size: 1.5em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 10px;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .buy-btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+        
+        .buy-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .buy-multiple {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .buy-multiple-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background 0.3s;
+        }
+        
+        .buy-multiple-btn:hover {
+            background: #5a6268;
+        }
+        
+        /* Message */
         .message {
-            text-align: center; padding: 10px; margin: 12px 20px 20px; border-radius: 50px; display: none; font-weight: 700;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+            font-size: 1.1em;
         }
-        .message.success { background: #2e7d32; color: white; display: block; }
-        .message.error { background: #b71c1c; color: white; display: block; }
-        .message.info { background: #0288d1; color: white; display: block; }
-
-        /* Modal for transaction history */
-        .modal {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
-            z-index: 1000;
+        
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
         }
-        .modal-content {
-            background: #1e2a3a; padding: 25px; border-radius: 30px; width: 90%; max-width: 500px;
-            max-height: 70vh; overflow-y: auto; color: white;
+        
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
         }
-        .close-modal { float: right; font-size: 24px; cursor: pointer; color: gold; }
-        .transaction-item {
-            background: #2c3e50; margin: 8px 0; padding: 8px; border-radius: 12px;
-            display: flex; justify-content: space-between;
+        
+        .message.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
         }
-
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } }
-        @keyframes winnerGlow { 0% { box-shadow: 0 0 3px gold; } 50% { box-shadow: 0 0 12px gold; } }
+        
+        /* Cards Grid */
+        .cards-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 20px;
+        }
+        
+        .section-title {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .card-count {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 30px;
+            font-size: 0.8em;
+        }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        
+        .bingo-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border: 2px solid #667eea;
+            transition: transform 0.3s;
+        }
+        
+        .bingo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .card-number {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.2em;
+        }
+        
+        .card-date {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+        
+        .bingo-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+        
+        .bingo-table th {
+            color: #667eea;
+            font-size: 1.2em;
+            padding: 5px;
+            background: #f8f9fa;
+        }
+        
+        .bingo-table td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .free-space {
+            background: #ffd700;
+            color: #333;
+        }
+        
+        .marked {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        /* Login Section */
+        .login-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 50px;
+            text-align: center;
+            max-width: 500px;
+            margin: 50px auto;
+        }
+        
+        .login-section h1 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .user-id-input {
+            padding: 15px;
+            font-size: 1.1em;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            width: 100%;
+            margin: 10px 0;
+        }
+        
+        .login-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 1.2em;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .remember-me {
+            margin: 15px 0;
+            text-align: left;
+        }
+        
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        
+        /* Loading Spinner */
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .buy-btn {
+                padding: 15px 40px;
+                font-size: 1.2em;
+            }
+            
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .user-info {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
-<div class="game-container">
-    <div class="header">
-        <h1>🎯 BINGO GALAXY · TeleBirr</h1>
-        <p>Game #<span id="game-id">0</span> | Player: <span id="player-id">0</span> 
-           <span id="admin-badge" style="display:none; background:gold; color:black; padding:2px 12px; border-radius:30px; margin-left:10px;">ADMIN</span>
-        </p>
-        <div><span id="status">⏳ WAITING</span><span id="connection-status" class="connection-status">✅ Connected</span></div>
-    </div>
-
-    <div class="pattern-bar">
-        <span>🎯 Pattern:</span>
-        <span class="pattern-name" id="pattern-name">Full House</span>
-    </div>
-
-    <div class="info-bar">
-        <div class="info-item"><div class="info-label">Round</div><div class="info-value" id="active-game-display">1</div></div>
-        <div class="info-item"><div class="info-label">Prize Pool</div><div class="info-value prize-value" id="prize-pool">0 ETB</div></div>
-        <div class="info-item"><div class="info-label">Players</div><div class="info-value" id="player-count">0</div></div>
-    </div>
-
-    <div class="house-fee-bar">
-        <span>🏠 House Fee (20%)</span>
-        <span class="house-fee" id="house-fee">0 ETB</span>
-    </div>
-
-    <div class="reconnect-bar" id="reconnect-bar">
-        ⚡ Connection lost. <button onclick="manualReconnect()">Reconnect</button>
-    </div>
-
-    <div class="main-content">
-        <!-- SELECTED CARDS HORIZONTAL -->
-        <div class="selected-section">
-            <div class="selected-header">
-                <span>📋 Your Cards (<span id="max-cards-display">5</span> max)</span>
-                <span id="selected-count">0/5</span>
-            </div>
-            <div id="selected-scroll" class="selected-scroll"></div>
-            <div id="total-cost" class="total-cost">Total: 0 ETB</div>
+    <div class="container">
+        <!-- Login Section -->
+        <div id="login-section" class="login-section">
+            <h1>🎯 MK BINGO</h1>
+            <p>Enter your Telegram User ID to access your cards</p>
+            <input type="text" id="user-id" class="user-id-input" placeholder="Telegram User ID (e.g., 6975815871)">
+            <label class="remember-me">
+                <input type="checkbox" id="remember-me"> Remember me
+            </label>
+            <button onclick="login()" class="login-btn">Login</button>
+            <p style="margin-top: 20px; color: #666; font-size: 0.9em;">
+                Don't know your ID? Send /start to the bot and check the logs, or contact @mk_admin
+            </p>
         </div>
-
-        <!-- 1–1000 GRID -->
-        <div class="grid-section">
-            <div class="grid-title">
-                <span>🎲 Choose Card (1‑1000)</span>
-                <span id="price-per-card">10 ETB</span>
-            </div>
-            <div class="card-grid-container">
-                <div class="card-grid" id="card-grid"></div>
-            </div>
-            <div class="action-buttons">
-                <button class="action-btn clear-btn" id="clear-btn" onclick="clearSelection()">Clear All</button>
-            </div>
-        </div>
-
-        <!-- GAME 2‑COLUMN -->
-        <div class="game-section">
-            <!-- LEFT -->
-            <div class="game-left">
-                <div id="winner-announcement" class="winner-announcement">
-                    <div id="winner-text"></div>
-                    <div class="winner-amount" id="winner-amount"></div>
+        
+        <!-- Main Content -->
+        <div id="main-content" style="display: none;">
+            <div class="header">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h1>🎯 MK BINGO</h1>
+                    <a href="https://t.me/YOUR_BOT_USERNAME" class="back-to-bot">⬅️ Back to Bot</a>
                 </div>
-                <div class="called-numbers-section">
-                    <div class="called-title">📞 CALLED NUMBERS</div>
-                    <div id="called-numbers-list" class="called-list"></div>
-                </div>
-                <div class="last-number" id="last-number">🎲 Ready</div>
-
-                <div class="current-card-section">
-                    <div class="card-navigation">
-                        <button class="card-nav-btn" id="prev-card" onclick="navigateCard(-1)">◀ Prev</button>
-                        <span class="card-counter" id="card-counter">Card <span id="current-card-index">1</span>/<span id="total-cards-count">0</span></span>
-                        <button class="card-nav-btn" id="next-card" onclick="navigateCard(1)">Next ▶</button>
+                
+                <div class="user-info">
+                    <div class="balance-box">
+                        <div>Your Balance</div>
+                        <div class="amount" id="balance">0 ETB</div>
                     </div>
-                    <div class="card-title" style="display:flex; gap:6px; align-items:center; margin-bottom:6px;">
-                        Card #<span id="current-card-id" style="background:#2f4b7c; color:white; padding:2px 12px; border-radius:30px;">0</span>
+                    <div class="user-id-box">
+                        <div>User ID: <span id="display-user-id"></span></div>
+                        <div>Username: <span id="display-username">Not set</span></div>
                     </div>
-                    <div class="bingo-header"><div>B</div><div>I</div><div>N</div><div>G</div><div>O</div></div>
-                    <div id="card-display" class="bingo-grid"></div>
+                    <button onclick="logout()" class="logout-btn">Logout</button>
                 </div>
             </div>
-
-            <!-- RIGHT COLUMN - WITH TELEBIRR PAYMENTS -->
-            <div class="game-right">
-                <!-- Balance -->
-                <div class="balance-display">
-                    <div>Your Balance</div>
-                    <div class="balance-amount" id="game-balance">0.00 ETB</div>
-                </div>
-
-                <!-- NEW: TeleBirr Payment Section -->
-                <div class="payment-section">
-                    <h3>💳 TeleBirr Wallet</h3>
-                    
-                    <!-- Deposit -->
-                    <div class="payment-input-group">
-                        <input type="number" id="deposit-amount" placeholder="Amount ETB" min="10" step="1">
-                        <button class="payment-btn" onclick="initiateDeposit()" id="deposit-btn">Deposit</button>
-                    </div>
-                    
-                    <!-- Withdrawal -->
-                    <div class="payment-input-group">
-                        <input type="number" id="withdraw-amount" placeholder="Amount" min="20" step="1">
-                        <input type="text" id="withdraw-phone" placeholder="09xxxxxxxx">
-                        <button class="payment-btn withdraw" onclick="requestWithdrawal()" id="withdraw-btn">Pull</button>
-                    </div>
-                    
-                    <div class="transaction-link">
-                        <a href="#" onclick="showTransactionHistory()">📋 My transactions</a>
-                    </div>
-                </div>
-
-                <!-- Prize Display -->
-                <div class="prize-display">
-                    <div class="prize-label">🏆 Winner Prize</div>
-                    <div class="prize-amount" id="winner-prize">0 ETB</div>
-                    <div class="winner-only">(90% of pool)</div>
-                </div>
-
-                <!-- Auto-mark & Timer -->
-                <div class="auto-mark" style="margin:6px 0">
-                    <label style="color:white"><input type="checkbox" id="autoDaub" onchange="toggleAutoDaub()"> 🤖 Auto-mark</label>
-                </div>
-                <div class="auto-start-timer" id="auto-start-timer">
-                    ⏱️ Game starting in <span id="timer-seconds">20</span>s
-                </div>
-
-                <!-- BINGO Button -->
-                <button class="bingo-btn" id="bingo-btn" onclick="checkBingo()" disabled>🎯 CLAIM BINGO!</button>
-
-                <!-- Players List -->
-                <div class="players-list" id="players-list"></div>
-
-                <!-- NEW: Admin Panel (hidden for non-admins) -->
-                <div id="admin-panel" class="admin-panel">
-                    <h4>👑 Admin Control · Withdrawals</h4>
-                    <div id="pending-withdrawals-list"></div>
-                    <div style="margin-top:10px; text-align:center;">
-                        <button onclick="refreshPendingWithdrawals()" style="background:#3498db; border:none; color:white; padding:5px 15px; border-radius:30px;">↻ Refresh</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div id="message" class="message"></div>
-</div>
-
-<!-- Transaction History Modal -->
-<div id="transaction-modal" class="modal">
-    <div class="modal-content">
-        <span class="close-modal" onclick="closeTransactionModal()">&times;</span>
-        <h3 style="color:gold; margin-bottom:15px;">📋 My Transactions</h3>
-        <div id="transaction-list" style="max-height:400px; overflow-y:auto;"></div>
-    </div>
-</div>
-
-<script>
-    // ============================================
-    // CONFIGURATION (replace with backend variables)
-    // ============================================
-    const userId = parseInt('{{ user_id }}' || '123');
-    const gameId = parseInt('{{ game_id }}' || '1');
-    const pricePerCard = parseFloat('{{ price_per_card }}' || '10');
-    const maxCards = parseInt('{{ max_cards }}' || '5');
-    const AUTO_START_DELAY = parseInt('{{ auto_start_delay }}' || '20');
-    const initialBalance = parseFloat('{{ initial_balance }}' || '200');
-    const IS_ADMIN = {{ is_admin | default(false) }};  // set from backend
-
-    const TOTAL_CARDS = 1000;
-    const HOUSE_COMMISSION = 0.2;
-
-    // ============================================
-    // GAME STATE
-    // ============================================
-    let ws = null;
-    let selectedCards = [];
-    let myCards = {};
-    let myCardIds = [];
-    let marked = {};
-    let called = [];
-    let players = [];
-    let takenCards = new Set();
-    let gameStarted = false, gameEnded = false, roundLocked = false;
-    let currentRound = 1;
-    let currentWinner = null;
-    let currentCardIndex = 0;
-    let currentCardId = null;
-    let balance = initialBalance;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5;
-    let autoDaubEnabled = false;
-    let autoStartTimer = null;
-    let autoStartSeconds = AUTO_START_DELAY;
-    
-    // Payment polling
-    let paymentPollInterval = null;
-
-    // ============================================
-    // DOM SHORTCUTS
-    // ============================================
-    const $ = id => document.getElementById(id);
-
-    // ============================================
-    // INIT
-    // ============================================
-    document.addEventListener('DOMContentLoaded', () => {
-        $('game-id').textContent = gameId;
-        $('player-id').textContent = userId;
-        $('max-cards-display').textContent = maxCards;
-        $('price-per-card').textContent = pricePerCard + ' ETB';
-        $('game-balance').textContent = balance.toFixed(2) + ' ETB';
-        
-        // Show admin badge and panel if admin
-        if (IS_ADMIN) {
-            $('admin-badge').style.display = 'inline-block';
-            $('admin-panel').style.display = 'block';
-            loadPendingWithdrawals();
-        }
-        
-        loadCardGrid();
-        connectWebSocket();
-    });
-
-    // ============================================
-    // CARD GRID (1-1000)
-    // ============================================
-    function loadCardGrid() {
-        const grid = $('card-grid');
-        grid.innerHTML = '';
-        for (let i = 1; i <= TOTAL_CARDS; i++) {
-            const btn = document.createElement('button');
-            btn.className = 'card-btn';
-            btn.textContent = i;
-            btn.onclick = () => toggleCardSelection(i);
-            grid.appendChild(btn);
-        }
-        updateCardGrid();
-    }
-
-    function toggleCardSelection(cardId) {
-        if (gameStarted || gameEnded || roundLocked) {
-            showMessage('Cards locked for this round', 'error'); return;
-        }
-        const idx = selectedCards.indexOf(cardId);
-        if (idx >= 0) {
-            selectedCards.splice(idx, 1);
-        } else {
-            if (selectedCards.length >= maxCards) {
-                showMessage(`Max ${maxCards} cards`, 'error'); return;
-            }
-            const totalCost = (selectedCards.length + 1) * pricePerCard;
-            if (totalCost > balance) {
-                showMessage('Insufficient balance', 'error'); return;
-            }
-            if (takenCards.has(cardId)) {
-                showMessage(`Card #${cardId} taken`, 'error'); return;
-            }
-            selectedCards.push(cardId);
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'select_cards', card_ids: [cardId] }));
-            }
-        }
-        selectedCards.sort((a,b) => a-b);
-        updateSelectedDisplay();
-        updateCardGrid();
-    }
-
-    function updateSelectedDisplay() {
-        const scroll = $('selected-scroll');
-        const total = $('total-cost');
-        $('selected-count').textContent = `${selectedCards.length}/${maxCards}`;
-        scroll.innerHTML = '';
-        selectedCards.forEach(id => {
-            const div = document.createElement('div');
-            div.className = 'selected-card';
-            div.innerHTML = `<div class="selected-card-number">#${id}</div>
-                <div class="selected-card-price">${pricePerCard} ETB</div>
-                <button class="selected-card-remove" onclick="removeCard(${id})">✕</button>`;
-            scroll.appendChild(div);
-        });
-        const cost = selectedCards.length * pricePerCard;
-        total.textContent = `Total: ${cost.toFixed(2)} ETB`;
-        $('clear-btn').disabled = (gameStarted || gameEnded || roundLocked);
-    }
-
-    function removeCard(cardId) {
-        if (gameStarted || gameEnded || roundLocked) return;
-        const idx = selectedCards.indexOf(cardId);
-        if (idx > -1) selectedCards.splice(idx, 1);
-        updateSelectedDisplay();
-        updateCardGrid();
-    }
-
-    function clearSelection() {
-        if (gameStarted || gameEnded || roundLocked) return;
-        selectedCards = [];
-        updateSelectedDisplay();
-        updateCardGrid();
-    }
-
-    function updateCardGrid() {
-        document.querySelectorAll('.card-btn').forEach(btn => {
-            const id = parseInt(btn.textContent);
-            btn.classList.remove('selected','taken');
-            if (selectedCards.includes(id)) btn.classList.add('selected');
-            else if (takenCards.has(id)) btn.classList.add('taken');
-        });
-    }
-
-    // ============================================
-    // CARD NAVIGATION & RENDERING
-    // ============================================
-    function navigateCard(direction) {
-        if (myCardIds.length === 0) return;
-        currentCardIndex = (currentCardIndex + direction + myCardIds.length) % myCardIds.length;
-        currentCardId = myCardIds[currentCardIndex];
-        $('current-card-id').textContent = currentCardId;
-        $('current-card-index').textContent = currentCardIndex + 1;
-        $('prev-card').disabled = myCardIds.length <= 1;
-        $('next-card').disabled = myCardIds.length <= 1;
-        renderCurrentCard();
-    }
-
-    function renderCurrentCard() {
-        if (!currentCardId || !myCards[currentCardId]) {
-            $('card-display').innerHTML = ''; return;
-        }
-        const card = myCards[currentCardId];
-        const markedNumbers = marked[currentCardId] || [];
-        const grid = $('card-display');
-        grid.innerHTML = '';
-        for (let r = 0; r < 5; r++) {
-            for (let c = 0; c < 5; c++) {
-                const cell = document.createElement('div');
-                cell.className = 'bingo-cell';
-                let num = card[c]?.[r] ?? '?';
-                cell.textContent = num;
-                if (r === 2 && c === 2 || num === 'FREE') {
-                    cell.classList.add('free'); cell.textContent = 'FREE';
-                }
-                if (num !== 'FREE' && (called.includes(parseInt(num)) || markedNumbers.includes(parseInt(num)))) {
-                    cell.classList.add('marked');
-                }
-                cell.onclick = () => markNumber(currentCardId, num);
-                grid.appendChild(cell);
-            }
-        }
-    }
-
-    function markNumber(cardId, num) {
-        if (!gameStarted || num === 'FREE') return;
-        const n = parseInt(num);
-        if (!called.includes(n)) {
-            showMessage(`Number ${num} not called`, 'error'); return;
-        }
-        ws.send(JSON.stringify({ type: 'mark_number', card_id: cardId, number: n }));
-    }
-
-    // ============================================
-    // BINGO CHECK
-    // ============================================
-    function checkBingo() {
-        if (!gameStarted || !currentCardId) return;
-        const card = myCards[currentCardId];
-        const markedNums = marked[currentCardId] || [];
-        
-        // rows
-        for (let r=0; r<5; r++) {
-            if (card[0][r]!=='FREE' && !markedNums.includes(card[0][r])) continue;
-            if (card[1][r]!=='FREE' && !markedNums.includes(card[1][r])) continue;
-            if (card[2][r]!=='FREE' && !markedNums.includes(card[2][r])) continue;
-            if (card[3][r]!=='FREE' && !markedNums.includes(card[3][r])) continue;
-            if (card[4][r]!=='FREE' && !markedNums.includes(card[4][r])) continue;
-            claimBingo(currentCardId); return;
-        }
-        // cols
-        for (let c=0; c<5; c++) {
-            if (card[c][0]!=='FREE' && !markedNums.includes(card[c][0])) continue;
-            if (card[c][1]!=='FREE' && !markedNums.includes(card[c][1])) continue;
-            if (card[c][2]!=='FREE' && !markedNums.includes(card[c][2])) continue;
-            if (card[c][3]!=='FREE' && !markedNums.includes(card[c][3])) continue;
-            if (card[c][4]!=='FREE' && !markedNums.includes(card[c][4])) continue;
-            claimBingo(currentCardId); return;
-        }
-        // diag \
-        if ((card[0][0]==='FREE'||markedNums.includes(card[0][0])) &&
-            (card[1][1]==='FREE'||markedNums.includes(card[1][1])) &&
-            (card[2][2]==='FREE'||markedNums.includes(card[2][2])) &&
-            (card[3][3]==='FREE'||markedNums.includes(card[3][3])) &&
-            (card[4][4]==='FREE'||markedNums.includes(card[4][4]))) { claimBingo(currentCardId); return; }
-        // diag /
-        if ((card[4][0]==='FREE'||markedNums.includes(card[4][0])) &&
-            (card[3][1]==='FREE'||markedNums.includes(card[3][1])) &&
-            (card[2][2]==='FREE'||markedNums.includes(card[2][2])) &&
-            (card[1][3]==='FREE'||markedNums.includes(card[1][3])) &&
-            (card[0][4]==='FREE'||markedNums.includes(card[0][4]))) { claimBingo(currentCardId); return; }
-
-        showMessage('No BINGO on this card', 'error');
-    }
-
-    function claimBingo(cardId) {
-        ws.send(JSON.stringify({ type: 'claim_bingo', card_id: cardId }));
-        showMessage('BINGO claimed, verifying...','info');
-    }
-
-    // ============================================
-    // WEBSOCKET
-    // ============================================
-    function connectWebSocket() {
-        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(`${proto}//${window.location.host}/ws/${gameId}/${userId}`);
-
-        ws.onopen = () => {
-            reconnectAttempts = 0;
-            $('reconnect-bar').style.display = 'none';
-            $('connection-status').className = 'connection-status';
-            $('connection-status').textContent = '✅ Connected';
-            showMessage('Connected','success');
-        };
-
-        ws.onmessage = (e) => {
-            const data = JSON.parse(e.data);
-            console.log('MSG', data);
-
-            if (data.type === 'connected') {
-                takenCards = new Set(data.taken_cards || []);
-                players = data.players || [];
-                gameStarted = data.game_started || false;
-                called = data.called_numbers || [];
-                currentRound = data.round || 1;
-                roundLocked = gameStarted;
-                $('active-game-display').textContent = currentRound;
-                $('status').textContent = gameStarted ? '🎮 PLAYING' : '⏳ WAITING';
-                $('bingo-btn').disabled = !gameStarted;
-                if (!gameStarted && data.auto_start_active) startAutoStartTimer();
-                updateCardGrid();
-                updatePlayersList();
-                updateCalledNumbers();
-                calcPrizePool();
-            }
-            else if (data.type === 'your_card') {
-                myCards[data.card_id] = data.card;
-                marked[data.card_id] = data.marked || [];
-                if (!myCardIds.includes(data.card_id)) myCardIds.push(data.card_id);
-                $('total-cards-count').textContent = myCardIds.length;
-                if (myCardIds.length === 1) {
-                    currentCardId = data.card_id;
-                    currentCardIndex = 0;
-                    $('current-card-id').textContent = currentCardId;
-                    $('current-card-index').textContent = 1;
-                }
-                renderCurrentCard();
-            }
-            else if (data.type === 'cards_selected') {
-                if (data.success) {
-                    showMessage(data.message, 'success');
-                    if (data.card_ids) selectedCards = data.card_ids;
-                    if (data.new_balance !== undefined) balance = data.new_balance / 100;
-                    updateSelectedDisplay();
-                    $('game-balance').textContent = balance.toFixed(2) + ' ETB';
-                } else {
-                    showMessage(data.message, 'error');
-                }
-            }
-            else if (data.type === 'player_ready') {
-                players = data.players || [];
-                updatePlayersList();
-                calcPrizePool();
-            }
-            else if (data.type === 'game_started') {
-                gameStarted = true; roundLocked = true; gameEnded = false;
-                $('status').textContent = '🎮 PLAYING';
-                $('bingo-btn').disabled = false;
-                $('auto-start-timer').style.display = 'none';
-                if (autoStartTimer) clearInterval(autoStartTimer);
-                showMessage('Game started!', 'success');
-            }
-            else if (data.type === 'number_called') {
-                called = data.called || [];
-                $('last-number').textContent = `🎲 ${data.number}`;
-                updateCalledNumbers();
-                renderCurrentCard();
-                if ($('autoDaub').checked) autoMarkNumber(data.number);
-            }
-            else if (data.type === 'number_marked') {
-                if (!marked[data.card_id]) marked[data.card_id] = [];
-                if (!marked[data.card_id].includes(data.number))
-                    marked[data.card_id].push(data.number);
-                if (currentCardId == data.card_id) renderCurrentCard();
-            }
-            else if (data.type === 'game_won') {
-                gameStarted = false; gameEnded = true; roundLocked = true;
-                currentWinner = data.winner;
-                $('status').textContent = '🏆 WINNER!';
-                $('bingo-btn').disabled = true;
-                $('winner-text').innerHTML = `🏆 ${data.winner.name} WINS!`;
-                $('winner-amount').textContent = `${data.prize} ETB`;
-                $('winner-announcement').style.display = 'block';
-                showMessage(`🏆 ${data.winner.name} won!`, 'success');
-                calcPrizePool();
-                updatePlayersList();
-                setTimeout(() => $('winner-announcement').style.display = 'none', 8000);
-            }
-            else if (data.type === 'game_reset') {
-                gameStarted = false; gameEnded = false; roundLocked = false;
-                called = []; currentWinner = null; myCards = {}; myCardIds = []; marked = {};
-                takenCards = new Set(data.taken_cards || []);
-                currentCardId = null; currentCardIndex = 0;
-                $('status').textContent = '⏳ WAITING';
-                $('bingo-btn').disabled = true;
-                $('last-number').textContent = '🎲 Ready';
-                $('winner-announcement').style.display = 'none';
-                $('total-cards-count').textContent = '0';
-                $('current-card-id').textContent = '0';
-                $('card-display').innerHTML = '';
-                if (autoStartTimer) clearInterval(autoStartTimer);
-                $('auto-start-timer').style.display = 'none';
-                currentRound = data.round || currentRound+1;
-                $('active-game-display').textContent = currentRound;
-                updateSelectedDisplay();
-                updateCardGrid();
-                updateCalledNumbers();
-                updatePlayersList();
-                showMessage('New round','info');
-            }
-            else if (data.type === 'error') {
-                showMessage(data.message, 'error');
-            }
-            calcPrizePool();
-        };
-
-        ws.onclose = () => {
-            $('reconnect-bar').style.display = 'block';
-            $('connection-status').className = 'connection-status error';
-            $('connection-status').textContent = '❌ Disconnected';
-            if (reconnectAttempts < maxReconnectAttempts) {
-                reconnectAttempts++;
-                setTimeout(connectWebSocket, 2000 * Math.pow(2, reconnectAttempts-1));
-            }
-        };
-    }
-
-    function manualReconnect() { reconnectAttempts = 0; connectWebSocket(); }
-
-    // ============================================
-    // UI UPDATES
-    // ============================================
-    function updateCalledNumbers() {
-        const list = $('called-numbers-list');
-        list.innerHTML = '';
-        if (called.length) {
-            called.forEach(n => {
-                const b = document.createElement('span');
-                b.className = 'called-badge'; b.textContent = n; list.appendChild(b);
-            });
-        } else {
-            const b = document.createElement('span');
-            b.className = 'called-badge'; b.style.background = '#777'; b.textContent = '—'; list.appendChild(b);
-        }
-    }
-
-    function updatePlayersList() {
-        const list = $('players-list');
-        list.innerHTML = '';
-        if (players.length) {
-            players.forEach(p => {
-                const b = document.createElement('span');
-                b.className = 'player-badge';
-                if (p.ready) b.classList.add('ready');
-                if (p.winner) b.classList.add('winner');
-                b.textContent = p.name + (p.id == userId ? ' (You)' : '') + (p.card_count ? ` [${p.card_count}]` : '');
-                list.appendChild(b);
-            });
-        } else {
-            list.innerHTML = '<span class="player-badge" style="background:#777;">No players</span>';
-        }
-    }
-
-    function calcPrizePool() {
-        const totalCards = players.reduce((acc,p) => acc + (p.card_count || 0), 0);
-        const totalPrize = totalCards * pricePerCard;
-        const house = totalPrize * HOUSE_COMMISSION;
-        const winnerPrize = totalPrize - house;
-        $('prize-pool').textContent = totalPrize.toFixed(2) + ' ETB';
-        $('house-fee').textContent = house.toFixed(2) + ' ETB';
-        $('winner-prize').textContent = winnerPrize.toFixed(2) + ' ETB';
-        $('player-count').textContent = players.length;
-    }
-
-    function autoMarkNumber(num) {
-        const n = parseInt(num);
-        Object.keys(myCards).forEach(cid => {
-            const card = myCards[cid];
-            for (let c=0;c<5;c++) for (let r=0;r<5;r++) {
-                if (card[c][r] === n && (!marked[cid] || !marked[cid].includes(n))) {
-                    ws.send(JSON.stringify({ type: 'mark_number', card_id: parseInt(cid), number: n }));
-                    return;
-                }
-            }
-        });
-    }
-
-    function toggleAutoDaub() { autoDaubEnabled = $('autoDaub').checked; }
-
-    function startAutoStartTimer() {
-        if (autoStartTimer) clearInterval(autoStartTimer);
-        autoStartSeconds = AUTO_START_DELAY;
-        const timerDiv = $('auto-start-timer'), span = $('timer-seconds');
-        timerDiv.style.display = 'block'; span.textContent = autoStartSeconds;
-        autoStartTimer = setInterval(() => {
-            autoStartSeconds--;
-            span.textContent = autoStartSeconds;
-            if (autoStartSeconds <= 0) {
-                clearInterval(autoStartTimer); timerDiv.style.display = 'none';
-            }
-        },1000);
-    }
-
-    function showMessage(text, type) {
-        const msg = $('message');
-        msg.textContent = text; msg.className = `message ${type}`;
-        setTimeout(() => msg.style.display = 'none', 3000);
-    }
-
-    // ============================================
-    // TELEBIRR PAYMENT FUNCTIONS
-    // ============================================
-
-    // Initiate deposit
-    async function initiateDeposit() {
-        const amount = parseFloat($('deposit-amount').value);
-        if (amount < 10) {
-            showMessage('Minimum deposit 10 ETB', 'error');
-            return;
-        }
-        
-        $('deposit-btn').disabled = true;
-        showMessage('Initiating payment...', 'info');
-        
-        try {
-            // In real implementation, call your backend
-            const response = await fetch('/api/payment/telebirr/initiate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, amount })
-            });
             
-            const data = await response.json();
-            if (data.success) {
-                // Open TeleBirr payment page
-                window.open(data.paymentUrl, '_blank');
-                showMessage('Payment initiated! Complete in new tab.', 'success');
+            <!-- Buy Cards Section -->
+            <div class="buy-section">
+                <h2>🎮 Buy Bingo Cards</h2>
+                <div class="price-info">
+                    Price: <span id="card-price">10 ETB</span> per card
+                </div>
                 
-                // Start polling for payment status
-                startPaymentPolling(data.transactionRef);
-            } else {
-                showMessage('Payment initiation failed', 'error');
-            }
-        } catch (error) {
-            showMessage('Network error', 'error');
-        } finally {
-            $('deposit-btn').disabled = false;
-        }
-    }
-
-    // Poll for payment completion (auto-approve simulation)
-    function startPaymentPolling(transactionRef) {
-        if (paymentPollInterval) clearInterval(paymentPollInterval);
+                <button class="buy-btn" onclick="buyCard()" id="buy-btn">
+                    🎲 Buy 1 Card
+                </button>
+                
+                <div class="buy-multiple">
+                    <button class="buy-multiple-btn" onclick="buyMultipleCards(3)">Buy 3 Cards</button>
+                    <button class="buy-multiple-btn" onclick="buyMultipleCards(5)">Buy 5 Cards</button>
+                    <button class="buy-multiple-btn" onclick="buyMultipleCards(10)">Buy 10 Cards</button>
+                </div>
+                
+                <div id="message" class="message"></div>
+                
+                <div id="loading-spinner" class="spinner"></div>
+            </div>
+            
+            <!-- My Cards Section -->
+            <div class="cards-section">
+                <div class="section-title">
+                    <span>📊 My Bingo Cards</span>
+                    <span class="card-count" id="card-count">0</span>
+                </div>
+                
+                <div id="cards-grid" class="card-grid">
+                    <!-- Cards will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Configuration
+        const API_BASE = window.location.origin;
+        const CARD_PRICE = 10;
+        let currentUserId = null;
         
-        paymentPollInterval = setInterval(async () => {
+        // Check for saved login
+        window.onload = function() {
+            const savedUserId = localStorage.getItem('bingo_user_id');
+            if (savedUserId) {
+                document.getElementById('user-id').value = savedUserId;
+                login();
+            }
+        };
+        
+        function showLoading(show) {
+            document.getElementById('loading-spinner').style.display = show ? 'block' : 'none';
+            document.getElementById('buy-btn').disabled = show;
+        }
+        
+        function showMessage(text, type) {
+            const msgDiv = document.getElementById('message');
+            msgDiv.textContent = text;
+            msgDiv.className = 'message ' + type;
+            
+            setTimeout(() => {
+                msgDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        async function login() {
+            const userId = document.getElementById('user-id').value.trim();
+            
+            if (!userId) {
+                showMessage('Please enter your User ID', 'error');
+                return;
+            }
+            
+            // Validate that it's a number
+            if (!/^\d+$/.test(userId)) {
+                showMessage('User ID must be a number', 'error');
+                return;
+            }
+            
+            showLoading(true);
+            currentUserId = userId;
+            
             try {
-                const response = await fetch(`/api/payment/status/${transactionRef}`);
-                const { status, newBalance } = await response.json();
+                // Save if remember me is checked
+                if (document.getElementById('remember-me').checked) {
+                    localStorage.setItem('bingo_user_id', userId);
+                }
                 
-                if (status === 'approved') {
-                    clearInterval(paymentPollInterval);
-                    paymentPollInterval = null;
+                // Try to load user data
+                const response = await fetch(`${API_BASE}/api/user/${userId}`);
+                const data = await response.json();
+                
+                // Show main content
+                document.getElementById('login-section').style.display = 'none';
+                document.getElementById('main-content').style.display = 'block';
+                
+                document.getElementById('display-user-id').textContent = userId;
+                document.getElementById('display-username').textContent = data.username || 'Not set';
+                document.getElementById('balance').textContent = data.balance + ' ETB';
+                
+                // Load cards
+                displayCards(data.cards || []);
+                
+                showMessage('✅ Login successful!', 'success');
+                
+            } catch (error) {
+                console.error('Login error:', error);
+                showMessage('Error connecting to server', 'error');
+                currentUserId = null;
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        function logout() {
+            currentUserId = null;
+            localStorage.removeItem('bingo_user_id');
+            document.getElementById('login-section').style.display = 'block';
+            document.getElementById('main-content').style.display = 'none';
+            document.getElementById('user-id').value = '';
+        }
+        
+        async function buyCard() {
+            if (!currentUserId) {
+                showMessage('Please login first', 'error');
+                return;
+            }
+            
+            await purchaseCards(1);
+        }
+        
+        async function buyMultipleCards(count) {
+            if (!currentUserId) {
+                showMessage('Please login first', 'error');
+                return;
+            }
+            
+            if (!confirm(`Buy ${count} cards for ${count * CARD_PRICE} ETB?`)) {
+                return;
+            }
+            
+            await purchaseCards(count);
+        }
+        
+        async function purchaseCards(count) {
+            showLoading(true);
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/buy-cards`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user_id: currentUserId,
+                        count: count
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`✅ Successfully bought ${count} card(s)!`, 'success');
                     
                     // Update balance
-                    balance = newBalance;
-                    $('game-balance').textContent = balance.toFixed(2) + ' ETB';
-                    showMessage('✅ Payment received! Balance updated.', 'success');
+                    document.getElementById('balance').textContent = data.new_balance + ' ETB';
                     
-                    // Refresh transaction history if modal open
-                    if ($('transaction-modal').style.display === 'flex') {
-                        loadTransactionHistory();
+                    // Reload all cards
+                    await reloadUserData();
+                } else {
+                    showMessage('❌ ' + data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Purchase error:', error);
+                showMessage('Error purchasing cards', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        async function reloadUserData() {
+            try {
+                const response = await fetch(`${API_BASE}/api/user/${currentUserId}`);
+                const data = await response.json();
+                
+                document.getElementById('balance').textContent = data.balance + ' ETB';
+                displayCards(data.cards || []);
+            } catch (error) {
+                console.error('Reload error:', error);
+            }
+        }
+        
+        function displayCards(cards) {
+            const grid = document.getElementById('cards-grid');
+            const cardCount = document.getElementById('card-count');
+            
+            cardCount.textContent = cards.length;
+            
+            if (cards.length === 0) {
+                grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; padding: 40px; color: #666;">You don\'t have any cards yet. Buy your first card above!</p>';
+                return;
+            }
+            
+            grid.innerHTML = cards.map(card => renderCard(card)).join('');
+        }
+        
+        function renderCard(card) {
+            // Handle both string and object cards
+            let cardData = card;
+            if (typeof card === 'string') {
+                try {
+                    cardData = JSON.parse(card);
+                } catch {
+                    cardData = { id: 'New', numbers: generatePlaceholderCard() };
+                }
+            }
+            
+            const numbers = cardData.numbers || generatePlaceholderCard();
+            const cardId = cardData.id || 'New';
+            const purchaseDate = cardData.purchased_at ? new Date(cardData.purchased_at).toLocaleDateString() : 'Just now';
+            const marked = cardData.marked || [];
+            
+            let html = `
+                <div class="bingo-card">
+                    <div class="card-header">
+                        <span class="card-number">Card #${cardId}</span>
+                        <span class="card-date">${purchaseDate}</span>
+                    </div>
+                    <table class="bingo-table">
+                        <tr>
+                            <th>B</th><th>I</th><th>N</th><th>G</th><th>O</th>
+                        </tr>
+            `;
+            
+            for (let row = 0; row < 5; row++) {
+                html += '<tr>';
+                for (let col = 0; col < 5; col++) {
+                    let value = numbers[col][row];
+                    let className = '';
+                    
+                    if (value === 'FREE') {
+                        className = 'free-space';
+                        value = '⭐';
+                    } else if (marked.includes(value)) {
+                        className = 'marked';
+                    }
+                    
+                    html += `<td class="${className}">${value}</td>`;
+                }
+                html += '</tr>';
+            }
+            
+            html += '</table></div>';
+            return html;
+        }
+        
+        function generatePlaceholderCard() {
+            // Generate a simple placeholder card
+            const card = [];
+            for (let col = 0; col < 5; col++) {
+                const colNumbers = [];
+                for (let row = 0; row < 5; row++) {
+                    if (col === 2 && row === 2) {
+                        colNumbers.push('FREE');
+                    } else {
+                        colNumbers.push(Math.floor(Math.random() * 15) + 1 + col * 15);
                     }
                 }
-            } catch (e) {
-                console.log('Polling error', e);
+                card.push(colNumbers);
             }
-        }, 3000);
-        
-        // Stop polling after 3 minutes
-        setTimeout(() => {
-            if (paymentPollInterval) {
-                clearInterval(paymentPollInterval);
-                paymentPollInterval = null;
-            }
-        }, 180000);
-    }
-
-    // Request withdrawal (requires admin approval)
-    async function requestWithdrawal() {
-        const amount = parseFloat($('withdraw-amount').value);
-        const phone = $('withdraw-phone').value.trim();
-        
-        if (amount < 20) {
-            showMessage('Minimum withdrawal 20 ETB', 'error');
-            return;
-        }
-        if (!/^09\d{8}$/.test(phone)) {
-            showMessage('Enter valid 09xxxxxxxx phone', 'error');
-            return;
-        }
-        if (amount > balance) {
-            showMessage('Insufficient balance', 'error');
-            return;
+            return card;
         }
         
-        $('withdraw-btn').disabled = true;
-        
-        try {
-            const response = await fetch('/api/withdrawal/request', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, amount, phoneNumber: phone })
-            });
-            
-            const data = await response.json();
-            if (data.success) {
-                // Update local balance (funds locked)
-                balance -= amount;
-                $('game-balance').textContent = balance.toFixed(2) + ' ETB';
-                showMessage('Withdrawal requested! Awaiting admin approval.', 'success');
-                
-                // If admin, refresh pending list
-                if (IS_ADMIN) loadPendingWithdrawals();
-                
-                // Clear inputs
-                $('withdraw-amount').value = '';
-                $('withdraw-phone').value = '';
-            } else {
-                showMessage(data.error || 'Request failed', 'error');
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            if (currentUserId) {
+                reloadUserData();
             }
-        } catch (error) {
-            showMessage('Network error', 'error');
-        } finally {
-            $('withdraw-btn').disabled = false;
-        }
-    }
-
-    // Show transaction history modal
-    async function showTransactionHistory() {
-        $('transaction-modal').style.display = 'flex';
-        await loadTransactionHistory();
-    }
-
-    async function loadTransactionHistory() {
-        try {
-            const response = await fetch(`/api/user/${userId}/transactions`);
-            const transactions = await response.json();
-            
-            const container = $('transaction-list');
-            container.innerHTML = '';
-            
-            if (transactions.length === 0) {
-                container.innerHTML = '<p style="color:#aaa; text-align:center;">No transactions yet</p>';
-                return;
-            }
-            
-            transactions.forEach(tx => {
-                const div = document.createElement('div');
-                div.className = 'transaction-item';
-                div.innerHTML = `
-                    <span>${tx.type === 'deposit' ? '📥' : '📤'} ${tx.type}</span>
-                    <span>${tx.amount} ETB</span>
-                    <span style="color:${tx.status === 'approved' ? '#2ecc71' : tx.status === 'pending' ? '#f39c12' : '#e74c33'}">${tx.status}</span>
-                    <span style="font-size:0.7rem;">${new Date(tx.date).toLocaleDateString()}</span>
-                `;
-                container.appendChild(div);
-            });
-        } catch (e) {
-            $('transaction-list').innerHTML = '<p style="color:#e74c3c;">Failed to load</p>';
-        }
-    }
-
-    function closeTransactionModal() {
-        $('transaction-modal').style.display = 'none';
-    }
-
-    // ============================================
-    // ADMIN FUNCTIONS (auto-approve/reject)
-    // ============================================
-    async function loadPendingWithdrawals() {
-        if (!IS_ADMIN) return;
-        
-        try {
-            const response = await fetch('/api/admin/withdrawals/pending');
-            const withdrawals = await response.json();
-            
-            const list = $('pending-withdrawals-list');
-            if (withdrawals.length === 0) {
-                list.innerHTML = '<p style="color:#aaa;">No pending withdrawals</p>';
-                return;
-            }
-            
-            list.innerHTML = withdrawals.map(w => `
-                <div class="pending-item">
-                    <div>
-                        <strong>User ${w.userId}</strong><br>
-                        ${w.amount} ETB → ${w.phoneNumber}
-                    </div>
-                    <div>
-                        <button class="admin-btn approve" onclick="approveWithdrawal(${w.id})">✓</button>
-                        <button class="admin-btn reject" onclick="rejectWithdrawal(${w.id})">✗</button>
-                    </div>
-                </div>
-            `).join('');
-        } catch (e) {
-            $('pending-withdrawals-list').innerHTML = '<p style="color:#e74c3c;">Error loading</p>';
-        }
-    }
-
-    async function approveWithdrawal(withdrawalId) {
-        try {
-            await fetch(`/api/admin/withdrawal/${withdrawalId}/approve`, { method: 'POST' });
-            showMessage('Withdrawal approved', 'success');
-            loadPendingWithdrawals();
-        } catch (e) {
-            showMessage('Action failed', 'error');
-        }
-    }
-
-    async function rejectWithdrawal(withdrawalId) {
-        try {
-            await fetch(`/api/admin/withdrawal/${withdrawalId}/reject`, { method: 'POST' });
-            showMessage('Withdrawal rejected', 'success');
-            loadPendingWithdrawals();
-        } catch (e) {
-            showMessage('Action failed', 'error');
-        }
-    }
-
-    function refreshPendingWithdrawals() {
-        loadPendingWithdrawals();
-    }
-
-    // ============================================
-    // GLOBAL EXPOSURE
-    // ============================================
-    window.toggleCardSelection = toggleCardSelection;
-    window.removeCard = removeCard;
-    window.clearSelection = clearSelection;
-    window.navigateCard = navigateCard;
-    window.markNumber = markNumber;
-    window.checkBingo = checkBingo;
-    window.manualReconnect = manualReconnect;
-    window.toggleAutoDaub = toggleAutoDaub;
-    
-    // Payment functions
-    window.initiateDeposit = initiateDeposit;
-    window.requestWithdrawal = requestWithdrawal;
-    window.showTransactionHistory = showTransactionHistory;
-    window.closeTransactionModal = closeTransactionModal;
-    
-    // Admin functions
-    window.approveWithdrawal = approveWithdrawal;
-    window.rejectWithdrawal = rejectWithdrawal;
-    window.refreshPendingWithdrawals = refreshPendingWithdrawals;
-    window.loadPendingWithdrawals = loadPendingWithdrawals;
-</script>
+        }, 30000);
+    </script>
 </body>
 </html>
